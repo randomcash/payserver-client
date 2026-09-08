@@ -1,12 +1,12 @@
 //! Invoice API methods.
 
-use super::{ApiError, EvmApiClient};
+use super::{ApiClient, ApiError};
 use crate::api::{
     CheckoutResponse, CreateInvoiceRequest, Invoice, InvoiceListResponse, InvoiceStatusResponse,
     Payment, TxHashLookupResponse,
 };
 
-impl EvmApiClient {
+impl ApiClient {
     /// List invoices with filters and pagination.
     ///
     /// `store_id` of `None` means "All Stores": the server then returns

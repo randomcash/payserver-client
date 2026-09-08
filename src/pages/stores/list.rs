@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
-use crate::api::{CreateStoreRequest, EvmApiClient, Store};
+use crate::api::{ApiClient, CreateStoreRequest, Store};
 use crate::app::StoreContext;
 
 use super::{
@@ -14,7 +14,7 @@ use super::{
 /// Stores list page.
 #[component]
 pub fn StoresPage() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let store_ctx = use_context::<StoreContext>().expect("StoreContext must be provided");
 
     // Fetch stores from API

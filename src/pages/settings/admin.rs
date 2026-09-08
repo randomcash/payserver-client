@@ -1,6 +1,6 @@
 //! Admin settings tab - server settings and user management (admin only).
 
-use crate::api::{AdminUserInfo, EvmApiClient, UpdateServerSettingsRequest, UpdateUserRoleRequest};
+use crate::api::{AdminUserInfo, ApiClient, UpdateServerSettingsRequest, UpdateUserRoleRequest};
 use leptos::prelude::*;
 use types::ChainId;
 
@@ -9,7 +9,7 @@ use super::IconShield;
 /// Admin tab - server settings and user management (admin only).
 #[component]
 pub fn AdminTab() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     // Settings form state
     let (default_confirmations, set_default_confirmations) = signal("3".to_string());

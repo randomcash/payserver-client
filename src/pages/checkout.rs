@@ -9,7 +9,7 @@ use leptos_router::hooks::use_params_map;
 
 use send_wrapper::SendWrapper;
 
-use crate::api::{ApiError, CheckoutResponse, EvmApiClient, PaymentOption};
+use crate::api::{ApiClient, ApiError, CheckoutResponse, PaymentOption};
 use crate::services::websocket::{StatusUpdate, WebSocketService};
 use crate::util::chain_name;
 
@@ -47,7 +47,7 @@ pub fn CheckoutPage() -> impl IntoView {
     let invoice_id = move || params.get().get("id").unwrap_or_default();
 
     // Create unauthenticated API client (same-origin, no auth header).
-    let api = EvmApiClient::unauthenticated();
+    let api = ApiClient::unauthenticated();
 
     // Selected payment option index
     let (selected_idx, set_selected_idx) = signal(0usize);

@@ -4,8 +4,7 @@ use leptos::prelude::*;
 use types::ChainId;
 
 use crate::api::{
-    EvmApiClient, SetTokenPolicyRequest, StoreSettings, TokenPolicyEntry,
-    UpdateStoreSettingsRequest,
+    ApiClient, SetTokenPolicyRequest, StoreSettings, TokenPolicyEntry, UpdateStoreSettingsRequest,
 };
 use crate::util::chain_name;
 
@@ -14,7 +13,7 @@ use super::event_target_checked;
 /// Store settings tab: defaults, branding, notifications.
 #[component]
 pub fn SettingsTab(store_id: String) -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let store_id_for_load = store_id.clone();
     let store_id_for_save = store_id.clone();
 
@@ -283,7 +282,7 @@ pub fn SettingsTab(store_id: String) -> impl IntoView {
 /// Token policy panel: allowlist/blocklist management.
 #[component]
 fn TokenPolicyPanel(store_id: String) -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let store_id_load = store_id.clone();
     let store_id_save = store_id.clone();
     let store_id_del = store_id.clone();

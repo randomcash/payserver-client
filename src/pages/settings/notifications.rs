@@ -17,7 +17,7 @@
 use leptos::prelude::*;
 use serde_json::{Value, json};
 
-use crate::api::{EvmApiClient, UpdateStoreSettingsRequest};
+use crate::api::{ApiClient, UpdateStoreSettingsRequest};
 use crate::app::StoreContext;
 use crate::components::NoStoreSelected;
 
@@ -124,7 +124,7 @@ fn write_matrix(cells: &[bool; NOTIFICATION_EVENTS.len()]) -> Value {
 /// Notifications tab.
 #[component]
 pub fn NotificationsTab() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let store_ctx = use_context::<StoreContext>().expect("StoreContext must be provided");
 
     let selected_store_id = store_ctx.selected_store_id;

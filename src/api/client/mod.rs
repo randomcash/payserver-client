@@ -1,4 +1,4 @@
-//! HTTP client for ethpayserver API.
+//! HTTP client for the payserver API.
 
 use gloo_net::http::{Request, RequestBuilder};
 use serde::{Serialize, de::DeserializeOwned};
@@ -23,14 +23,14 @@ pub enum ApiError {
     Unauthorized,
 }
 
-/// API client for ethpayserver.
+/// API client for a payserver.
 #[derive(Clone)]
-pub struct EvmApiClient {
+pub struct ApiClient {
     base_url: String,
     token: Option<String>,
 }
 
-impl EvmApiClient {
+impl ApiClient {
     /// Create a new API client.
     pub fn new(base_url: impl Into<String>) -> Self {
         Self {
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_api_client_new() {
-        let client = EvmApiClient::new("http://localhost:5000");
+        let client = ApiClient::new("http://localhost:5000");
         assert_eq!(client.base_url, "http://localhost:5000");
         assert_eq!(client.token, None);
     }
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn test_api_client_with_token() {
         let client =
-            EvmApiClient::new("http://localhost:5000").with_token(Some("test-token".to_string()));
+            ApiClient::new("http://localhost:5000").with_token(Some("test-token".to_string()));
 
         assert_eq!(client.token, Some("test-token".to_string()));
     }

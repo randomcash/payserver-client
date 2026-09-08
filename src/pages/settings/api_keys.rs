@@ -1,8 +1,7 @@
 //! API Keys settings tab.
 
 use crate::api::{
-    ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponsePayload, EvmApiClient,
-    RotateApiKeyResponse,
+    ApiClient, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponsePayload, RotateApiKeyResponse,
 };
 use leptos::prelude::*;
 
@@ -11,7 +10,7 @@ use super::{IconInfo, IconPlus};
 /// API Keys tab.
 #[component]
 pub fn ApiKeysTab() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     // Track version to trigger refetches after create/revoke
     let (version, set_version) = signal(0u32);

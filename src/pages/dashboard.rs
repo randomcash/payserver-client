@@ -7,7 +7,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use send_wrapper::SendWrapper;
 
-use crate::api::{ApiError, ChainHealthInfo, DashboardAnalytics, EvmApiClient};
+use crate::api::{ApiClient, ApiError, ChainHealthInfo, DashboardAnalytics};
 use crate::app::{StoreContext, StoresStatus};
 use crate::components::EmptyState;
 use crate::pages::payments::format::{
@@ -62,7 +62,7 @@ fn DashboardHeader() -> impl IntoView {
 /// Re-fetches when a WebSocket InvoiceStatus or PaymentUpdate arrives.
 #[component]
 fn DashboardMetrics() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let ws_update = use_context::<ReadSignal<Option<StatusUpdate>>>();
 
     // Bump to trigger re-fetch when relevant WS messages arrive.
@@ -189,7 +189,7 @@ fn MetricCard(
 /// Re-fetches on the same WebSocket messages as the metric cards.
 #[component]
 fn DashboardCharts() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let ws_update = use_context::<ReadSignal<Option<StatusUpdate>>>();
 
     let (ws_version, set_ws_version) = signal(0u32);
@@ -526,7 +526,7 @@ const RECENT_PAYMENTS_LIMIT: i64 = 5;
 /// so that is what the row shows.
 #[component]
 fn RecentPayments() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let store_ctx = use_context::<StoreContext>().expect("StoreContext must be provided");
     // Signals off StoreContext are Copy; take them once so the resource closure
     // does not need to own the (non-Copy) context.
@@ -755,7 +755,7 @@ fn chain_label(chain: &ChainHealthInfo) -> String {
 /// the panel says so.
 #[component]
 fn NetworkStatus() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     // The monitor republishes every 10s under a 60s TTL, so a panel rendered
     // once and never refreshed is a stale claim about live infrastructure.

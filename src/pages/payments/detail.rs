@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
 
-use crate::api::{EvmApiClient, Payment};
+use crate::api::{ApiClient, Payment};
 use crate::util::chain_name;
 
 use super::format::{
@@ -15,7 +15,7 @@ use super::icons::{IconArrowLeft, IconChevronRight, IconCopy, IconExternalLink, 
 /// Payment detail page.
 #[component]
 pub fn PaymentDetailPage() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let params = use_params_map();
     let payment_id = move || params.get().get("id").unwrap_or_default();
 

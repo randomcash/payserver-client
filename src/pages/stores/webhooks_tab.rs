@@ -3,14 +3,14 @@
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
-use crate::api::{EvmApiClient, StoreWebhook, UpdateWebhookRequest};
+use crate::api::{ApiClient, StoreWebhook, UpdateWebhookRequest};
 
 use super::{IconWebhook, format_date};
 
 /// Webhooks tab.
 #[component]
 pub fn WebhooksTab(store_id: String) -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let store_id_fetch = store_id.clone();

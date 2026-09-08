@@ -11,7 +11,7 @@ use leptos_router::{
 use ui_kit::hooks::use_storage::{get_local, set_local};
 use ui_kit::{AuthGuard, use_auth};
 
-use crate::api::{EvmApiClient, Store};
+use crate::api::{ApiClient, Store};
 use crate::components::{CreateInvoiceModal, CreateInvoiceSignal};
 use crate::services::WebSocketService;
 
@@ -38,7 +38,7 @@ pub(super) fn ProtectedLayout() -> impl IntoView {
     let auth = use_auth();
     let api = Signal::derive(move || {
         let token = auth.token.get();
-        EvmApiClient::new("").with_token(token)
+        ApiClient::new("").with_token(token)
     });
     provide_context(api);
 

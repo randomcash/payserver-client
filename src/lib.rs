@@ -1,6 +1,6 @@
-//! EVM PayServer Web Client
+//! PayServer Web Client
 //!
-//! Leptos-based frontend for ethpayserver, providing:
+//! Leptos-based frontend for the random.cash payservers, providing:
 //! - Invoice management
 //! - Payment monitoring
 //! - Store configuration

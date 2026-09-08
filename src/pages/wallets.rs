@@ -7,7 +7,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
 
-use crate::api::{EvmApiClient, Wallet};
+use crate::api::{ApiClient, Wallet};
 
 /// Format ISO date string for display.
 fn format_date(iso: &str) -> String {
@@ -48,7 +48,7 @@ fn truncate_address(address: &str) -> String {
 /// Wallets list page.
 #[component]
 pub fn WalletsPage() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     let wallets_resource = LocalResource::new(move || {
         let api = api.get();
@@ -173,7 +173,7 @@ pub fn WalletDetailPage() -> impl IntoView {
     let params = use_params_map();
     let wallet_id = move || params.get().get("id").unwrap_or_default();
 
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     let wallet_resource = LocalResource::new(move || {
         let api = api.get();

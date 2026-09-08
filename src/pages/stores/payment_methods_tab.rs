@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use types::ChainId;
 
 use crate::api::{
-    CreatePaymentMethodRequest, EvmApiClient, StorePaymentMethod, UpdatePaymentMethodRequest,
+    ApiClient, CreatePaymentMethodRequest, StorePaymentMethod, UpdatePaymentMethodRequest,
 };
 use crate::util::chain_name;
 
@@ -13,7 +13,7 @@ use super::IconPlus;
 /// Payment methods tab.
 #[component]
 pub fn PaymentMethodsTab(store_id: String) -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     // Fetch payment methods from API
     let (refresh_counter, set_refresh_counter) = signal(0u32);
@@ -289,7 +289,7 @@ fn PaymentMethodRow(
     store_id: String,
     set_refresh_counter: WriteSignal<u32>,
 ) -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let network = chain_name(&method.chain_id).to_string();
     let asset_type = if method.token_address.is_some() {
         "ERC20"

@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
-use crate::api::{ApiError, EvmApiClient};
+use crate::api::{ApiClient, ApiError};
 use crate::app::{StoreContext, StoresStatus};
 use crate::components::{CreateInvoiceSignal, NoStoreSelected, PAGE_SIZE, Pagination};
 use crate::services::StatusUpdate;
@@ -15,7 +15,7 @@ use super::widgets::{IconPlus, IconSearch, InvoiceCard, InvoiceRow};
 /// Invoice list page.
 #[component]
 pub fn InvoicesPage() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let store_ctx = use_context::<StoreContext>().expect("StoreContext must be provided");
 
     // Inputs for the no-store-selected branch below: whether the store fetch

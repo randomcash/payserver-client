@@ -1,13 +1,13 @@
 //! Auth/user, dashboard, API key, and admin API methods.
 
-use super::{ApiError, EvmApiClient};
+use super::{ApiClient, ApiError};
 use crate::api::{
     ApiKeyListResponse, CreateApiKeyRequest, CreateApiKeyResponsePayload, DashboardAnalytics,
     DashboardStats, RotateApiKeyResponse, ServerSettingsResponse, UpdateServerSettingsRequest,
     UpdateUserRoleRequest, UserInfo, UserListResponse,
 };
 
-impl EvmApiClient {
+impl ApiClient {
     // =========================================================================
     // Auth / User
     // =========================================================================

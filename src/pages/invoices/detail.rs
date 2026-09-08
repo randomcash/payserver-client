@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
 
-use crate::api::{ApiError, EvmApiClient, Invoice, InvoiceStatusExt, Payment};
+use crate::api::{ApiClient, ApiError, Invoice, InvoiceStatusExt, Payment};
 
 use super::helpers::{
     IconExport, chain_name, confirmed_payment_count, format_amount, format_date,
@@ -15,7 +15,7 @@ use super::helpers::{
 #[component]
 pub fn InvoiceDetailPage() -> impl IntoView {
     let params = use_params_map();
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     let invoice_id = Signal::derive(move || params.get().get("id").unwrap_or_default());
 

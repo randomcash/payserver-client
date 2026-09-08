@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use ui_kit::use_auth;
 use wasm_bindgen::JsCast;
 
-use crate::api::EvmApiClient;
+use crate::api::ApiClient;
 use crate::components::CreateInvoiceSignal;
 use crate::services::ConnectionState;
 
@@ -17,7 +17,7 @@ where
     F: Fn(web_sys::MouseEvent) + 'static,
 {
     let auth = use_auth();
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let create_invoice =
         use_context::<CreateInvoiceSignal>().expect("CreateInvoiceSignal must be provided");
     let ws_state =

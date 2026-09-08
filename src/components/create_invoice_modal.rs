@@ -9,7 +9,7 @@ use leptos_router::hooks::use_navigate;
 
 use types::currency::{EXPIRATION_PRESETS, INVOICE_CURRENCY_OPTIONS};
 
-use crate::api::{CreateInvoiceRequest, EvmApiClient};
+use crate::api::{ApiClient, CreateInvoiceRequest};
 use crate::app::{StoreContext, StoresStatus};
 
 /// Shared signal that any component can use to open the create-invoice modal.
@@ -28,12 +28,12 @@ impl CreateInvoiceSignal {
 /// Create invoice modal form.
 ///
 /// Reads `CreateInvoiceSignal` from context to determine visibility.
-/// Reads `EvmApiClient` and `StoreContext` from context.
+/// Reads `ApiClient` and `StoreContext` from context.
 #[component]
 pub fn CreateInvoiceModal() -> impl IntoView {
     let modal_signal =
         use_context::<CreateInvoiceSignal>().expect("CreateInvoiceSignal must be provided");
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let store_ctx = use_context::<StoreContext>().expect("StoreContext must be provided");
     let navigate = use_navigate();
 

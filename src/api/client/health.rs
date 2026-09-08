@@ -1,9 +1,9 @@
 //! Health API methods.
 
-use super::{ApiError, EvmApiClient};
+use super::{ApiClient, ApiError};
 use crate::api::ChainsHealthResponse;
 
-impl EvmApiClient {
+impl ApiClient {
     /// Fetch per-chain monitor health.
     ///
     /// Answers every caller. An admin additionally gets block heights, the
@@ -18,7 +18,7 @@ impl EvmApiClient {
     /// `/health` is exempt from the IP rate limit tiers
     /// (`server/src/api/rate_limit.rs`), so polling this is safe.
     pub async fn get_chains_health(&self) -> Result<ChainsHealthResponse, ApiError> {
-        // "/api/health/chains", not "/health/chains". EvmApiClient is built with
+        // "/api/health/chains", not "/health/chains". ApiClient is built with
         // an EMPTY base_url (app/layout.rs), so every path here is absolute and
         // carries its own "/api" - see every other method. Without it the
         // request never reaches the server: nginx serves the SPA fallback for

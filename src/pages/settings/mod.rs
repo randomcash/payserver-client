@@ -14,7 +14,7 @@ use api_keys::ApiKeysTab;
 use notifications::NotificationsTab;
 use preferences::PreferencesTab;
 
-use crate::api::EvmApiClient;
+use crate::api::ApiClient;
 use leptos::prelude::*;
 
 /// Settings page with tabbed interface.
@@ -24,7 +24,7 @@ pub fn SettingsPage() -> impl IntoView {
     let (active_tab, set_active_tab) = signal("account".to_string());
 
     // Load user role to conditionally show admin tab
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let (is_admin, set_is_admin) = signal(false);
 
     leptos::task::spawn_local({

@@ -1,7 +1,7 @@
-//! API client for ethpayserver.
+//! API client for a payserver.
 
 mod client;
 mod types;
 
 pub use self::types::*;
-pub use client::{ApiError, EvmApiClient};
+pub use client::{ApiClient, ApiError};

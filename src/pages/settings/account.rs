@@ -1,6 +1,6 @@
 //! Account settings tab.
 
-use crate::api::EvmApiClient;
+use crate::api::ApiClient;
 use leptos::prelude::*;
 
 use super::format_date;
@@ -8,7 +8,7 @@ use super::format_date;
 /// Account settings tab — loads profile from `/auth/me`.
 #[component]
 pub fn AccountTab() -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
     let user_resource = LocalResource::new(move || {
         let api = api.get();

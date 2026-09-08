@@ -1,14 +1,14 @@
 //! Store API methods: stores, payment methods, webhooks, settings, token
 //! policy, and wallets.
 
-use super::{ApiError, EvmApiClient};
+use super::{ApiClient, ApiError};
 use crate::api::{
     CreatePaymentMethodRequest, CreateStoreRequest, SetTokenPolicyRequest, Store,
     StorePaymentMethod, StoreSettings, StoreWebhook, TokenPolicy, UpdatePaymentMethodRequest,
     UpdateStoreRequest, UpdateStoreSettingsRequest, UpdateWebhookRequest, Wallet,
 };
 
-impl EvmApiClient {
+impl ApiClient {
     // =========================================================================
     // Stores
     // =========================================================================

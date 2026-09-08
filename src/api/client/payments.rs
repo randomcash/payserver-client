@@ -1,9 +1,9 @@
 //! Payment API methods (store-scoped).
 
-use super::{ApiError, EvmApiClient};
+use super::{ApiClient, ApiError};
 use crate::api::{Payment, PaymentListResponse};
 
-impl EvmApiClient {
+impl ApiClient {
     /// List payments with filters and pagination.
     ///
     /// `store_id` of `None` means "All Stores": the server then returns

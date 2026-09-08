@@ -3,13 +3,13 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
-use crate::api::{EvmApiClient, Store, UpdateStoreRequest};
+use crate::api::{ApiClient, Store, UpdateStoreRequest};
 use crate::app::StoreContext;
 
 /// General settings tab.
 #[component]
 pub fn GeneralTab(store: Store) -> impl IntoView {
-    let api = use_context::<Signal<EvmApiClient>>().expect("EvmApiClient must be provided");
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
     let store_ctx = use_context::<StoreContext>().expect("StoreContext must be provided");
     let navigate = use_navigate();
     let store_id = store.id;
