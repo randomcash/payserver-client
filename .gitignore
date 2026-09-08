@@ -7,3 +7,8 @@
 
 # Written by `scripts/commons.sh link`; never commit it — it un-pins commons.
 /.cargo/config.toml
+
+# Layout tests
+/node_modules
+/test-results
+/playwright-report

@@ -81,6 +81,34 @@ jobs:
       - name: Test
         run: cargo test --all-targets
 
+  layout:
+    name: Layout
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # styles.css layers two design systems across 5000+ lines, so it holds
+      # pairs of rules with identical specificity where the later one wins by
+      # source order alone. That has produced three user-visible bugs, none of
+      # which could fail a normal test: the app compiles, renders, and is simply
+      # wrong. These inject the stylesheet into a blank page and assert computed
+      # style - no server, no auth, milliseconds.
+      #
+      # They ran in ethpayserver's E2E suite until the split. They belong here:
+      # a CSS regression should fail the repository that owns the CSS.
+      - name: Layout regressions
+        run: npx playwright test
+
   build:
     name: Build bundle
     runs-on: ubuntu-latest
@@ -117,7 +145,7 @@ jobs:
 
   publish:
     name: Publish image
-    needs: [lint, test, build]
+    needs: [lint, test, layout, build]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
