@@ -1,5 +1,9 @@
 # Build output
 /dist
+/target
 
 # Trunk cache
 .trunk
+
+# Written by `scripts/commons.sh link`; never commit it — it un-pins commons.
+/.cargo/config.toml

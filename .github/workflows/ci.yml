@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository }}
+
+# A frontend deploy is a tag move on a registry, so two merges landing close
+# together can publish out of order and leave `latest` pointing at the older
+# bundle. Serialise per ref rather than trying to detect it after the fact.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      # A committed Cargo.lock that does not carry the pinned revision means
+      # someone ran `scripts/commons.sh link` and committed the result. That
+      # silently un-pins commons for everyone and it looks like nothing.
+      - name: Commons pin matches the lock file
+        run: |
+          REV="$(grep -m1 -oP 'rev = "\K[0-9a-f]{40}' Cargo.toml)"
+          if [ -z "$REV" ]; then
+            echo "::error::no payserver-commons rev pinned in Cargo.toml"
+            exit 1
+          fi
+          # Per crate, and the crate name has to be in the match. Grepping only
+          # for the revision proves that SOME entry is pinned, which a partial
+          # un-pin passes: `types` pinned, `ui-kit` left as a path entry, green.
+          for CRATE in api-types scrub types ui-kit; do
+            if ! awk -v c="$CRATE" -v r="$REV" '
+                 /^\[\[package\]\]/ { name=""; src="" }
+                 /^name = / { gsub(/[",]/,""); name=$3 }
+                 /^source = / { src=$0 }
+                 name == c && src ~ r { found=1 }
+                 END { exit !found }' Cargo.lock; then
+              echo "::error::Cargo.lock does not pin $CRATE at $REV."
+              echo "Run 'scripts/commons.sh unlink' and commit the regenerated Cargo.lock."
+              exit 1
+            fi
+          done
+          echo "commons pinned at $REV in both Cargo.toml and Cargo.lock"
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      # The bundle is what ships, and it is the only configuration where
+      # `web-sys` is not a stub. A crate that lints clean on the host can still
+      # fail to build for the browser.
+      - name: Check wasm32 target
+        run: cargo check --target wasm32-unknown-unknown
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test --all-targets
+
+  build:
+    name: Build bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install trunk
+        run: cargo install trunk --locked
+
+      - name: Build
+        run: trunk build --release
+
+      # The whole reason this crate hand-writes its secret scrubber instead of
+      # using `regex` is bundle size (~1 MB of WASM). Print it on every build so
+      # a regression is visible in the log rather than six months later.
+      - name: Bundle size
+        run: |
+          echo "### Bundle" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -lhS dist/ | awk 'NR>1 {printf "%-40s %s\n", $9, $5}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  publish:
+    name: Publish image
+    needs: [lint, test, build]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Tags
+        id: tag
+        run: |
+          SHA_TAG="$(git rev-parse --short HEAD)"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG=latest
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=$SHA_TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The sha tag is the one a payserver deployment pins. `latest` is a
+      # convenience and nothing should deploy from it.
+      - name: Build & push
+        run: |
+          docker build -f docker/Dockerfile \
+            -t ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }} \
+            -t ${{ env.IMAGE }}:${{ steps.tag.outputs.sha_tag }} .
+          docker push ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          docker push ${{ env.IMAGE }}:${{ steps.tag.outputs.sha_tag }}
+          echo "pushed ${{ env.IMAGE }}:${{ steps.tag.outputs.sha_tag }}" >> "$GITHUB_STEP_SUMMARY"

@@ -19,10 +19,10 @@ backend = "http://127.0.0.1:3000/"
 [[hooks]]
 stage = "build"
 command = "sh"
-command_arguments = ["-c", "echo 'Building EVM PayServer client...'"]
+command_arguments = ["-c", "echo 'Building payserver-client...'"]
 
 # Pre-compress the built WASM/JS/CSS assets so nginx can serve them with
-# `gzip_static on;` (see docker/client-nginx.conf) instead of compressing on
+# `gzip_static on;` (see docker/nginx.conf) instead of compressing on
 # every request. Runs against the staging dir before Trunk swaps it into dist.
 [[hooks]]
 stage = "post_build"

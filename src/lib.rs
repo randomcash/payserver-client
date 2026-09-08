@@ -145,7 +145,7 @@ fn render_wallet_actions(
 /// Mount the app into `#app`, clearing whatever placeholder is there first.
 ///
 /// This is the single mounting implementation. Trunk builds the cdylib
-/// (`data-target-name="ethpayserver_client"` in index.html), so `init` below is
+/// (`data-target-name="payserver_client"` in index.html), so `init` below is
 /// the entry point that actually ships; `src/main.rs` exists for the standalone
 /// bin target. Both call this, so a fix to one cannot silently miss the other —
 /// which is exactly how the first-paint loader survived its own removal code.
