@@ -208,3 +208,32 @@ jobs:
           [ -n "$DIGEST" ] || { echo "::error::no digest for the client image"; exit 1; }
           cosign sign --yes "$DIGEST"
           echo "pushed and signed $DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
+      # The frontend deploys on its own cadence now (RCS-245). It used to ride
+      # along with whatever ethpayserver release happened next, which meant a
+      # frontend fix could not ship without deploying the backend.
+      #
+      # Only `main` deploys to testnet. A release tag is deliberately NOT wired
+      # to production here: promoting to production stays a deliberate act, run
+      # by hand against central-infrastructure.
+      - name: Deploy to testnet
+        if: github.ref == 'refs/heads/main'
+        env:
+          # Same secret name ethpayserver uses to dispatch its own deploy.
+          # central-infrastructure is private, so GITHUB_TOKEN cannot reach it.
+          DEPLOY_PAT: ${{ secrets.DEPLOY_PAT }}
+        run: |
+          set -e
+          if [ -z "$DEPLOY_PAT" ]; then
+            echo "::error::DEPLOY_PAT is not set on this repository, so the image was"
+            echo "published but nothing was deployed. Add a PAT with repo scope on"
+            echo "randomcash/central-infrastructure:"
+            echo "  gh secret set DEPLOY_PAT --repo randomcash/payserver-client"
+            exit 1
+          fi
+          curl -sS --fail-with-body -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $DEPLOY_PAT" \
+            https://api.github.com/repos/randomcash/central-infrastructure/dispatches \
+            -d '{"event_type":"deploy-client","client_payload":{"environment":"testnet","sha_tag":"${{ steps.tag.outputs.sha_tag }}"}}'
+          echo "dispatched deploy-client testnet ${{ steps.tag.outputs.sha_tag }}" >> "$GITHUB_STEP_SUMMARY"
