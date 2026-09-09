@@ -80,6 +80,24 @@ unhandled rejections are sent; never cookies, request bodies, user identity or
 query strings. Every free-text field goes through `scrub::redact_secrets`, the
 same implementation the payservers run. See `src/telemetry`.
 
+## Verifying the image
+
+The published image is signed with cosign in keyless mode — no private key
+exists; the signer is this repository's GitHub Actions job, recorded in the
+public Sigstore transparency log. Signatures are made against the **digest**,
+not the tag.
+
+```sh
+cosign verify \
+  --certificate-identity-regexp \
+    "^https://github.com/randomcash/payserver-client/\.github/workflows/ci\.yml@refs/(heads|tags)/.*$" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/randomcash/payserver-client:sha-abc1234
+```
+
+A payserver pins a specific tag of this image and verifies it under this
+identity — which is not the payserver's own, since the frontend is built here.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).

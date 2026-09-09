@@ -152,6 +152,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless cosign: the job proves its identity with a GitHub OIDC token
+      # instead of a long-lived private key. Nothing to store, rotate or leak.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -173,6 +176,9 @@ jobs:
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4
+
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -188,4 +194,13 @@ jobs:
             -t ${{ env.IMAGE }}:${{ steps.tag.outputs.sha_tag }} .
           docker push ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
           docker push ${{ env.IMAGE }}:${{ steps.tag.outputs.sha_tag }}
-          echo "pushed ${{ env.IMAGE }}:${{ steps.tag.outputs.sha_tag }}" >> "$GITHUB_STEP_SUMMARY"
+
+          # Signed by DIGEST, never by tag. A tag is a moving pointer: signing
+          # `:latest` says "something called that was signed once", which is not
+          # a statement about the bytes anyone pulls. The digest is the bytes.
+          # `cosign verify` on a tag resolves it to a digest and checks that, so
+          # verifying by tag still works for humans.
+          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.IMAGE }}:${{ steps.tag.outputs.sha_tag }})"
+          [ -n "$DIGEST" ] || { echo "::error::no digest for the client image"; exit 1; }
+          cosign sign --yes "$DIGEST"
+          echo "pushed and signed $DIGEST" >> "$GITHUB_STEP_SUMMARY"
