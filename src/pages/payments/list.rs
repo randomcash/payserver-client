@@ -116,8 +116,8 @@ pub fn PaymentsPage() -> impl IntoView {
         let _ = refresh.get();
 
         async move {
-            // Mirrors `pages/invoices/list.rs` — see the reasoning there
-            //: "All Stores" is a real query, but only once the store
+            // Mirrors `pages/invoices/list.rs` — see the reasoning there:
+            // "All Stores" is a real query, but only once the store
             // list has landed, and a non-admin's 400 is a "pick a store" state
             // rather than an error to render raw.
             if store_id.is_none() && !stores_loaded {
