@@ -35,7 +35,7 @@ pub fn InvoicesPage() -> impl IntoView {
     let (currency_filter, set_currency_filter) = signal("all".to_string());
     let (search_query, set_search_query) = signal(String::new());
     // The box tracks every keystroke; only this settles, and only it is ever
-    // queried. Search is a server-side filter now (RCS-231), so one request
+    // queried. Search is a server-side filter now, so one request
     // per character is what the debounce is standing between us and.
     let search_param = use_debounced_search(search_query.into());
     let (current_offset, set_current_offset) = signal(0i64);
@@ -111,7 +111,7 @@ pub fn InvoicesPage() -> impl IntoView {
         // every search keystroke that settled - two identical requests per
         // search, measured against testnet - since the offset is already 0 in
         // the common case. `get_untracked` so reading it here does not make the
-        // effect depend on the value it sets (RCS-231).
+        // effect depend on the value it sets.
         if current_offset.get_untracked() != 0 {
             set_current_offset.set(0);
         }
@@ -201,7 +201,7 @@ pub fn InvoicesPage() -> impl IntoView {
                 // The all-stores view is admin-only server-side; everyone else
                 // gets a 400. That is a "pick a store" situation, not a failure
                 // to show as a raw error with a Retry that cannot work — fall
-                // through to NoStoreSelected, which says exactly that (RCS-171).
+                // through to NoStoreSelected, which says exactly that.
                 Err(ApiError::Http { status: 400, .. }) if store_id.is_none() => Ok(None),
                 Err(e) => Err(e),
             }
@@ -217,8 +217,8 @@ pub fn InvoicesPage() -> impl IntoView {
     // NoStoreSelected on screen - so the same signal says whether an export can
     // succeed. Offering the button there fired a request that could only fail,
     // and the failure was console-only, so to the user the button did nothing
-    // at all. RCS-171 asks for non-admin behaviour to be handled gracefully
-    // with no raw error; a button that silently does nothing is not that.
+    // at all. Non-admin behaviour has to be handled gracefully, with no raw
+    // error; a button that silently does nothing is not that.
     let export_available = move || matches!(invoices_resource.get().as_deref(), Some(Ok(Some(_))));
 
     view! {
@@ -390,7 +390,7 @@ pub fn InvoicesPage() -> impl IntoView {
                                     // Same as payments: the hedge this used to
                                     // carry was honest only while the search
                                     // filtered the fetched page. The server
-                                    // filters now (RCS-231), so an empty result
+                                    // filters now, so an empty result
                                     // is the whole result.
                                     <p>{if searching {
                                         "No invoices match your search."

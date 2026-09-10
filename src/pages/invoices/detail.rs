@@ -103,7 +103,7 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                 })}
             </div>
             <div class="invoice-detail-actions">
-                // Neither action is wired up; both would silently no-op (RCS-230).
+                // Neither action is wired up; both would silently no-op.
                 <button
                     class="btn btn-secondary btn-sm"
                     disabled=true

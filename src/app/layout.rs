@@ -89,7 +89,7 @@ pub(super) fn ProtectedLayout() -> impl IntoView {
                     }
                     // Surface it: pages keyed only on "no store selected" would
                     // otherwise render the onboarding empty state forever, with
-                    // no error text and no way to retry (RCS-195).
+                    // no error text and no way to retry.
                     set_stores_status.set(StoresStatus::Failed(msg));
                 }
             }

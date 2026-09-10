@@ -74,8 +74,8 @@ pub fn EmptyState(#[prop(into)] title: String, #[prop(into)] description: String
 /// What to render on a store-scoped list page when no store is selected.
 ///
 /// "No store selected" is four different situations, and collapsing them into
-/// one onboarding empty state is what RCS-195 traded its `ApiError::Network`
-/// bug for: a user who *has* stores gets told to create one while the list is
+/// one onboarding empty state costs more than the `ApiError::Network` bug it
+/// replaced: a user who *has* stores gets told to create one while the list is
 /// still in flight, and a failed `list_stores()` looks identical to a brand-new
 /// account — with no error text and no way to retry. This branches on
 /// [`StoresStatus`] so each case says what is actually true.

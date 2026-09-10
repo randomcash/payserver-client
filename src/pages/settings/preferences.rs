@@ -86,7 +86,7 @@ pub fn PreferencesTab() -> impl IntoView {
 
                     <div class="form-actions">
                         // Same as Notifications: no persistence behind the form, so
-                        // saving would discard the edits silently (RCS-230).
+                        // saving would discard the edits silently.
                         <button
                             class="btn btn-primary btn-sm"
                             disabled=true

@@ -2,7 +2,7 @@
 //! it reaches the server.
 //!
 //! Search used to be a client-side filter over the fetched page, so typing was
-//! free. It is a query parameter now (RCS-231) — every distinct term is a
+//! free. It is a query parameter now — every distinct term is a
 //! request — which is what the debounce below is for.
 
 use std::cell::RefCell;
@@ -42,8 +42,8 @@ pub fn normalize_search(raw: &str) -> Option<String> {
 /// The pending timer lives in an `Rc` this hook owns so that a new keystroke
 /// *replaces* it — dropping a `Timeout` cancels it — and so `on_cleanup` can
 /// cancel one still in flight. A timer that outlives its owner and writes a
-/// disposed signal panics the whole app, which was RCS-220; here that is
-/// navigating away mid-word.
+/// disposed signal panics the whole app; here that is navigating away
+/// mid-word.
 pub fn use_debounced_search(raw: Signal<String>) -> Signal<Option<String>> {
     let (term, set_term) = signal(normalize_search(&raw.get_untracked()));
 

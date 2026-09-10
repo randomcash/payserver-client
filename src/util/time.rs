@@ -4,10 +4,9 @@
 //! text - recovery timestamps, API-key expiry - and for the `js_sys::Date`
 //! interop the countdown needs.
 //!
-//! RCS-242 added `chrono` to this crate, so response fields now arrive already
-//! typed and most callers do not parse at all. Replacing what remains with
-//! `DateTime::parse_from_rfc3339` is a reasonable follow-up; it is left alone
-//! here because these functions are covered by tests this PR does not touch.
+//! `chrono` is now a dependency of this crate, so response fields arrive
+//! already typed and most callers do not parse at all. Replacing what remains
+//! with `DateTime::parse_from_rfc3339` is a reasonable follow-up.
 
 /// Parse an RFC 3339 / ISO 8601 timestamp into milliseconds since the Unix
 /// epoch.
@@ -16,7 +15,7 @@
 /// (`2026-09-07T19:21:47.939123Z`) plus explicit numeric offsets
 /// (`...+02:00`). Returns `None` for anything it cannot read rather than
 /// guessing: a wrong timestamp renders as a wrong "2 minutes ago", which is
-/// exactly the kind of invented detail RCS-224 is removing.
+/// exactly the kind of invented detail this client must not produce.
 #[must_use]
 pub fn parse_iso8601_ms(iso: &str) -> Option<i64> {
     let bytes = iso.as_bytes();

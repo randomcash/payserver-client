@@ -209,7 +209,7 @@ jobs:
           cosign sign --yes "$DIGEST"
           echo "pushed and signed $DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
-      # The frontend deploys on its own cadence now (RCS-245). It used to ride
+      # The frontend deploys on its own cadence now. It used to ride
       # along with whatever ethpayserver release happened next, which meant a
       # frontend fix could not ship without deploying the backend.
       #

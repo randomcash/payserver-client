@@ -366,9 +366,9 @@ fn PaymentMethodRow(
                 <span class="payment-method-type">{asset_type}</span>
             </td>
             <td>
-                // A method with no resolved wallet has no index to show. Since
-                // RCS-234 that is a real state - not pinned, no store override,
-                // no account primary - and rendering the bare Option would leave
+                // A method with no resolved wallet has no index to show. That
+                // is a real state - not pinned, no store override, no account
+                // primary - and rendering the bare Option would leave
                 // an empty cell that reads as zero. Say which it is.
                 <code class="payment-method-index">
                     {method.derivation_index

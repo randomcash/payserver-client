@@ -2,7 +2,7 @@
 
 /// Shorten a store ID for display, or say so when there is nothing to shorten.
 ///
-/// Used as the fallback label in the "All Stores" views (RCS-171) when the
+/// Used as the fallback label in the "All Stores" views when the
 /// server could not resolve a store name: a row still has to say which store it
 /// came from, and a bare UUID is better than a blank cell.
 ///

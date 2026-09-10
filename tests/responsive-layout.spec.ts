@@ -201,7 +201,7 @@ test.describe('table column alignment', () => {
  * `display: flex` with the warning background and padding. Applied to the step
  * container instead of the checkbox, it laid the four children out as four
  * columns: the title, the description, the checkbox label and the buttons, each
- * a narrow strip of text (RCS-237). It also nested the warning background
+ * a narrow strip of text. It also nested the warning background
  * inside itself, invisibly.
  *
  * Reported twice from real use - passkey registration and wallet registration,

@@ -68,7 +68,7 @@ where
 
                 <div class="main-header-actions">
                     <ConnectionIndicator state=ws_state />
-                    // No notification centre behind the bell yet (RCS-230).
+                    // No notification centre behind the bell yet.
                     <button
                         class="btn btn-ghost btn-sm"
                         disabled=true

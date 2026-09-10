@@ -5,7 +5,7 @@
 //! client used to keep its own hand-written copy of each shape, the two were
 //! compiled separately, and nothing checked that they agreed. When they drifted
 //! the whole workspace still built and the page died on contact with the API -
-//! three times in one day (RCS-234, and twice in RCS-241).
+//! three times in one day.
 //!
 //! What stays here is what the server does not define: view models the client
 //! assembles for itself, and the auth shapes that come from `ui-kit`.
