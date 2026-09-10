@@ -195,3 +195,50 @@ test.describe('table column alignment', () => {
     expect(display, 'flex here silently destroys column alignment').toBe('table-row');
   });
 });
+
+/**
+ * `.ps-recovery-confirm` carried a copy of the `.ps-checkbox-label` rule -
+ * `display: flex` with the warning background and padding. Applied to the step
+ * container instead of the checkbox, it laid the four children out as four
+ * columns: the title, the description, the checkbox label and the buttons, each
+ * a narrow strip of text (RCS-237). It also nested the warning background
+ * inside itself, invisibly.
+ *
+ * Reported twice from real use - passkey registration and wallet registration,
+ * which share this component from ui-kit.
+ */
+test.describe('recovery confirm step', () => {
+  const MARKUP = `
+    <div class="ps-recovery-confirm">
+      <h3 class="ps-recovery-title">Confirm Your Recovery Phrase</h3>
+      <p class="ps-recovery-description">Please confirm that you have saved your recovery phrase securely.</p>
+      <label class="ps-checkbox-label"><input type="checkbox" class="ps-checkbox"/><span>I have written down my recovery phrase.</span></label>
+      <div class="ps-recovery-actions"><button class="ps-button ps-button-primary">Complete Setup</button></div>
+    </div>`;
+
+  test('the step stacks its children instead of laying them out as columns', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setContent(`<style>${CSS}</style>${MARKUP}`);
+
+    const boxes = await page.locator('.ps-recovery-confirm > *').evaluateAll((els) =>
+      els.map((el) => el.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), y: Math.round(r.y) })),
+    );
+    expect(boxes.length).toBe(4);
+
+    // Stacked: every child starts at the same x and strictly below the previous.
+    // Side-by-side columns is the bug, and it shows up as increasing x.
+    for (let i = 1; i < boxes.length; i++) {
+      expect(boxes[i].x, `child ${i} shifted right — laid out as a column`).toBe(boxes[0].x);
+      expect(boxes[i].y, `child ${i} did not stack below child ${i - 1}`).toBeGreaterThan(boxes[i - 1].y);
+    }
+  });
+
+  test('the warning background belongs to the checkbox, not the whole step', async ({ page }) => {
+    await page.setContent(`<style>${CSS}</style>${MARKUP}`);
+    const step = await page.locator('.ps-recovery-confirm').evaluate((el) => getComputedStyle(el).backgroundColor);
+    const label = await page.locator('.ps-checkbox-label').evaluate((el) => getComputedStyle(el).backgroundColor);
+
+    expect(label, 'the checkbox should sit in the warning box').not.toBe('rgba(0, 0, 0, 0)');
+    expect(step, 'the step container should not repeat it').toBe('rgba(0, 0, 0, 0)');
+  });
+});

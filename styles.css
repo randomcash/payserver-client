@@ -5652,14 +5652,18 @@ tr.payment-row {
     color: var(--text-primary);
 }
 
+/* The confirm step is a plain container, like .ps-recovery-show. It used to
+ * carry a copy of the .ps-checkbox-label rule below - display:flex, the warning
+ * background, padding, radius - which is that element's styling, not this one's.
+ *
+ * Applied here it laid the step's four children (title, description, checkbox
+ * label, actions) out as four columns, because flex defaults to row. Nothing
+ * failed: it compiled, rendered, and was simply wrong (RCS-237). It also drew
+ * the warning background twice, one inside the other, invisibly.
+ *
+ * If this needs layout again, set flex-direction explicitly. */
 .ps-recovery-confirm {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    background: var(--color-warning-light);
-    border-radius: var(--radius-md);
-    margin-bottom: var(--space-4);
+    display: block;
 }
 
 .ps-recovery-checkbox {
