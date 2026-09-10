@@ -2,6 +2,7 @@
 
 use crate::api::ApiClient;
 use leptos::prelude::*;
+use ui_kit::use_auth;
 
 use super::format_date;
 
@@ -9,6 +10,16 @@ use super::format_date;
 #[component]
 pub fn AccountTab() -> impl IntoView {
     let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
+    let auth = use_auth();
+
+    // Deleting is irreversible and cascades, so it takes two deliberate steps:
+    // reveal the confirmation, then type the account's own handle back. A single
+    // click - or a browser `confirm()`, which people dismiss by reflex - is not
+    // enough for an action that destroys stores, wallets and API keys.
+    let (confirming, set_confirming) = signal(false);
+    let (typed, set_typed) = signal(String::new());
+    let (deleting, set_deleting) = signal(false);
+    let (delete_error, set_delete_error) = signal(Option::<String>::None);
 
     let user_resource = LocalResource::new(move || {
         let api = api.get();
@@ -31,6 +42,47 @@ pub fn AccountTab() -> impl IntoView {
                         let created = format_date(&user.created_at);
                         let last_login = user.last_login_at.as_deref().map(format_date).unwrap_or_else(|| "Never".to_string());
                         let user_id = user.id.clone();
+                        // What the server will compare against: the email where
+                        // there is one, else the account id. A passkey-only
+                        // account has neither email nor wallet, so its id is the
+                        // only handle it has.
+                        let expected = user.email.clone().unwrap_or_else(|| user.id.clone());
+                        // `StoredValue` so the handlers below stay `Copy`. A
+                        // captured `String` would make `on_delete` `FnOnce`, and
+                        // a reactive block has to be callable more than once.
+                        let expected_stored = StoredValue::new(expected.clone());
+                        let matches = move || {
+                            expected_stored.with_value(|e| {
+                                typed.get().trim().eq_ignore_ascii_case(e.trim())
+                            })
+                        };
+                        let on_delete = move |_| {
+                            if !matches() {
+                                return;
+                            }
+                            let api = api.get();
+                            let confirm = expected_stored.get_value();
+                            set_deleting.set(true);
+                            set_delete_error.set(None);
+                            leptos::task::spawn_local(async move {
+                                match api.delete_account(&confirm).await {
+                                    Ok(()) => {
+                                        // The session died with the account; drop
+                                        // the local token so the app does not keep
+                                        // retrying with it.
+                                        auth.logout();
+                                    }
+                                    Err(e) => {
+                                        // Includes the 409 naming the payments,
+                                        // payouts or refunds holding the account.
+                                        // Shown verbatim: "you have 3 payments" is
+                                        // the answer, not a failure to report one.
+                                        let _ = set_delete_error.try_set(Some(e.to_string()));
+                                        let _ = set_deleting.try_set(false);
+                                    }
+                                }
+                            });
+                        };
                         let has_email = user.email.is_some();
                         let has_wallet = user.primary_wallet_address.is_some();
 
@@ -110,10 +162,72 @@ pub fn AccountTab() -> impl IntoView {
                                     <div class="danger-action">
                                         <div class="danger-action-info">
                                             <span class="danger-action-title">"Delete account"</span>
-                                            <span class="danger-action-desc">"Permanently delete your account and all associated data"</span>
+                                            <span class="danger-action-desc">
+                                                "Deletes this account, its stores, wallets and API keys. \
+                                                 Refused if any store has taken a payment - that history \
+                                                 cannot be destroyed. Addresses already issued stay valid \
+                                                 and funds sent to them remain yours."
+                                            </span>
                                         </div>
-                                        <button class="btn btn-danger btn-sm" disabled=true>"Delete account"</button>
+                                        <button
+                                            class="btn btn-danger btn-sm"
+                                            on:click=move |_| set_confirming.set(true)
+                                            disabled=move || confirming.get()
+                                        >
+                                            "Delete account"
+                                        </button>
                                     </div>
+
+                                    {
+                                        // Owned by the closure and cloned per
+                                        // call: cloning the captured value
+                                        // directly would move it, and a reactive
+                                        // block has to be callable more than once.
+                                        let expected_label = expected.clone();
+                                        move || confirming.get().then(|| {
+                                        let expected = expected_label.clone();
+                                        view! {
+                                            <div class="form-group">
+                                                <label class="form-label">
+                                                    "Type " <code>{expected.clone()}</code> " to confirm"
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    class="form-input"
+                                                    prop:value=move || typed.get()
+                                                    on:input=move |ev| set_typed.set(event_target_value(&ev))
+                                                />
+                                                {move || delete_error.get().map(|msg| view! {
+                                                    <p style="color: var(--color-error)">{msg}</p>
+                                                })}
+                                                <div class="form-actions">
+                                                    <button
+                                                        class="btn btn-danger btn-sm"
+                                                        on:click=on_delete
+                                                        disabled=move || !matches() || deleting.get()
+                                                    >
+                                                        {move || if deleting.get() {
+                                                            "Deleting..."
+                                                        } else {
+                                                            "Permanently delete this account"
+                                                        }}
+                                                    </button>
+                                                    <button
+                                                        class="btn btn-secondary btn-sm"
+                                                        on:click=move |_| {
+                                                            set_confirming.set(false);
+                                                            set_typed.set(String::new());
+                                                            set_delete_error.set(None);
+                                                        }
+                                                        disabled=move || deleting.get()
+                                                    >
+                                                        "Cancel"
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                    })
+                                    }
                                 </div>
                             </div>
                         }.into_any()

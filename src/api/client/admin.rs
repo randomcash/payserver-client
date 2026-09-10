@@ -18,6 +18,23 @@ impl ApiClient {
     }
 
     /// Log out the current session (server-side invalidation).
+    /// Delete the authenticated account.
+    ///
+    /// `confirm` must be the account's email, or its id where it has none. The
+    /// server refuses while the account's stores hold any payment, payout or
+    /// refund - deleting would cascade through invoices into payments and erase
+    /// a merchant's financial history - and answers 409 naming what blocked it.
+    ///
+    /// The confirmation is a query parameter rather than a body so that no DTO
+    /// has to be defined twice, once here and once server-side.
+    pub async fn delete_account(&self, confirm: &str) -> Result<(), ApiError> {
+        self.delete(&format!(
+            "/api/users/me?confirm={}",
+            js_sys::encode_uri_component(confirm)
+        ))
+        .await
+    }
+
     pub async fn logout(&self) -> Result<(), ApiError> {
         let request = self
             .build_request("POST", "/api/auth/logout")
