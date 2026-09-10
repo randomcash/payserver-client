@@ -5,9 +5,9 @@
 
 use leptos::prelude::*;
 use leptos_router::components::A;
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_navigate, use_params_map};
 
-use crate::api::{ApiClient, Wallet};
+use crate::api::{ApiClient, CreateWalletRequest, UpdateWalletRequest, Wallet};
 
 /// Format ISO date string for display.
 fn format_date(iso: &str) -> String {
@@ -50,10 +50,51 @@ fn truncate_address(address: &str) -> String {
 pub fn WalletsPage() -> impl IntoView {
     let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
+    let (refresh, set_refresh) = signal(0u32);
     let wallets_resource = LocalResource::new(move || {
+        refresh.track();
         let api = api.get();
         async move { api.list_wallets().await }
     });
+
+    let (show_form, set_show_form) = signal(false);
+    let (xpub, set_xpub) = signal(String::new());
+    let (wallet_name, set_wallet_name) = signal(String::new());
+    let (creating, set_creating) = signal(false);
+    let (create_error, set_create_error) = signal(Option::<String>::None);
+
+    let on_create = move |_| {
+        let xpub_value = xpub.get_untracked().trim().to_string();
+        if xpub_value.is_empty() {
+            return;
+        }
+        let name = wallet_name.get_untracked().trim().to_string();
+        let api = api.get();
+        set_creating.set(true);
+        set_create_error.set(None);
+        leptos::task::spawn_local(async move {
+            let req = CreateWalletRequest {
+                xpub: xpub_value,
+                name: (!name.is_empty()).then_some(name),
+            };
+            match api.create_wallet(&req).await {
+                Ok(_) => {
+                    let _ = set_xpub.try_set(String::new());
+                    let _ = set_wallet_name.try_set(String::new());
+                    let _ = set_show_form.try_set(false);
+                    let _ = set_refresh.try_update(|c| *c += 1);
+                }
+                Err(e) => {
+                    // Includes the 409 for an xpub already registered to another
+                    // account. Surfaced verbatim rather than flattened: "that key
+                    // belongs to someone else" is the one thing a merchant needs
+                    // to read here.
+                    let _ = set_create_error.try_set(Some(e.to_string()));
+                }
+            }
+            let _ = set_creating.try_set(false);
+        });
+    };
 
     view! {
         <div class="wallets-page">
@@ -64,25 +105,66 @@ pub fn WalletsPage() -> impl IntoView {
                     <p class="page-description">"Manage HD wallets for receiving payments"</p>
                 </div>
                 <div class="page-actions">
-                    // The wallets API is read-only, so nothing on this page can act
-                    // yet.
                     <button
                         class="btn btn-primary btn-sm"
-                        disabled=true
-                        title="Adding a wallet is not implemented yet"
+                        on:click=move |_| set_show_form.update(|v| *v = !*v)
                     >
                         <IconPlus />
-                        "Add wallet"
+                        {move || if show_form.get() { "Cancel" } else { "Add wallet" }}
                     </button>
                 </div>
             </div>
+
+            {move || show_form.get().then(|| view! {
+                <div class="detail-card">
+                    <div class="detail-card-header"><h3>"Add a wallet"</h3></div>
+                    <div class="detail-card-body">
+                        <div class="form-group">
+                            <label class="form-label">"Extended public key (xpub)"</label>
+                            <input
+                                type="text"
+                                class="form-input"
+                                placeholder="xpub..."
+                                prop:value=move || xpub.get()
+                                on:input=move |ev| set_xpub.set(event_target_value(&ev))
+                            />
+                            <p class="form-help">
+                                "An account-level xpub (m/44\u{2019}/60\u{2019}/0\u{2019}). Addresses are derived \
+                                 from it here; the private key never leaves your wallet. One \
+                                 xpub belongs to one account."
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">"Name (optional)"</label>
+                            <input
+                                type="text"
+                                class="form-input"
+                                prop:value=move || wallet_name.get()
+                                on:input=move |ev| set_wallet_name.set(event_target_value(&ev))
+                            />
+                        </div>
+                        {move || create_error.get().map(|msg| view! {
+                            <p style="color: var(--color-error)">{msg}</p>
+                        })}
+                        <div class="form-actions">
+                            <button
+                                class="btn btn-primary btn-sm"
+                                on:click=on_create
+                                disabled=move || creating.get() || xpub.get().trim().is_empty()
+                            >
+                                {move || if creating.get() { "Adding..." } else { "Add wallet" }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            })}
 
             // Wallets Grid
             <Suspense fallback=move || view! { <div class="loading-state">"Loading wallets..."</div> }>
                 {move || {
                     wallets_resource.get().map(|result| match &*result {
                         Ok(wallets) if wallets.is_empty() => {
-                            view! { <WalletsEmpty /> }.into_any()
+                            view! { <WalletsEmpty on_add=Callback::new(move |()| set_show_form.set(true)) /> }.into_any()
                         }
                         Ok(wallets) => {
                             let wallets = wallets.clone();
@@ -107,7 +189,7 @@ pub fn WalletsPage() -> impl IntoView {
 
 /// Empty state for wallets.
 #[component]
-fn WalletsEmpty() -> impl IntoView {
+fn WalletsEmpty(on_add: Callback<()>) -> impl IntoView {
     view! {
         <div class="wallets-empty">
             <IconWalletLarge />
@@ -115,8 +197,7 @@ fn WalletsEmpty() -> impl IntoView {
             <p>"Add an HD wallet to start receiving cryptocurrency payments"</p>
             <button
                 class="btn btn-primary btn-sm"
-                disabled=true
-                title="Adding a wallet is not implemented yet"
+                on:click=move |_| on_add.run(())
             >
                 "Add your first wallet"
             </button>
@@ -181,6 +262,37 @@ pub fn WalletDetailPage() -> impl IntoView {
         async move { api.get_wallet(&id).await }
     });
 
+    let (exporting, set_exporting) = signal(false);
+
+    // Export fetches the FULL xpub and copies it. Every other view of the key
+    // is masked, so this has to be an explicit act by the merchant - which is
+    // why it is its own endpoint and its own button rather than something the
+    // page loads to render.
+    let on_export = move |_| {
+        let api = api.get();
+        let id = wallet_id();
+        set_exporting.set(true);
+        leptos::task::spawn_local(async move {
+            match api.export_wallet_xpub(&id).await {
+                Ok(res) => {
+                    if let Some(window) = web_sys::window() {
+                        let _ = window.navigator().clipboard().write_text(&res.xpub);
+                        let _ = window.alert_with_message(
+                            "The full xpub is on your clipboard. It derives every address this \
+                             wallet issues, so anyone holding it can see your incoming payments. \
+                             It cannot move funds.",
+                        );
+                    }
+                }
+                Err(e) => {
+                    web_sys::window()
+                        .and_then(|w| w.alert_with_message(&format!("Export failed: {e}")).ok());
+                }
+            }
+            let _ = set_exporting.try_set(false);
+        });
+    };
+
     // Active tab state
     let (active_tab, set_active_tab) = signal("general".to_string());
 
@@ -220,11 +332,12 @@ pub fn WalletDetailPage() -> impl IntoView {
                                             <div class="wallet-detail-actions">
                                                 <button
                                                     class="btn btn-secondary btn-sm"
-                                                    disabled=true
-                                                    title="Wallet export is not implemented yet"
+                                                    on:click=on_export
+                                                    disabled=move || exporting.get()
+                                                    title="Copy the full xpub to your clipboard"
                                                 >
                                                     <IconDownload />
-                                                    "Export"
+                                                    {move || if exporting.get() { "Exporting..." } else { "Export" }}
                                                 </button>
                                             </div>
                                         </div>
@@ -271,7 +384,99 @@ pub fn WalletDetailPage() -> impl IntoView {
 /// General settings tab.
 #[component]
 fn GeneralTab(wallet: Wallet) -> impl IntoView {
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
+    let navigate = use_navigate();
+
     let (name, set_name) = signal(wallet.name.clone().unwrap_or_default());
+    // `is_primary` is a promotion, never a demotion: the server ignores
+    // `Some(false)`, because "this account has no primary wallet" is not a state
+    // a merchant can usefully ask for - a store with no override would then
+    // resolve to nothing. So the control offers promotion and goes away once
+    // this wallet holds the role.
+    let already_primary = wallet.is_primary;
+    let (promote, set_promote) = signal(false);
+    let (saving, set_saving) = signal(false);
+    let (deleting, set_deleting) = signal(false);
+    let (message, set_message) = signal(Option::<(bool, String)>::None);
+    let (copied, set_copied) = signal(false);
+
+    let wallet_id = wallet.id;
+    let xpub_for_copy = wallet.xpub_masked.clone();
+
+    let on_copy = move |_| {
+        // The masked xpub is what is on screen, and what gets copied. The full
+        // key is a separate, deliberate export (`GET /wallets/{id}/xpub`);
+        // silently copying it here would hand out the whole key from a button
+        // whose label says nothing about that.
+        if let Some(window) = web_sys::window() {
+            let _ = window.navigator().clipboard().write_text(&xpub_for_copy);
+            set_copied.set(true);
+            leptos::task::spawn_local(async move {
+                gloo_timers::future::TimeoutFuture::new(2000).await;
+                let _ = set_copied.try_set(false);
+            });
+        }
+    };
+
+    let on_save = move |_| {
+        let api = api.get();
+        let trimmed = name.get().trim().to_string();
+        let req = UpdateWalletRequest {
+            // Empty means "no name", not "leave it alone" - the field is a text
+            // input a merchant can clear on purpose.
+            name: Some(trimmed),
+            is_primary: promote.get().then_some(true),
+        };
+        set_saving.set(true);
+        set_message.set(None);
+        leptos::task::spawn_local(async move {
+            // `try_*` throughout: navigating away disposes this component while
+            // the request is in flight, and writing a disposed signal panics the
+            // whole client.
+            match api.update_wallet(&wallet_id.to_string(), &req).await {
+                Ok(_) => {
+                    let _ = set_message.try_set(Some((true, "Saved.".to_string())));
+                    let _ = set_promote.try_set(false);
+                }
+                Err(e) => {
+                    let _ = set_message.try_set(Some((false, format!("Save failed: {e}"))));
+                }
+            }
+            let _ = set_saving.try_set(false);
+        });
+    };
+
+    let on_delete = move |_| {
+        let confirmed = web_sys::window()
+            .and_then(|w| {
+                w.confirm_with_message(
+                    "Delete this wallet? Addresses it has already issued stay valid and any \
+                     funds sent to them remain yours - the key is derived from your xpub, not \
+                     held here. Stores still pointing at this wallet will refuse to derive new \
+                     addresses until you give them another.",
+                )
+                .ok()
+            })
+            .unwrap_or(false);
+        if !confirmed {
+            return;
+        }
+        let api = api.get();
+        let navigate = navigate.clone();
+        set_deleting.set(true);
+        set_message.set(None);
+        leptos::task::spawn_local(async move {
+            match api.delete_wallet(&wallet_id.to_string()).await {
+                Ok(()) => navigate("/evm/wallets", Default::default()),
+                Err(e) => {
+                    // The server refuses while a store still derives from this
+                    // wallet, so this is a real answer, not a failure to report.
+                    let _ = set_message.try_set(Some((false, format!("Delete failed: {e}"))));
+                    let _ = set_deleting.try_set(false);
+                }
+            }
+        });
+    };
 
     view! {
         <div class="wallet-tab-general">
@@ -297,11 +502,14 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
                             <code class="wallet-address-full">{wallet.xpub_masked.clone()}</code>
                             <button
                                 class="btn btn-ghost btn-sm btn-icon"
-                                disabled=true
-                                title="Copy is not implemented yet"
+                                on:click=on_copy
+                                title="Copy the masked key shown here"
                             >
                                 <IconCopy />
                             </button>
+                            {move || copied.get().then(|| view! {
+                                <span class="text-muted">"Copied"</span>
+                            })}
                         </div>
                         <p class="form-help">"Masked xpub used for HD address derivation"</p>
                     </div>
@@ -314,13 +522,36 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
                         <p class="form-help">"Next BIP-44 index for address generation"</p>
                     </div>
 
+                    {move || (!already_primary).then(|| view! {
+                        <div class="form-group">
+                            <label class="form-label">"Account primary"</label>
+                            <label class="toggle">
+                                <input
+                                    type="checkbox"
+                                    prop:checked=move || promote.get()
+                                    on:change=move |ev| set_promote.set(event_target_checked(&ev))
+                                />
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <p class="form-help">
+                                "Stores with no wallet of their own derive from the account \
+                                 primary. Promoting this wallet demotes the current one."
+                            </p>
+                        </div>
+                    })}
+
+                    {move || message.get().map(|(ok, msg)| {
+                        let style = if ok { "color: var(--color-success)" } else { "color: var(--color-error)" };
+                        view! { <p style=style>{msg}</p> }
+                    })}
+
                     <div class="form-actions">
                         <button
                             class="btn btn-primary btn-sm"
-                            disabled=true
-                            title="Wallets are read-only - saving is not implemented yet"
+                            on:click=on_save
+                            disabled=move || saving.get() || deleting.get()
                         >
-                            "Save changes"
+                            {move || if saving.get() { "Saving..." } else { "Save changes" }}
                         </button>
                     </div>
                 </div>
@@ -338,10 +569,10 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
                         </div>
                         <button
                             class="btn btn-danger btn-sm"
-                            disabled=true
-                            title="Wallets are read-only - deleting is not implemented yet"
+                            on:click=on_delete
+                            disabled=move || deleting.get() || saving.get()
                         >
-                            "Delete wallet"
+                            {move || if deleting.get() { "Deleting..." } else { "Delete wallet" }}
                         </button>
                     </div>
                 </div>

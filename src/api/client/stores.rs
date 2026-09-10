@@ -3,9 +3,10 @@
 
 use super::{ApiClient, ApiError};
 use crate::api::{
-    CreatePaymentMethodRequest, CreateStoreRequest, SetTokenPolicyRequest, Store,
-    StorePaymentMethod, StoreSettings, StoreWebhook, TokenPolicy, UpdatePaymentMethodRequest,
-    UpdateStoreRequest, UpdateStoreSettingsRequest, UpdateWebhookRequest, Wallet,
+    CreatePaymentMethodRequest, CreateStoreRequest, CreateWalletRequest, SetTokenPolicyRequest,
+    Store, StorePaymentMethod, StoreSettings, StoreWebhook, TokenPolicy,
+    UpdatePaymentMethodRequest, UpdateStoreRequest, UpdateStoreSettingsRequest,
+    UpdateWalletRequest, UpdateWebhookRequest, Wallet, WalletXpubResponse,
 };
 
 impl ApiClient {
@@ -179,5 +180,43 @@ impl ApiClient {
     /// Get a wallet by ID.
     pub async fn get_wallet(&self, id: &str) -> Result<Wallet, ApiError> {
         self.get(&format!("/api/wallets/{}", id)).await
+    }
+
+    /// Add a wallet to the account.
+    ///
+    /// The server refuses an xpub already registered to another account with a
+    /// 409 - one key, one account, so two merchants cannot derive the same
+    /// addresses for different customers.
+    pub async fn create_wallet(&self, req: &CreateWalletRequest) -> Result<Wallet, ApiError> {
+        self.post("/api/wallets", req).await
+    }
+
+    /// Rename a wallet, or make it the account primary.
+    ///
+    /// `is_primary: Some(true)` promotes; `Some(false)` is ignored server-side,
+    /// because "no primary" is not a state a merchant can usefully ask for.
+    pub async fn update_wallet(
+        &self,
+        id: &str,
+        req: &UpdateWalletRequest,
+    ) -> Result<Wallet, ApiError> {
+        self.patch(&format!("/api/wallets/{}", id), req).await
+    }
+
+    /// Delete a wallet.
+    ///
+    /// Refused while any store still derives from it, so this cannot silently
+    /// strand a store's payment methods.
+    pub async fn delete_wallet(&self, id: &str) -> Result<(), ApiError> {
+        self.delete(&format!("/api/wallets/{}", id)).await
+    }
+
+    /// Read a wallet's FULL xpub.
+    ///
+    /// Everything else returns it masked. This is the one call that does not,
+    /// which is why it is a separate endpoint and should stay a deliberate act
+    /// by the merchant rather than something a page fetches to render.
+    pub async fn export_wallet_xpub(&self, id: &str) -> Result<WalletXpubResponse, ApiError> {
+        self.get(&format!("/api/wallets/{}/xpub", id)).await
     }
 }
