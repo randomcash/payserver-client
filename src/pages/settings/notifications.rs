@@ -108,16 +108,19 @@ fn read_matrix(prefs: &Value) -> [bool; NOTIFICATION_EVENTS.len()] {
 
 /// The `notification_prefs` blob to PATCH for a given matrix.
 ///
-/// Writes all five keys and nothing else. Not a merge onto what was loaded,
-/// deliberately: the PATCH validator rejects any top-level key outside
-/// `VALID_NOTIFICATION_EVENTS`, so carrying `customer_receipts_enabled`
-/// through would turn every save into a 400. The cost is that saving here
-/// drops that key — see the note rendered under the matrix.
-fn write_matrix(cells: &[bool; NOTIFICATION_EVENTS.len()]) -> Value {
+/// Carries `customer_receipts_enabled` alongside the five event keys. It used
+/// to be omitted, because the validator rejected any top-level key outside
+/// `VALID_NOTIFICATION_EVENTS` and including it made every save a 400 — and
+/// since the server replaced the blob rather than merging, omitting it *removed*
+/// it, which reads as enabled. Saving one preference therefore switched customer
+/// receipt emails back on. The server now accepts the key and merges, so it is
+/// sent explicitly rather than left to survive by luck.
+fn write_matrix(cells: &[bool; NOTIFICATION_EVENTS.len()], receipts: bool) -> Value {
     let mut obj = serde_json::Map::new();
     for (cell, event) in cells.iter().zip(NOTIFICATION_EVENTS.iter()) {
         obj.insert(event.key.to_string(), json!({ "webhook": *cell }));
     }
+    obj.insert(CUSTOMER_RECEIPTS_KEY.to_string(), Value::Bool(receipts));
     Value::Object(obj)
 }
 
@@ -153,7 +156,7 @@ pub fn NotificationsTab() -> impl IntoView {
 
     // The matrix: one webhook flag per event, parallel to NOTIFICATION_EVENTS.
     let cells = RwSignal::new([true; NOTIFICATION_EVENTS.len()]);
-    // Receipts are shown, not edited — the key cannot be PATCHed yet.
+    // Receipts: a real control now that the endpoint accepts the key.
     let receipts = RwSignal::new(true);
     // Which store the matrix currently holds, not merely "something loaded":
     // the sidebar can switch stores under this tab, and a plain `loaded` flag
@@ -186,7 +189,7 @@ pub fn NotificationsTab() -> impl IntoView {
             default_display_currency: None,
             logo_url: None,
             accent_color: None,
-            notification_prefs: Some(write_matrix(&cells.get())),
+            notification_prefs: Some(write_matrix(&cells.get(), receipts.get())),
         };
 
         leptos::task::spawn_local(async move {
@@ -323,16 +326,15 @@ fn NotificationMatrix(
                             </span>
                         }
                         .into_any(),
-                        // Read-only on purpose: the flag lives at the top level
-                        // of the prefs blob, which the PATCH validator rejects,
-                        // so a live toggle here could only fail.
                         EmailChannel::CustomerReceipt => view! {
                             <label class="toggle">
                                 <input
                                     type="checkbox"
                                     prop:checked=move || receipts.get()
-                                    disabled=true
-                                    title="Customer receipts cannot be changed here yet"
+                                    on:change=move |ev| {
+                                        receipts.set(event_target_checked(&ev));
+                                    }
+                                    title="Email a receipt to the customer when their payment confirms"
                                 />
                                 <span class="toggle-slider"></span>
                             </label>
@@ -370,9 +372,7 @@ fn NotificationMatrix(
         <p class="form-help">
             "Webhooks are delivered to the endpoint configured on the store. \
              The only email the server sends is the customer payment receipt, \
-             which is why the other email cells are empty rather than off. \
-             Receipts are read-only here until the settings endpoint accepts \
-             their key."
+             which is why the other email cells are empty rather than off."
         </p>
     }
 }
@@ -433,22 +433,49 @@ mod tests {
     #[test]
     fn a_matrix_survives_a_round_trip() {
         let cells = [true, false, false, true, false];
-        assert_eq!(read_matrix(&write_matrix(&cells)), cells);
+        assert_eq!(read_matrix(&write_matrix(&cells, true)), cells);
     }
 
     #[test]
-    fn the_payload_carries_every_event_and_only_those() {
-        let payload = write_matrix(&[true, false, true, false, true]);
+    fn the_payload_carries_every_event_plus_the_receipts_switch() {
+        let payload = write_matrix(&[true, false, true, false, true], true);
         let obj = payload.as_object().expect("payload is an object");
-        assert_eq!(obj.len(), NOTIFICATION_EVENTS.len());
+        assert_eq!(obj.len(), NOTIFICATION_EVENTS.len() + 1);
         for event in &NOTIFICATION_EVENTS {
             assert!(obj.contains_key(event.key), "missing {}", event.key);
         }
-        // The receipts key must never be sent: the PATCH validator rejects any
-        // top-level key it does not know, so including it is a 400.
-        assert!(!obj.contains_key(CUSTOMER_RECEIPTS_KEY));
+        assert!(obj.contains_key(CUSTOMER_RECEIPTS_KEY));
         assert_eq!(payload["payment_detected"], json!({"webhook": true}));
         assert_eq!(payload["payment_confirmed"], json!({"webhook": false}));
+    }
+
+    #[test]
+    fn receipts_off_is_sent_as_an_explicit_false() {
+        // Not omission. Absent reads as ENABLED on the server
+        // (`confirmation_handler.rs` matches `Bool(false)` exactly), so leaving
+        // the key out is how a merchant's "off" used to be lost.
+        let payload = write_matrix(&[true; NOTIFICATION_EVENTS.len()], false);
+        assert_eq!(payload[CUSTOMER_RECEIPTS_KEY], json!(false));
+    }
+
+    #[test]
+    fn receipts_survive_a_round_trip_in_both_positions() {
+        for want in [true, false] {
+            let payload = write_matrix(&[true; NOTIFICATION_EVENTS.len()], want);
+            assert_eq!(
+                customer_receipts_enabled(&payload),
+                want,
+                "receipts={want} did not survive"
+            );
+        }
+    }
+
+    #[test]
+    fn the_receipts_switch_does_not_disturb_the_event_cells() {
+        let cells = [true, false, true, false, true];
+        for receipts in [true, false] {
+            assert_eq!(read_matrix(&write_matrix(&cells, receipts)), cells);
+        }
     }
 
     #[test]
@@ -458,7 +485,7 @@ mod tests {
         for i in 0..NOTIFICATION_EVENTS.len() {
             let mut cells = [true; NOTIFICATION_EVENTS.len()];
             cells[i] = false;
-            let payload = write_matrix(&cells);
+            let payload = write_matrix(&cells, true);
             for (j, event) in NOTIFICATION_EVENTS.iter().enumerate() {
                 assert_eq!(
                     payload[event.key]["webhook"],
