@@ -22,7 +22,7 @@ fn store_label(invoice: &Invoice) -> String {
 /// Invoice table row.
 ///
 /// `show_store` adds the store column, which the list page turns on only for
-/// the "All Stores" view — see `list.rs` (RCS-171).
+/// the "All Stores" view — see `list.rs`.
 #[component]
 pub(super) fn InvoiceRow(invoice: Invoice, show_store: bool) -> impl IntoView {
     let invoice_id = invoice.id.clone();
@@ -65,7 +65,7 @@ pub(super) fn InvoiceRow(invoice: Invoice, show_store: bool) -> impl IntoView {
                 <span class="invoice-date">{created_display}</span>
             </td>
             <td>
-                // The overflow menu has no items behind it yet (RCS-230).
+                // The overflow menu has no items behind it yet.
                 <button
                     class="btn btn-ghost btn-sm btn-icon"
                     disabled=true

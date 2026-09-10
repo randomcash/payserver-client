@@ -71,7 +71,7 @@ pub fn StoreDetailPage() -> impl IntoView {
                                 <div class="store-detail-actions">
                                     {(!store.archived).then(|| view! {
                                         // Archiving is not wired to the API; enabled, it reads
-                                        // as a store that got archived (RCS-230).
+                                        // as a store that got archived.
                                         <button
                                             class="btn btn-secondary btn-sm"
                                             disabled=true

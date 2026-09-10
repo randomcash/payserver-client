@@ -48,7 +48,7 @@ pub fn CreateInvoiceModal() -> impl IntoView {
     let default_expiration = EXPIRATION_PRESETS[0].0.to_string();
     // Store to invoice against. Empty = nothing picked yet; the modal owns this
     // rather than reading the global selection at submit time, so an invoice can
-    // be created while the header sits on "All Stores" (RCS-172).
+    // be created while the header sits on "All Stores".
     let (store_id, set_store_id) = signal(String::new());
     let (amount, set_amount) = signal(String::new());
     let (currency, set_currency) = signal(default_currency.clone());
@@ -206,7 +206,7 @@ pub fn CreateInvoiceModal() -> impl IntoView {
     };
 
     // Placeholder doubles as the stores-fetch status line, so a slow or
-    // failed fetch doesn't read as "this account has no stores" (RCS-195).
+    // failed fetch doesn't read as "this account has no stores".
     let store_placeholder = move || match stores_status.get() {
         StoresStatus::Loading => "Loading stores...",
         StoresStatus::Failed(_) => "Could not load stores",

@@ -65,7 +65,7 @@ pub fn WalletsPage() -> impl IntoView {
                 </div>
                 <div class="page-actions">
                     // The wallets API is read-only, so nothing on this page can act
-                    // yet (RCS-226, RCS-230).
+                    // yet.
                     <button
                         class="btn btn-primary btn-sm"
                         disabled=true

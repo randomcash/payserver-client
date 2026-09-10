@@ -312,7 +312,7 @@ pub fn AdminTab() -> impl IntoView {
                             </div>
                             // None of the three maintenance actions call the server. Left
                             // enabled, an admin has no way to tell a no-op from a restart
-                            // that happened (RCS-230).
+                            // that happened.
                             <button
                                 class="btn btn-secondary btn-sm"
                                 disabled=true

@@ -11,11 +11,10 @@ impl ApiClient {
     ///
     /// `store_id` of `None` means "All Stores": the server then returns
     /// invoices across every store, which it only allows for server admins —
-    /// any other caller gets `400 Bad Request` (RCS-171).
+    /// any other caller gets `400 Bad Request`.
     ///
     /// `search` is a free-text term over id, currency, amount and metadata,
-    /// applied in SQL so `total` counts the same rows the page shows
-    /// (RCS-231).
+    /// applied in SQL so `total` counts the same rows the page shows.
     pub async fn list_invoices(
         &self,
         store_id: Option<&str>,
@@ -92,7 +91,7 @@ impl ApiClient {
     ///
     /// `search` is passed for the same reason `status` is: the export shares
     /// the list's filter builders server-side, and an export that ignores the
-    /// search box hands the merchant rows they cannot see (RCS-231).
+    /// search box hands the merchant rows they cannot see.
     pub async fn export_invoices_csv(
         &self,
         store_id: Option<&str>,

@@ -13,7 +13,8 @@ impl ApiClient {
     ///
     /// The server answers `503` when the monitor has published nothing to
     /// Redis, so an error here is a real "we do not know" and must not be
-    /// rendered as healthy — a green panel over dead monitors was RCS-196.
+    /// rendered as healthy — a green panel over dead monitors has shipped
+    /// before.
     ///
     /// `/health` is exempt from the IP rate limit tiers
     /// (`server/src/api/rate_limit.rs`), so polling this is safe.

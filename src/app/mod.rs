@@ -29,7 +29,7 @@ const SELECTED_STORE_KEY: &str = "eps_selected_store";
 /// "the fetch failed" and "this account genuinely has no stores" all at once.
 /// Pages that render an onboarding empty state need to tell those apart, or a
 /// user with stores is told to create one while the list is still in flight,
-/// and a failed fetch is indistinguishable from a brand-new account (RCS-195).
+/// and a failed fetch is indistinguishable from a brand-new account.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StoresStatus {
     /// No fetch has completed yet; `stores` is not yet meaningful.

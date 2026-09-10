@@ -292,9 +292,9 @@ impl Drop for WebSocketService {
 
 /// Create a single reconnection WebSocket (used from the onclose callback).
 ///
-/// Fixes RCS-131: the new WebSocket is now stored in `ws_storage` so it can
-/// be closed by `disconnect()`. Previously the socket was created but never
-/// stored, leaving orphaned connections after network blips.
+/// The new WebSocket is stored in `ws_storage` so it can be closed by
+/// `disconnect()`. It used to be created but never stored, leaving orphaned
+/// connections after network blips.
 #[allow(clippy::too_many_arguments)]
 fn reconnect_one(
     url: &str,
@@ -353,7 +353,7 @@ fn reconnect_one(
         }
     };
 
-    // Store the new WebSocket so disconnect() can close it (RCS-131 fix)
+    // Store the new WebSocket so disconnect() can close it
     *ws_storage.borrow_mut() = Some(ws.clone());
 
     // On open — send auth message if token provided, reset reconnect counter

@@ -6,7 +6,7 @@
 //! no account-wide preference store and no notion of a "security alert", so
 //! there was nothing to wire those toggles to. What it has is per-store
 //! `store_settings.notification_prefs`, keyed by event, with a flag per
-//! channel. This tab is drawn against that instead (RCS-228).
+//! channel. This tab is drawn against that instead.
 //!
 //! "Product updates" has no successor here on purpose. It is not an event the
 //! server emits, it is a marketing mailing list — which needs a list, consent
@@ -112,7 +112,7 @@ fn read_matrix(prefs: &Value) -> [bool; NOTIFICATION_EVENTS.len()] {
 /// deliberately: the PATCH validator rejects any top-level key outside
 /// `VALID_NOTIFICATION_EVENTS`, so carrying `customer_receipts_enabled`
 /// through would turn every save into a 400. The cost is that saving here
-/// drops that key — see the note rendered under the matrix (RCS-228).
+/// drops that key — see the note rendered under the matrix.
 fn write_matrix(cells: &[bool; NOTIFICATION_EVENTS.len()]) -> Value {
     let mut obj = serde_json::Map::new();
     for (cell, event) in cells.iter().zip(NOTIFICATION_EVENTS.iter()) {
@@ -193,7 +193,7 @@ pub fn NotificationsTab() -> impl IntoView {
             let result = api.update_store_settings(&store_id, &request).await;
             // `try_*` throughout: switching tabs disposes this component while
             // the request is still in flight, and writing a disposed signal
-            // panics the whole client, which was RCS-220.
+            // panics the whole client.
             match result {
                 Ok(_) => {
                     let _ = set_saved.try_set(true);
@@ -325,7 +325,7 @@ fn NotificationMatrix(
                         .into_any(),
                         // Read-only on purpose: the flag lives at the top level
                         // of the prefs blob, which the PATCH validator rejects,
-                        // so a live toggle here could only fail (RCS-228).
+                        // so a live toggle here could only fail.
                         EmailChannel::CustomerReceipt => view! {
                             <label class="toggle">
                                 <input
@@ -372,7 +372,7 @@ fn NotificationMatrix(
              The only email the server sends is the customer payment receipt, \
              which is why the other email cells are empty rather than off. \
              Receipts are read-only here until the settings endpoint accepts \
-             their key (RCS-228)."
+             their key."
         </p>
     }
 }

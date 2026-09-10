@@ -2166,7 +2166,7 @@ tr.payment-row {
     color: var(--text-muted);
 }
 
-/* Store attribution, shown only in the "All Stores" view (RCS-171). */
+/* Store attribution, shown only in the "All Stores" view. */
 .invoice-store,
 .payment-store {
     color: var(--text-secondary);
@@ -5073,7 +5073,7 @@ tr.payment-row {
     margin-top: var(--space-1);
 }
 
-/* Notification event x channel matrix (RCS-228) */
+/* Notification event x channel matrix */
 .notification-matrix {
     width: 100%;
     border-collapse: collapse;
@@ -5658,7 +5658,7 @@ tr.payment-row {
  *
  * Applied here it laid the step's four children (title, description, checkbox
  * label, actions) out as four columns, because flex defaults to row. Nothing
- * failed: it compiled, rendered, and was simply wrong (RCS-237). It also drew
+ * failed: it compiled, rendered, and was simply wrong. It also drew
  * the warning background twice, one inside the other, invisibly.
  *
  * If this needs layout again, set flex-direction explicitly. */
@@ -5744,7 +5744,7 @@ tr.payment-row {
 
 /* Account id shown beside the recovery phrase for passkey-only accounts.
    Recovery needs an identifier as well as the phrase, and a passkey-only
-   account has no email or wallet to fall back on (RCS-201/205). Styled as a
+   account has no email or wallet to fall back on. Styled as a
    sibling of the mnemonic grid so it reads as part of what must be saved,
    not as an aside. */
 .ps-recovery-account-id {

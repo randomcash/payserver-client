@@ -98,8 +98,8 @@ fn test_wallet_serialization() {
     let parsed: Wallet = serde_json::from_str(&json).unwrap();
 
     assert_eq!(wallet.id, parsed.id);
-    // user_id, not store_id: RCS-234 moved wallets to the account. This
-    // assertion is why the DTO change could not pass silently.
+    // user_id, not store_id: wallets belong to the account. This assertion is
+    // why the DTO change could not pass silently.
     assert_eq!(wallet.user_id, parsed.user_id);
     assert_eq!(wallet.is_primary, parsed.is_primary);
     assert_eq!(wallet.xpub_masked, parsed.xpub_masked);
@@ -155,7 +155,7 @@ fn test_dashboard_stats_roundtrip() {
 }
 
 // =========================================================================
-// Dashboard analytics (RCS-225)
+// Dashboard analytics
 // =========================================================================
 
 #[test]
@@ -524,7 +524,7 @@ fn test_store_payment_method_from_backend_json() {
     assert_eq!(pm.id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
     assert_eq!(pm.chain_id, ChainId::evm(11155111));
     assert_eq!(pm.asset_symbol, "ETH");
-    // Option since RCS-234: a payment method can resolve to no wallet.
+    // Option: a payment method can resolve to no wallet.
     assert_eq!(pm.xpub_masked.as_deref(), Some("xpub6CUG...Ht4QRnxv"));
     assert_eq!(pm.derivation_index, Some(3));
     assert!(pm.enabled);

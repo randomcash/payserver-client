@@ -1,7 +1,7 @@
 //! Formatting and status helpers for payment rows.
 //!
 //! Shared across the payments pages and the dashboard's recent-payments panel,
-//! so a payment reads the same wherever it is shown (RCS-224).
+//! so a payment reads the same wherever it is shown.
 
 use crate::api::Payment;
 

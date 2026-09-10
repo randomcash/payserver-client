@@ -40,7 +40,7 @@ fn DashboardHeader() -> impl IntoView {
             </div>
             <div class="dashboard-actions">
                 // Nothing exports yet; disabled beats a click that looks like
-                // a download that failed (RCS-230).
+                // a download that failed.
                 <button
                     class="btn btn-secondary btn-sm"
                     disabled=true
@@ -328,7 +328,7 @@ fn amount_for_scale(amount: &str) -> f64 {
 /// Daily volume for one asset.
 ///
 /// Bars are per asset because volume is not summable across assets — 1 ETH
-/// plus 1 USDC is not 2 of anything (RCS-225). The selected asset's symbol is
+/// plus 1 USDC is not 2 of anything. The selected asset's symbol is
 /// on the axis label so the numbers mean something.
 #[component]
 fn VolumeChart(
@@ -517,7 +517,7 @@ const RECENT_PAYMENTS_LIMIT: i64 = 5;
 ///
 /// This panel used to be a literal list of invented tx hashes, amounts, dollar
 /// values and timestamps, shown identically to every account including ones
-/// with no payments at all (RCS-224). Everything here now comes off the row.
+/// with no payments at all. Everything here now comes off the row.
 ///
 /// There is deliberately no fiat column. Rendering one needs a rate for the
 /// asset *at the time the payment landed*; `/rates` only serves the current
@@ -555,11 +555,11 @@ fn RecentPayments() -> impl IntoView {
         let _ = ws_version.get();
 
         async move {
-            // Mirrors `pages/payments/list.rs` (RCS-171): "All Stores" is a
+            // Mirrors `pages/payments/list.rs`: "All Stores" is a
             // real query, but only once the store list has landed, and a
             // non-admin's 400 is a "pick a store" state rather than an error.
-            // RCS-222 is widening the server side of that; when it lands this
-            // branch simply stops being reached.
+            // Widening the server side of that will make this branch stop
+            // being reached.
             if store_id.is_none() && !stores_loaded {
                 return Ok(None);
             }
@@ -702,7 +702,7 @@ impl ChainState {
     ///
     /// `is_healthy` is the monitor's own verdict and only matters while
     /// connected: a monitor can hold an RPC connection and still not be
-    /// processing, which is precisely the state RCS-196 rendered as green.
+    /// processing, which is precisely the state that once rendered as green.
     fn dot_class(self, is_healthy: bool) -> &'static str {
         match self {
             Self::Connected if is_healthy => "network-dot network-dot-online",
@@ -749,9 +749,9 @@ fn chain_label(chain: &ChainHealthInfo) -> String {
 /// Network status panel — the chains the monitor is actually reporting on.
 ///
 /// This was a hardcoded five-chain list that named chains which are not
-/// enabled and showed them all connected with invented confirmation counts
-/// (RCS-223). It would have stayed green throughout RCS-196, where every
-/// monitor RPC endpoint was empty. Nothing here has a default: no data means
+/// enabled and showed them all connected with invented confirmation counts.
+/// It would have stayed green through the outage where every monitor RPC
+/// endpoint was empty. Nothing here has a default: no data means
 /// the panel says so.
 #[component]
 fn NetworkStatus() -> impl IntoView {
@@ -776,7 +776,7 @@ fn NetworkStatus() -> impl IntoView {
                 // 503 means the monitor has published no health at all. That is
                 // "we cannot tell you", which is not the same as "all good" and
                 // must not render as rows - a green panel over dead monitors
-                // was RCS-196.
+                // has shipped before.
                 //
                 // There is no 403 case: the endpoint answers everyone, and
                 // simply says less to a non-admin (block heights, the watched
@@ -850,7 +850,7 @@ const RELATIVE_TIME_TICK_MS: u32 = 30_000;
 /// component is alive.
 ///
 /// The interval handle is dropped in `on_cleanup`: a timer that outlives its
-/// owner and writes a disposed signal panics the whole app, which was RCS-220.
+/// owner and writes a disposed signal panics the whole app.
 fn use_tick(interval_ms: u32) -> ReadSignal<u32> {
     let (tick, set_tick) = signal(0u32);
 
@@ -981,7 +981,7 @@ mod tests {
     fn only_a_healthy_connection_gets_the_green_dot() {
         let online = "network-dot network-dot-online";
         assert_eq!(ChainState::Connected.dot_class(true), online);
-        // Connected but the monitor itself says unhealthy: RCS-196.
+        // Connected but the monitor itself says unhealthy.
         assert_ne!(ChainState::Connected.dot_class(false), online);
         assert_ne!(ChainState::Connecting.dot_class(true), online);
         assert_ne!(ChainState::Disconnected.dot_class(true), online);
