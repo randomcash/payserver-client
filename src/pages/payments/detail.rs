@@ -5,6 +5,7 @@ use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
 
 use crate::api::{ApiClient, Payment};
+use crate::components::TimelineState;
 use crate::util::chain_name;
 
 use super::format::{
@@ -202,7 +203,7 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                         <div class="detail-card-body">
                             <div class="timeline">
                                 {payment.confirmed_at.is_some().then(|| view! {
-                                    <div class="timeline-item timeline-item-success">
+                                    <div class=TimelineState::Done.row_class()>
                                         <div class="timeline-dot"></div>
                                         <div class="timeline-content">
                                             <span class="timeline-title">"Payment confirmed"</span>
@@ -212,7 +213,7 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                                     </div>
                                 })}
                                 {(!payment.reorged && payment.confirmed_at.is_none()).then(|| view! {
-                                    <div class="timeline-item timeline-item-pending">
+                                    <div class=TimelineState::Pending.row_class()>
                                         <div class="timeline-dot"></div>
                                         <div class="timeline-content">
                                             <span class="timeline-title">"Awaiting confirmation"</span>
@@ -221,7 +222,7 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                                     </div>
                                 })}
                                 {payment.reorged.then(|| view! {
-                                    <div class="timeline-item timeline-item-error">
+                                    <div class=TimelineState::Failed.row_class()>
                                         <div class="timeline-dot"></div>
                                         <div class="timeline-content">
                                             <span class="timeline-title">"Payment invalidated"</span>
@@ -229,7 +230,10 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                                         </div>
                                     </div>
                                 })}
-                                <div class="timeline-item">
+                                // Detection is the one event on this page that
+                                // is certain: there is a payment to look at, so
+                                // it was seen. It rendered grey regardless.
+                                <div class=TimelineState::Done.row_class()>
                                     <div class="timeline-dot"></div>
                                     <div class="timeline-content">
                                         <span class="timeline-title">"Payment detected"</span>
