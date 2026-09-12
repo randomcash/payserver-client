@@ -39,8 +39,8 @@ pub fn PaymentMethodsTab(store_id: String) -> impl IntoView {
     let on_create = move |_| {
         let xpub = new_xpub.get_untracked();
         let symbol = new_asset_symbol.get_untracked();
-        if xpub.trim().is_empty() || symbol.trim().is_empty() {
-            set_create_error.set(Some("Asset symbol and xpub are required".to_string()));
+        if symbol.trim().is_empty() {
+            set_create_error.set(Some("Asset symbol is required".to_string()));
             return;
         }
         // Accepts either a full CAIP-2 identifier (`eip155:1`) or a bare
@@ -85,7 +85,12 @@ pub fn PaymentMethodsTab(store_id: String) -> impl IntoView {
                 token_address,
                 asset_symbol: symbol.trim().to_string(),
                 decimals,
-                xpub: xpub.trim().to_string(),
+                // Empty means "use the key this store already resolves to".
+                // A merchant pastes their key once, on the Wallets page, and
+                // every method after that inherits it - rather than retyping
+                // 111 characters per chain, per token and per store, where a
+                // single wrong character silently sends money elsewhere.
+                xpub: (!xpub.trim().is_empty()).then(|| xpub.trim().to_string()),
             };
             match api.create_payment_method(&sid, &req).await {
                 Ok(_) => {
@@ -197,14 +202,26 @@ pub fn PaymentMethodsTab(store_id: String) -> impl IntoView {
                                 </div>
                             </div>
                             <div class="form-group" style="margin-top: 1rem;">
-                                <label class="form-label">"Extended Public Key (xpub)"</label>
+                                <label class="form-label">
+                                    "Receiving key (xpub) " <span class="text-muted">"— optional"</span>
+                                </label>
                                 <input
                                     type="text"
                                     class="form-input"
-                                    placeholder="xpub..."
+                                    placeholder="Leave empty to use this store's key"
                                     prop:value=move || new_xpub.get()
                                     on:input=move |ev| set_new_xpub.set(event_target_value(&ev))
                                 />
+                                <p class="form-help">
+                                    "Left empty, this method derives from the key the store \
+                                     already uses — your account's key, or a different one set \
+                                     for this store. Add keys on the Wallets page. Paste one \
+                                     here only to pin this method to a different key."
+                                </p>
+                                <p class="form-help">
+                                    "An extended PUBLIC key. It derives the addresses customers \
+                                     pay into and cannot spend — a private key (xprv) is refused."
+                                </p>
                             </div>
                             <div class="form-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem;">
                                 <button
