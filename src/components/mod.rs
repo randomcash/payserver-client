@@ -6,6 +6,7 @@ mod feedback;
 mod gas_estimator;
 mod network_selector;
 mod pagination;
+mod timeline;
 mod token_selector;
 
 pub use chain_status::ChainStatus;
@@ -14,4 +15,5 @@ pub use feedback::{EmptyState, ErrorState, LoadingInline, LoadingState, NoStoreS
 pub use gas_estimator::GasEstimator;
 pub use network_selector::NetworkSelector;
 pub use pagination::{PAGE_SIZE, Pagination};
+pub use timeline::{TimelineState, payment_state};
 pub use token_selector::TokenSelector;

@@ -5,6 +5,7 @@ use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
 
 use crate::api::{ApiClient, ApiError, Invoice, InvoiceStatusExt, Payment};
+use crate::components::{TimelineState, payment_state};
 
 use super::helpers::{
     IconExport, chain_name, confirmed_payment_count, format_amount, format_date,
@@ -264,7 +265,7 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                     <div class="detail-card-body">
                         <div class="timeline">
                             {is_paid.then(|| view! {
-                                <div class="timeline-item timeline-item-success">
+                                <div class=TimelineState::Done.row_class()>
                                     <div class="timeline-dot"></div>
                                     <div class="timeline-content">
                                         <span class="timeline-title">"Invoice paid in full"</span>
@@ -272,7 +273,7 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                                 </div>
                             })}
                             {(is_expired && !is_paid).then(|| view! {
-                                <div class="timeline-item timeline-item-error">
+                                <div class=TimelineState::Failed.row_class()>
                                     <div class="timeline-dot"></div>
                                     <div class="timeline-content">
                                         <span class="timeline-title">"Invoice expired"</span>
@@ -282,8 +283,12 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                             {payments.iter().map(|p| {
                                 let timestamp = format_date(&p.detected_at.to_rfc3339());
                                 let desc = format!("{} payment received", p.asset_symbol);
+                                // Per payment, not per invoice: an invoice can
+                                // hold a confirmed payment and a reorged one at
+                                // once, and a single grey dot said neither.
+                                let state = payment_state(p.reorged, p.confirmed_at.is_some());
                                 view! {
-                                    <div class="timeline-item">
+                                    <div class=state.row_class()>
                                         <div class="timeline-dot"></div>
                                         <div class="timeline-content">
                                             <span class="timeline-title">{desc}</span>
@@ -292,7 +297,7 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                                     </div>
                                 }
                             }).collect_view()}
-                            <div class="timeline-item">
+                            <div class=TimelineState::Done.row_class()>
                                 <div class="timeline-dot"></div>
                                 <div class="timeline-content">
                                     <span class="timeline-title">"Invoice created"</span>
