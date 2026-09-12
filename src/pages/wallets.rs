@@ -116,9 +116,9 @@ pub fn WalletsPage() -> impl IntoView {
             </div>
 
             {move || show_form.get().then(|| view! {
-                <div class="detail-card">
-                    <div class="detail-card-header"><h3>"Add a wallet"</h3></div>
-                    <div class="detail-card-body">
+                <div class="ps-card">
+                    <div class="ps-card-header"><h3>"Add a wallet"</h3></div>
+                    <div class="ps-card-body">
                         <div class="form-group">
                             <label class="form-label">"Extended public key (xpub)"</label>
                             <input
@@ -497,11 +497,11 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
 
     view! {
         <div class="wallet-tab-general">
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"Wallet Information"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <div class="form-group">
                         <label class="form-label">"Wallet Name"</label>
                         <input
@@ -576,11 +576,11 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="detail-card detail-card-danger">
-                <div class="detail-card-header">
+            <div class="ps-card ps-card-danger">
+                <div class="ps-card-header">
                     <h3>"Danger Zone"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <div class="danger-action">
                         <div class="danger-action-info">
                             <span class="danger-action-title">"Delete this wallet"</span>
@@ -616,8 +616,8 @@ fn AddressesTab(wallet: Wallet) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="detail-card">
-                <div class="detail-card-body">
+            <div class="ps-card">
+                <div class="ps-card-body">
                     <div class="form-group">
                         <label class="form-label">"Addresses Derived"</label>
                         <div class="form-static">

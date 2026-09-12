@@ -1385,11 +1385,18 @@ a:hover {
     max-width: var(--content-max-width);
 }
 
+/* One card definition for both vocabularies, now that the client emits ui-kit's
+ * names. This is the union of the two rules it replaces: ui-kit's Card (rendered
+ * on the 404 page) brought `box-shadow`, and the client's detail cards brought
+ * `overflow: hidden`. Both now apply to both, which is the point - one design
+ * system means one card - and it is a real visual change: 40 cards gain a
+ * subtle shadow they did not have. */
 .ps-card {
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-xs);
+    overflow: hidden;
 }
 
 .ps-card-padded {
@@ -2386,25 +2393,18 @@ tr.payment-row {
 }
 
 /* Detail Card */
-.detail-card {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-lg);
-    overflow: hidden;
-}
-
-.detail-card-header {
+.ps-card-header {
     padding: var(--space-4) var(--space-5);
     border-bottom: 1px solid var(--border-color);
 }
 
-.detail-card-header h3 {
+.ps-card-header h3 {
     font-size: var(--text-md);
     font-weight: 600;
     color: var(--text-primary);
 }
 
-.detail-card-body {
+.ps-card-body {
     padding: var(--space-5);
 }
 
@@ -2580,7 +2580,7 @@ tr.payment-row {
 }
 
 /* Payments Table */
-.detail-card-header {
+.ps-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -2970,20 +2970,20 @@ tr.payment-row {
         width: 100%;
     }
 
-    .detail-card {
+    .ps-card {
         border-radius: var(--border-radius-md);
         overflow: hidden;
     }
 
-    .detail-card-header {
+    .ps-card-header {
         padding: var(--space-3) var(--space-4);
     }
 
-    .detail-card-header h3 {
+    .ps-card-header h3 {
         font-size: var(--text-base);
     }
 
-    .detail-card-body {
+    .ps-card-body {
         padding: var(--space-3) var(--space-4);
     }
 
@@ -3922,15 +3922,15 @@ tr.payment-row {
 }
 
 /* Danger Zone Card */
-.detail-card-danger {
+.ps-card-danger {
     border-color: var(--color-error-light);
 }
 
-.detail-card-danger .detail-card-header {
+.ps-card-danger .ps-card-header {
     background: var(--color-error-light);
 }
 
-.detail-card-danger .detail-card-header h3 {
+.ps-card-danger .ps-card-header h3 {
     color: var(--color-error);
 }
 

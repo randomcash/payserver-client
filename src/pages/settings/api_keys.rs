@@ -109,11 +109,11 @@ pub fn ApiKeysTab() -> impl IntoView {
 
             // Create form
             {move || show_create.get().then(|| view! {
-                <div class="detail-card" style="margin-bottom: 16px;">
-                    <div class="detail-card-header">
+                <div class="ps-card" style="margin-bottom: 16px;">
+                    <div class="ps-card-header">
                         <h3>"Create new API key"</h3>
                     </div>
-                    <div class="detail-card-body">
+                    <div class="ps-card-body">
                         <div class="form-group">
                             <label class="form-label">"Key name"</label>
                             <input
@@ -145,8 +145,8 @@ pub fn ApiKeysTab() -> impl IntoView {
 
             // Show newly created key (plaintext shown once)
             {move || created_key.get().map(|key| view! {
-                <div class="detail-card" style="margin-bottom: 16px; border-color: var(--color-success);">
-                    <div class="detail-card-body">
+                <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-success);">
+                    <div class="ps-card-body">
                         <p><strong>"Your new API key has been created. Copy it now — it will not be shown again."</strong></p>
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">
                             {key.key.clone()}
@@ -163,8 +163,8 @@ pub fn ApiKeysTab() -> impl IntoView {
 
             // Rotation error — user must know when a rotate click failed.
             {move || rotate_error.get().map(|msg| view! {
-                <div class="detail-card" style="margin-bottom: 16px; border-color: var(--color-danger);">
-                    <div class="detail-card-body">
+                <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-danger);">
+                    <div class="ps-card-body">
                         <p><strong>{msg}</strong></p>
                         <button
                             class="ps-btn ps-btn-ghost ps-btn-sm"
@@ -186,8 +186,8 @@ pub fn ApiKeysTab() -> impl IntoView {
                     key.old_key_grace_expires_at.to_rfc3339()
                 );
                 view! {
-                <div class="detail-card" style="margin-bottom: 16px; border-color: var(--color-warning);">
-                    <div class="detail-card-body">
+                <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-warning);">
+                    <div class="ps-card-body">
                         <p><strong>"Key rotated successfully. Copy your new key now — it will not be shown again."</strong></p>
                         <p>{grace_line}</p>
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">

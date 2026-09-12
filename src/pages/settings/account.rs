@@ -87,12 +87,12 @@ pub fn AccountTab() -> impl IntoView {
                         let has_wallet = user.primary_wallet_address.is_some();
 
                         view! {
-                            <div class="detail-card">
-                                <div class="detail-card-header">
+                            <div class="ps-card">
+                                <div class="ps-card-header">
                                     <h3>"Profile Information"</h3>
                                     <span class=role_class>{role_label}</span>
                                 </div>
-                                <div class="detail-card-body">
+                                <div class="ps-card-body">
                                     <div class="form-group">
                                         <label class="form-label">"User ID"</label>
                                         <div class="form-static">
@@ -135,11 +135,11 @@ pub fn AccountTab() -> impl IntoView {
                                 </div>
                             </div>
 
-                            <div class="detail-card">
-                                <div class="detail-card-header">
+                            <div class="ps-card">
+                                <div class="ps-card-header">
                                     <h3>"Security"</h3>
                                 </div>
-                                <div class="detail-card-body">
+                                <div class="ps-card-body">
                                     <p class="form-help" style="margin-bottom: 16px;">
                                         "This server uses passwordless authentication. Manage your passkeys and connected wallets to control access to your account."
                                     </p>
@@ -154,11 +154,11 @@ pub fn AccountTab() -> impl IntoView {
                                 </div>
                             </div>
 
-                            <div class="detail-card detail-card-danger">
-                                <div class="detail-card-header">
+                            <div class="ps-card ps-card-danger">
+                                <div class="ps-card-header">
                                     <h3>"Danger Zone"</h3>
                                 </div>
-                                <div class="detail-card-body">
+                                <div class="ps-card-body">
                                     <div class="danger-action">
                                         <div class="danger-action-info">
                                             <span class="danger-action-title">"Delete account"</span>
@@ -233,8 +233,8 @@ pub fn AccountTab() -> impl IntoView {
                         }.into_any()
                     }
                     Err(e) => view! {
-                        <div class="detail-card">
-                            <div class="detail-card-body">
+                        <div class="ps-card">
+                            <div class="ps-card-body">
                                 <p class="text-error">"Failed to load profile: "{e.to_string()}</p>
                             </div>
                         </div>

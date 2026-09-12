@@ -138,11 +138,11 @@ pub fn PaymentMethodsTab(store_id: String) -> impl IntoView {
             {move || show_create_form.get().then(|| {
                 let on_create = on_create.clone();
                 view! {
-                    <div class="detail-card" style="margin-bottom: 1.5rem;">
-                        <div class="detail-card-header">
+                    <div class="ps-card" style="margin-bottom: 1.5rem;">
+                        <div class="ps-card-header">
                             <h3>"Add Payment Method"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             {move || create_error.get().map(|err| view! {
                                 <div class="form-error" style="color: var(--color-error); margin-bottom: 1rem; padding: 0.5rem; background: var(--color-error-bg, rgba(239,68,68,0.1)); border-radius: 4px;">
                                     {err}

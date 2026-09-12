@@ -12,11 +12,11 @@ pub fn PreferencesTab() -> impl IntoView {
 
     view! {
         <div class="settings-tab-preferences">
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"Appearance"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <div class="form-group">
                         <label class="form-label">"Theme"</label>
                         <select
@@ -32,11 +32,11 @@ pub fn PreferencesTab() -> impl IntoView {
                 </div>
             </div>
 
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"Regional Settings"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <div class="form-group">
                         <label class="form-label">"Default Currency"</label>
                         <select

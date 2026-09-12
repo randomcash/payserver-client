@@ -87,11 +87,11 @@ pub fn GeneralTab(store: Store) -> impl IntoView {
 
     view! {
         <div class="store-tab-general">
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"Store Information"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     {move || save_message.get().map(|(success, msg)| {
                         let class = if success { "color: var(--color-success)" } else { "color: var(--color-error)" };
                         view! { <p style=class>{msg}</p> }
@@ -132,11 +132,11 @@ pub fn GeneralTab(store: Store) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="detail-card detail-card-danger">
-                <div class="detail-card-header">
+            <div class="ps-card ps-card-danger">
+                <div class="ps-card-header">
                     <h3>"Danger Zone"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <div class="danger-action">
                         <div class="danger-action-info">
                             <span class="danger-action-title">"Delete this store"</span>

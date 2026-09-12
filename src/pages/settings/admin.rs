@@ -141,12 +141,12 @@ pub fn AdminTab() -> impl IntoView {
             </div>
 
             // User Management
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"User Management"</h3>
                     <span class="badge">{move || format!("{} users", user_total.get())}</span>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     {move || {
                         let status = user_status.get();
                         if status.is_empty() {
@@ -215,11 +215,11 @@ pub fn AdminTab() -> impl IntoView {
             </div>
 
             // Payment Defaults
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"Payment Defaults"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <div class="settings-grid">
                         <div class="form-group">
                             <label class="form-label">"Required Confirmations"</label>
@@ -264,11 +264,11 @@ pub fn AdminTab() -> impl IntoView {
             </div>
 
             // Enabled Networks
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"Enabled Networks"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <p class="form-help" style="margin-bottom: 16px;">
                         "Networks available for payment processing. Disabled networks cannot be used by any store."
                     </p>
@@ -299,11 +299,11 @@ pub fn AdminTab() -> impl IntoView {
             </div>
 
             // Maintenance
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"Maintenance"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <div class="admin-actions">
                         <div class="admin-action">
                             <div class="admin-action-info">
