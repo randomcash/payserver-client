@@ -73,7 +73,7 @@ pub fn StoreDetailPage() -> impl IntoView {
                                         // Archiving is not wired to the API; enabled, it reads
                                         // as a store that got archived.
                                         <button
-                                            class="btn btn-secondary btn-sm"
+                                            class="ps-btn ps-btn-secondary ps-btn-sm"
                                             disabled=true
                                             title="Archiving a store is not implemented yet"
                                         >

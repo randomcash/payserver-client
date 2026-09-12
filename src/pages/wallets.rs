@@ -106,7 +106,7 @@ pub fn WalletsPage() -> impl IntoView {
                 </div>
                 <div class="page-actions">
                     <button
-                        class="btn btn-primary btn-sm"
+                        class="ps-btn ps-btn-primary ps-btn-sm"
                         on:click=move |_| set_show_form.update(|v| *v = !*v)
                     >
                         <IconPlus />
@@ -148,7 +148,7 @@ pub fn WalletsPage() -> impl IntoView {
                         })}
                         <div class="form-actions">
                             <button
-                                class="btn btn-primary btn-sm"
+                                class="ps-btn ps-btn-primary ps-btn-sm"
                                 on:click=on_create
                                 disabled=move || creating.get() || xpub.get().trim().is_empty()
                             >
@@ -196,7 +196,7 @@ fn WalletsEmpty(on_add: Callback<()>) -> impl IntoView {
             <h3>"No wallets configured"</h3>
             <p>"Add an HD wallet to start receiving cryptocurrency payments"</p>
             <button
-                class="btn btn-primary btn-sm"
+                class="ps-btn ps-btn-primary ps-btn-sm"
                 on:click=move |_| on_add.run(())
             >
                 "Add your first wallet"
@@ -342,7 +342,7 @@ pub fn WalletDetailPage() -> impl IntoView {
                                             </div>
                                             <div class="wallet-detail-actions">
                                                 <button
-                                                    class="btn btn-secondary btn-sm"
+                                                    class="ps-btn ps-btn-secondary ps-btn-sm"
                                                     on:click=on_export
                                                     disabled=move || exporting.get()
                                                     title="Copy the full xpub to your clipboard"
@@ -518,7 +518,7 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
                         <div class="form-static">
                             <code class="wallet-address-full">{wallet.xpub_masked.clone()}</code>
                             <button
-                                class="btn btn-ghost btn-sm btn-icon"
+                                class="ps-btn ps-btn-ghost ps-btn-sm ps-btn-icon"
                                 on:click=on_copy
                                 title="Copy the masked key shown here"
                             >
@@ -566,7 +566,7 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
 
                     <div class="form-actions">
                         <button
-                            class="btn btn-primary btn-sm"
+                            class="ps-btn ps-btn-primary ps-btn-sm"
                             on:click=on_save
                             disabled=move || saving.get() || deleting.get()
                         >
@@ -587,7 +587,7 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
                             <span class="danger-action-desc">"Remove this wallet configuration. This will not affect any funds."</span>
                         </div>
                         <button
-                            class="btn btn-danger btn-sm"
+                            class="ps-btn ps-btn-danger ps-btn-sm"
                             on:click=on_delete
                             disabled=move || deleting.get() || saving.get()
                         >

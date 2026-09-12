@@ -163,7 +163,7 @@ test.describe('table column alignment', () => {
             <td><a class="payment-invoice-link">inv_123</a></td>
             <td><span class="status-badge status-confirmed">Confirmed</span></td>
             <td><span class="payment-date">Sep 7, 2026</span></td>
-            <td><a class="btn btn-ghost btn-sm btn-icon">⋯</a></td>
+            <td><a class="ps-btn ps-btn-ghost ps-btn-sm ps-btn-icon">⋯</a></td>
           </tr>
         </tbody>
       </table>

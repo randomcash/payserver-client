@@ -37,7 +37,7 @@ pub fn PaymentDetailPage() -> impl IntoView {
                 Err(e) => view! {
                     <div class="error-container">
                         <p class="error-message">{e.to_string()}</p>
-                        <A href="/evm/payments" attr:class="btn btn-secondary btn-sm">"Back to payments"</A>
+                        <A href="/evm/payments" attr:class="ps-btn ps-btn-secondary ps-btn-sm">"Back to payments"</A>
                     </div>
                 }.into_any(),
                 Ok(payment) => {
@@ -111,7 +111,7 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                     <p class="payment-detail-subtitle">{network.clone()}" · "{detected_display.clone()}</p>
                 </div>
                 <div class="payment-detail-actions">
-                    <a href=tx_explorer_url.clone() target="_blank" class="btn btn-secondary btn-sm">
+                    <a href=tx_explorer_url.clone() target="_blank" class="ps-btn ps-btn-secondary ps-btn-sm">
                         <IconExternalLink />
                         "View on Explorer"
                     </a>
@@ -133,7 +133,7 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                                 <div class="detail-value detail-value-mono">
                                     <span class="tx-hash-full">{payment.tx_hash.clone()}</span>
                                     <button
-                                        class="btn-icon-xs"
+                                        class="ps-btn-icon-xs"
                                         disabled=true
                                         title="Copy is not implemented yet"
                                     >
@@ -156,7 +156,7 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                                         {truncate_hash(&from_address, 10, 8)}
                                     </a>
                                     <button
-                                        class="btn-icon-xs"
+                                        class="ps-btn-icon-xs"
                                         disabled=true
                                         title="Copy is not implemented yet"
                                     >
@@ -183,7 +183,7 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                                     <div class="detail-value detail-value-mono">
                                         <span>{truncate_hash(&addr, 10, 8)}</span>
                                         <button
-                                            class="btn-icon-xs"
+                                            class="ps-btn-icon-xs"
                                             disabled=true
                                             title="Copy is not implemented yet"
                                         >

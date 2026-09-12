@@ -222,7 +222,7 @@ pub fn CreateInvoiceModal() -> impl IntoView {
             <div class="modal modal-md" on:click=|ev| ev.stop_propagation()>
                 <div class="modal-header">
                     <h2>"Create Invoice"</h2>
-                    <button class="btn btn-ghost btn-sm btn-icon" on:click=move |_| close()>
+                    <button class="ps-btn ps-btn-ghost ps-btn-sm ps-btn-icon" on:click=move |_| close()>
                         <IconClose />
                     </button>
                 </div>
@@ -333,7 +333,7 @@ pub fn CreateInvoiceModal() -> impl IntoView {
                         <div class="form-advanced-toggle">
                             <button
                                 type="button"
-                                class="btn btn-ghost btn-sm"
+                                class="ps-btn ps-btn-ghost ps-btn-sm"
                                 on:click=move |_| set_show_advanced.update(|v| *v = !*v)
                             >
                                 <IconChevron expanded=show_advanced />
@@ -374,12 +374,12 @@ pub fn CreateInvoiceModal() -> impl IntoView {
                         </Show>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary btn-sm" on:click=move |_| close()>
+                        <button type="button" class="ps-btn ps-btn-secondary ps-btn-sm" on:click=move |_| close()>
                             "Cancel"
                         </button>
                         <button
                             type="submit"
-                            class="btn btn-primary btn-sm"
+                            class="ps-btn ps-btn-primary ps-btn-sm"
                             disabled=move || submitting.get() || !store_selection_valid()
                         >
                             {move || if submitting.get() { "Creating..." } else { "Create Invoice" }}

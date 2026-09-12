@@ -49,7 +49,7 @@ pub fn InvoiceDetailPage() -> impl IntoView {
                     Err(e) => view! {
                         <div class="error-container">
                             <p class="error-message">{e.to_string()}</p>
-                            <button class="btn btn-secondary btn-sm" on:click=move |_| set_refresh.update(|n| *n += 1)>
+                            <button class="ps-btn ps-btn-secondary ps-btn-sm" on:click=move |_| set_refresh.update(|n| *n += 1)>
                                 "Retry"
                             </button>
                         </div>
@@ -106,7 +106,7 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
             <div class="invoice-detail-actions">
                 // Neither action is wired up; both would silently no-op.
                 <button
-                    class="btn btn-secondary btn-sm"
+                    class="ps-btn ps-btn-secondary ps-btn-sm"
                     disabled=true
                     title="Copy link is not implemented yet"
                 >
@@ -114,7 +114,7 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                     "Copy link"
                 </button>
                 <button
-                    class="btn btn-secondary btn-sm"
+                    class="ps-btn ps-btn-secondary ps-btn-sm"
                     disabled=true
                     title="Download is not implemented yet"
                 >
@@ -204,7 +204,7 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                                                             <div class="payment-tx-cell">
                                                                 <code class="tx-hash">{tx_display}</code>
                                                                 <button
-                                                                    class="btn-icon-xs"
+                                                                    class="ps-btn-icon-xs"
                                                                     disabled=true
                                                                     title="Explorer link is not implemented yet"
                                                                 >

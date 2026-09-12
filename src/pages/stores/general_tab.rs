@@ -122,7 +122,7 @@ pub fn GeneralTab(store: Store) -> impl IntoView {
 
                     <div class="form-actions">
                         <button
-                            class="btn btn-primary btn-sm"
+                            class="ps-btn ps-btn-primary ps-btn-sm"
                             on:click=on_save
                             disabled=move || saving.get()
                         >
@@ -143,7 +143,7 @@ pub fn GeneralTab(store: Store) -> impl IntoView {
                             <span class="danger-action-desc">"Permanently delete this store and all its data"</span>
                         </div>
                         <button
-                            class="btn btn-danger btn-sm"
+                            class="ps-btn ps-btn-danger ps-btn-sm"
                             on:click=on_delete
                             disabled=move || deleting.get()
                         >

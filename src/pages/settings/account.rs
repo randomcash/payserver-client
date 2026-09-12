@@ -144,10 +144,10 @@ pub fn AccountTab() -> impl IntoView {
                                         "This server uses passwordless authentication. Manage your passkeys and connected wallets to control access to your account."
                                     </p>
                                     <div class="form-actions">
-                                        <button class="btn btn-secondary btn-sm" disabled=true>
+                                        <button class="ps-btn ps-btn-secondary ps-btn-sm" disabled=true>
                                             "Manage passkeys"
                                         </button>
-                                        <button class="btn btn-secondary btn-sm" disabled=true>
+                                        <button class="ps-btn ps-btn-secondary ps-btn-sm" disabled=true>
                                             "Manage wallets"
                                         </button>
                                     </div>
@@ -170,7 +170,7 @@ pub fn AccountTab() -> impl IntoView {
                                             </span>
                                         </div>
                                         <button
-                                            class="btn btn-danger btn-sm"
+                                            class="ps-btn ps-btn-danger ps-btn-sm"
                                             on:click=move |_| set_confirming.set(true)
                                             disabled=move || confirming.get()
                                         >
@@ -202,7 +202,7 @@ pub fn AccountTab() -> impl IntoView {
                                                 })}
                                                 <div class="form-actions">
                                                     <button
-                                                        class="btn btn-danger btn-sm"
+                                                        class="ps-btn ps-btn-danger ps-btn-sm"
                                                         on:click=on_delete
                                                         disabled=move || !matches() || deleting.get()
                                                     >
@@ -213,7 +213,7 @@ pub fn AccountTab() -> impl IntoView {
                                                         }}
                                                     </button>
                                                     <button
-                                                        class="btn btn-secondary btn-sm"
+                                                        class="ps-btn ps-btn-secondary ps-btn-sm"
                                                         on:click=move |_| {
                                                             set_confirming.set(false);
                                                             set_typed.set(String::new());

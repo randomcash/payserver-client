@@ -126,7 +126,7 @@ pub fn PaymentMethodsTab(store_id: String) -> impl IntoView {
                     </Suspense>
                 </div>
                 <button
-                    class="btn btn-primary btn-sm"
+                    class="ps-btn ps-btn-primary ps-btn-sm"
                     on:click=move |_| set_show_create_form.update(|v| *v = !*v)
                 >
                     <IconPlus />
@@ -225,14 +225,14 @@ pub fn PaymentMethodsTab(store_id: String) -> impl IntoView {
                             </div>
                             <div class="form-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem;">
                                 <button
-                                    class="btn btn-primary btn-sm"
+                                    class="ps-btn ps-btn-primary ps-btn-sm"
                                     on:click=on_create
                                     disabled=move || creating.get()
                                 >
                                     {move || if creating.get() { "Creating..." } else { "Create" }}
                                 </button>
                                 <button
-                                    class="btn btn-secondary btn-sm"
+                                    class="ps-btn ps-btn-secondary ps-btn-sm"
                                     on:click=move |_| set_show_create_form.set(false)
                                 >
                                     "Cancel"
@@ -284,7 +284,7 @@ pub fn PaymentMethodsTab(store_id: String) -> impl IntoView {
                             <div style="text-align: center; padding: 2rem; color: var(--color-error);">
                                 <p>"Failed to load payment methods: "{e.to_string()}</p>
                                 <button
-                                    class="btn btn-secondary btn-sm"
+                                    class="ps-btn ps-btn-secondary ps-btn-sm"
                                     style="margin-top: 1rem;"
                                     on:click=move |_| set_refresh_counter.update(|c| *c += 1)
                                 >
@@ -405,7 +405,7 @@ fn PaymentMethodRow(
             </td>
             <td>
                 <button
-                    class="btn btn-ghost btn-sm"
+                    class="ps-btn ps-btn-ghost ps-btn-sm"
                     style="color: var(--color-error);"
                     on:click=on_delete
                     disabled=move || deleting.get()

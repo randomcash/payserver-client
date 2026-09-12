@@ -169,7 +169,7 @@ pub fn PaymentsPage() -> impl IntoView {
                 </div>
                 <div class="page-actions">
                     <button
-                        class="btn btn-secondary btn-sm"
+                        class="ps-btn ps-btn-secondary ps-btn-sm"
                         disabled=move || !export_available()
                         on:click=move |_| {
                         let api = api.get();
@@ -232,7 +232,7 @@ pub fn PaymentsPage() -> impl IntoView {
                     Err(e) => view! {
                         <div class="error-container">
                             <p class="error-message">{e.to_string()}</p>
-                            <button class="btn btn-secondary btn-sm" on:click=move |_| set_refresh.update(|n| *n += 1)>
+                            <button class="ps-btn ps-btn-secondary ps-btn-sm" on:click=move |_| set_refresh.update(|n| *n += 1)>
                                 "Retry"
                             </button>
                         </div>
@@ -408,7 +408,7 @@ fn PaymentRow(payment: Payment, show_store: bool) -> impl IntoView {
                 <div class="payment-tx-cell">
                     <code class="tx-hash">{tx_display}</code>
                     <button
-                        class="btn-icon-xs"
+                        class="ps-btn-icon-xs"
                         disabled=true
                         title="Explorer link is not implemented yet"
                     >
@@ -439,7 +439,7 @@ fn PaymentRow(payment: Payment, show_store: bool) -> impl IntoView {
                 <span class="payment-date">{date_display}</span>
             </td>
             <td>
-                <A href=format!("/evm/payments/{}", payment_link) attr:class="btn btn-ghost btn-sm btn-icon">
+                <A href=format!("/evm/payments/{}", payment_link) attr:class="ps-btn ps-btn-ghost ps-btn-sm ps-btn-icon">
                     <IconMore />
                 </A>
             </td>
@@ -498,7 +498,7 @@ fn PaymentCard(payment: Payment, show_store: bool) -> impl IntoView {
                 {store_display.map(|name| view! {
                     <span class="payment-card-store">{name}</span>
                 })}
-                <A href=format!("/evm/payments/{}", payment_link) attr:class="btn btn-ghost btn-xs">
+                <A href=format!("/evm/payments/{}", payment_link) attr:class="ps-btn ps-btn-ghost ps-btn-xs">
                     "Details"
                     <IconChevronRight />
                 </A>

@@ -44,7 +44,7 @@ pub fn ErrorState(
             <p class="error-message">{message}</p>
             {on_retry.map(|retry| view! {
                 <button
-                    class="btn btn-secondary btn-sm"
+                    class="ps-btn ps-btn-secondary ps-btn-sm"
                     on:click=move |_| retry.run(())
                 >
                     "Try again"
@@ -123,7 +123,7 @@ pub fn NoStoreSelected(
                 </div>
                 <h3>"No stores yet"</h3>
                 <p>{format!("{entity} belong to a store. Create one to start accepting payments.")}</p>
-                <a class="btn btn-primary btn-sm" href="/evm/stores">"Go to stores"</a>
+                <a class="ps-btn ps-btn-primary ps-btn-sm" href="/evm/stores">"Go to stores"</a>
             </div>
         }
         .into_any(),
