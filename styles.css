@@ -548,7 +548,8 @@ a:hover {
         gap: var(--space-2);
     }
 
-    .main-header-actions .btn span {
+    .main-header-actions .btn span,
+    .main-header-actions .ps-btn span {
         display: none;
     }
 }
@@ -743,7 +744,8 @@ a:hover {
     }
 }
 
-.stat-card {
+.stat-card,
+.ps-stat-card {
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-lg);
@@ -751,13 +753,15 @@ a:hover {
     box-shadow: var(--shadow-xs);
 }
 
-.stat-label {
+.stat-label,
+.ps-stat-label {
     font-size: var(--text-sm);
     color: var(--text-muted);
     font-weight: 500;
 }
 
-.stat-value {
+.stat-value,
+.ps-stat-value {
     font-size: var(--text-3xl);
     font-weight: 600;
     color: var(--text-primary);
@@ -843,7 +847,8 @@ a:hover {
 /* ============================================
    Buttons
    ============================================ */
-.btn {
+.btn,
+.ps-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -860,33 +865,39 @@ a:hover {
     white-space: nowrap;
 }
 
-.btn:disabled {
+.btn:disabled,
+.ps-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.btn-primary {
+.btn-primary,
+.ps-btn-primary {
     background: var(--color-primary);
     color: white;
     box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-.btn-primary:hover:not(:disabled) {
+.btn-primary:hover:not(:disabled),
+.ps-btn-primary:hover:not(:disabled) {
     background: var(--color-primary-hover);
 }
 
-.btn-primary:focus {
+.btn-primary:focus,
+.ps-btn-primary:focus {
     box-shadow: var(--shadow-focus);
 }
 
-.btn-secondary {
+.btn-secondary,
+.ps-btn-ghost {
     background: var(--bg-primary);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-xs);
 }
 
-.btn-secondary:hover:not(:disabled) {
+.btn-secondary:hover:not(:disabled),
+.ps-btn-ghost:hover:not(:disabled) {
     background: var(--bg-secondary);
 }
 
@@ -926,7 +937,8 @@ a:hover {
     margin-bottom: var(--space-4);
 }
 
-.form-label {
+.form-label,
+.ps-label {
     display: block;
     margin-bottom: var(--space-2);
     font-size: var(--text-sm);
@@ -941,7 +953,8 @@ a:hover {
 
 .form-input,
 .form-select,
-.form-textarea {
+.form-textarea,
+.ps-input {
     width: 100%;
     padding: var(--space-2) var(--space-3);
     font-family: var(--font-family);
@@ -956,19 +969,22 @@ a:hover {
 
 .form-input:hover,
 .form-select:hover,
-.form-textarea:hover {
+.form-textarea:hover,
+.ps-input:hover {
     border-color: var(--border-color-strong);
 }
 
 .form-input:focus,
 .form-select:focus,
-.form-textarea:focus {
+.form-textarea:focus,
+.ps-input:focus {
     outline: none;
     border-color: var(--color-primary);
     box-shadow: var(--shadow-focus);
 }
 
-.form-input::placeholder {
+.form-input::placeholder,
+.ps-input::placeholder {
     color: var(--text-disabled);
 }
 
@@ -1126,7 +1142,8 @@ a:hover {
 /* ============================================
    Badges & Status
    ============================================ */
-.badge {
+.badge,
+.ps-status-badge {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
@@ -1137,17 +1154,22 @@ a:hover {
     text-transform: capitalize;
 }
 
-.badge-success {
+.badge-success,
+.ps-status-badge.paid,
+.ps-status-badge.confirmed {
     background: var(--color-success-light);
     color: var(--color-success);
 }
 
-.badge-warning {
+.badge-warning,
+.ps-status-badge.pending {
     background: var(--color-warning-light);
     color: #9e6c00;
 }
 
-.badge-error {
+.badge-error,
+.ps-status-badge.expired,
+.ps-status-badge.error {
     background: var(--color-error-light);
     color: var(--color-error);
 }
@@ -1178,7 +1200,8 @@ a:hover {
 /* ============================================
    Network Badges
    ============================================ */
-.network-badge {
+.network-badge,
+.ps-network-badge {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
@@ -1199,7 +1222,8 @@ a:hover {
 /* ============================================
    Address Display
    ============================================ */
-.address {
+.address,
+.ps-address {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
@@ -1232,7 +1256,8 @@ a:hover {
 /* ============================================
    Empty States
    ============================================ */
-.empty-state {
+.empty-state,
+.evm-empty-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1265,7 +1290,8 @@ a:hover {
 /* ============================================
    Loading States
    ============================================ */
-.spinner {
+.spinner,
+.ps-spinner {
     width: 20px;
     height: 20px;
     border: 2px solid var(--border-color);
@@ -1281,7 +1307,8 @@ a:hover {
     to { transform: rotate(360deg); }
 }
 
-.skeleton {
+.skeleton,
+.ps-skeleton {
     background: linear-gradient(90deg, var(--color-gray-100) 25%, var(--color-gray-200) 50%, var(--color-gray-100) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
@@ -1369,31 +1396,12 @@ a:hover {
     padding: var(--space-5);
 }
 
-.ps-btn { composes: btn; }
-.ps-btn-primary { composes: btn-primary; }
-.ps-btn-ghost { composes: btn-secondary; }
 
-.ps-input { composes: form-input; }
-.ps-label { composes: form-label; }
 
-.ps-status-badge { composes: badge; }
-.ps-status-badge.pending { composes: badge-warning; }
-.ps-status-badge.paid { composes: badge-success; }
-.ps-status-badge.confirmed { composes: badge-success; }
-.ps-status-badge.expired { composes: badge-error; }
-.ps-status-badge.error { composes: badge-error; }
 
-.ps-network-badge { composes: network-badge; }
-.ps-address { composes: address; }
 
-.ps-stat-card { composes: stat-card; }
-.ps-stat-label { composes: stat-label; }
-.ps-stat-value { composes: stat-value; }
 
-.ps-skeleton { composes: skeleton; }
-.ps-spinner { composes: spinner; }
 
-.evm-empty-state { composes: empty-state; }
 .evm-invoice-list { display: flex; flex-direction: column; gap: var(--space-3); }
 .evm-detail-grid { display: flex; flex-direction: column; gap: var(--space-4); }
 .evm-detail-row { display: flex; justify-content: space-between; align-items: center; }
@@ -1473,7 +1481,8 @@ a:hover {
         width: 100%;
     }
 
-    .dashboard-actions .btn {
+    .dashboard-actions .btn,
+    .dashboard-actions .ps-btn {
         flex: 1;
         justify-content: center;
     }
@@ -2864,7 +2873,8 @@ tr.payment-row {
         gap: var(--space-2);
     }
 
-    .invoices-page .page-actions .btn {
+    .invoices-page .page-actions .btn,
+    .invoices-page .page-actions .ps-btn {
         flex: 1;
         justify-content: center;
     }
@@ -2941,7 +2951,8 @@ tr.payment-row {
         gap: var(--space-2);
     }
 
-    .invoice-detail-actions .btn {
+    .invoice-detail-actions .btn,
+    .invoice-detail-actions .ps-btn {
         justify-content: center;
     }
 
@@ -3314,7 +3325,8 @@ tr.payment-row {
     color: var(--text-muted);
 }
 
-.payment-card-footer .btn {
+.payment-card-footer .btn,
+.payment-card-footer .ps-btn {
     display: flex;
     align-items: center;
     gap: var(--space-1);
@@ -3339,7 +3351,8 @@ tr.payment-row {
         gap: var(--space-2);
     }
 
-    .payments-page .page-actions .btn {
+    .payments-page .page-actions .btn,
+    .payments-page .page-actions .ps-btn {
         flex: 1;
         justify-content: center;
     }
@@ -3554,7 +3567,8 @@ tr.payment-row {
         flex-wrap: wrap;
     }
 
-    .payment-detail-actions .btn {
+    .payment-detail-actions .btn,
+    .payment-detail-actions .ps-btn {
         flex: 1;
         justify-content: center;
     }
@@ -3850,17 +3864,20 @@ tr.payment-row {
    identical padding, border and box-sizing, but a select's intrinsic content
    box is taller. Side by side that reads as one control sagging. Pin the height
    so anything styled .form-input is the same height as everything else. */
-.form-input {
+.form-input,
+.ps-input {
     min-height: 36px;
 }
 
-.form-label {
+.form-label,
+.ps-label {
     font-size: var(--text-sm);
     font-weight: 500;
     color: var(--text-primary);
 }
 
-.form-input {
+.form-input,
+.ps-input {
     padding: var(--space-2) var(--space-3);
     font-size: var(--text-sm);
     font-family: var(--font-family);
@@ -3872,16 +3889,19 @@ tr.payment-row {
     transition: all 0.15s ease;
 }
 
-.form-input:hover {
+.form-input:hover,
+.ps-input:hover {
     border-color: var(--border-color-strong);
 }
 
-.form-input:focus {
+.form-input:focus,
+.ps-input:focus {
     border-color: var(--color-primary);
     box-shadow: var(--shadow-focus);
 }
 
-.form-input::placeholder {
+.form-input::placeholder,
+.ps-input::placeholder {
     color: var(--text-disabled);
 }
 
@@ -4179,7 +4199,8 @@ tr.payment-row {
         gap: var(--space-2);
     }
 
-    .stores-page .page-actions .btn {
+    .stores-page .page-actions .btn,
+    .stores-page .page-actions .ps-btn {
         flex: 1;
         justify-content: center;
     }
@@ -4211,7 +4232,8 @@ tr.payment-row {
         width: 100%;
     }
 
-    .store-detail-actions .btn {
+    .store-detail-actions .btn,
+    .store-detail-actions .ps-btn {
         flex: 1;
         justify-content: center;
     }
@@ -4236,7 +4258,8 @@ tr.payment-row {
         gap: var(--space-3);
     }
 
-    .section-header .btn {
+    .section-header .btn,
+    .section-header .ps-btn {
         width: 100%;
         justify-content: center;
     }
@@ -4255,7 +4278,8 @@ tr.payment-row {
         gap: var(--space-3);
     }
 
-    .danger-action .btn {
+    .danger-action .btn,
+    .danger-action .ps-btn {
         width: 100%;
         justify-content: center;
     }
@@ -4798,7 +4822,8 @@ tr.payment-row {
         gap: var(--space-2);
     }
 
-    .wallets-page .page-actions .btn {
+    .wallets-page .page-actions .btn,
+    .wallets-page .page-actions .ps-btn {
         flex: 1;
         justify-content: center;
     }
@@ -4830,7 +4855,8 @@ tr.payment-row {
         width: 100%;
     }
 
-    .wallet-detail-actions .btn {
+    .wallet-detail-actions .btn,
+    .wallet-detail-actions .ps-btn {
         flex: 1;
         justify-content: center;
     }
@@ -5296,7 +5322,8 @@ tr.payment-row {
         gap: var(--space-3);
     }
 
-    .admin-action .btn {
+    .admin-action .btn,
+    .admin-action .ps-btn {
         width: 100%;
         justify-content: center;
     }
