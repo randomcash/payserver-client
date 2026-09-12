@@ -287,7 +287,27 @@ fn render_checkout(
                     let chain = chain_name(&option.chain_id).to_string();
                     let addr_for_copy = addr.clone();
 
-                    let qr_data = addr.clone();
+                    // EIP-681 rather than a bare address, so a scanned QR
+                    // prefills the amount and the chain instead of leaving a
+                    // customer to type `0.04735110051849455` by hand at the one
+                    // moment in the flow where a mistake costs money.
+                    //
+                    // `option.amount` is already base units - the same string
+                    // `format_crypto_amount` divides for display - which is what
+                    // the URI wants. Nothing converts through a float.
+                    //
+                    // Falls back to the bare address when a URI cannot be built
+                    // with certainty (a non-EVM chain, an address that does not
+                    // parse). A bare address still lets a customer pay by hand;
+                    // a URI a wallet misreads can send the wrong amount to the
+                    // wrong place.
+                    let qr_data = types::payment_request_uri(
+                        &option.chain_id,
+                        &addr,
+                        &option.amount,
+                        option.token_address.as_deref(),
+                    )
+                    .unwrap_or_else(|| addr.clone());
                     view! {
                         <div class="checkout-payment-details">
                             <div class="checkout-qr">

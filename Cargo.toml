@@ -12,10 +12,10 @@ resolver = "3"
 # commons. To work against a local checkout run `scripts/commons.sh link`,
 # which writes an uncommitted `.cargo/config.toml` patch — do not edit this.
 [workspace.dependencies]
-api-types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "6964c6ae6204c6055736b6e0e40b8bf6ae405dec" }
-scrub = { git = "https://github.com/randomcash/payserver-commons.git", rev = "6964c6ae6204c6055736b6e0e40b8bf6ae405dec" }
-types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "6964c6ae6204c6055736b6e0e40b8bf6ae405dec" }
-ui-kit = { git = "https://github.com/randomcash/payserver-commons.git", rev = "6964c6ae6204c6055736b6e0e40b8bf6ae405dec" }
+api-types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "75e66071e88647f6c568114d07f5c4a385294c1e" }
+scrub = { git = "https://github.com/randomcash/payserver-commons.git", rev = "75e66071e88647f6c568114d07f5c4a385294c1e" }
+types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "75e66071e88647f6c568114d07f5c4a385294c1e" }
+ui-kit = { git = "https://github.com/randomcash/payserver-commons.git", rev = "75e66071e88647f6c568114d07f5c4a385294c1e" }
 
 [package]
 name = "payserver-client"

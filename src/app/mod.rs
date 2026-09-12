@@ -10,7 +10,7 @@ use leptos_router::{
     path,
 };
 use ui_kit::hooks::use_storage::set_local;
-use ui_kit::{AuthProvider, LoginPage, RegisterPage};
+use ui_kit::{AuthProvider, LoginPage, RegisterPage, UiKitStyles};
 
 use crate::api::Store;
 use crate::pages::{
@@ -86,6 +86,16 @@ impl StoreContext {
 #[component]
 pub fn App() -> impl IntoView {
     view! {
+        // ui-kit's own styles, once, before anything renders one of its
+        // components. It emits 99 `ps-*` classes and used to ship rules for
+        // none, so a shared component could render unstyled with nothing wrong
+        // in either repository - the checkout QR card drew a raw browser button
+        // beside a styled one for exactly that reason.
+        //
+        // Before `styles.css` in the document, so a rule this client writes
+        // still wins on equal specificity and overriding one ui-kit component
+        // stays a one-line job.
+        <UiKitStyles />
         <AuthProvider>
             <Router>
                 <Routes fallback=|| view! { <NotFoundPage /> }>
