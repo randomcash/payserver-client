@@ -51,7 +51,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 [[package]]
 name = "api-types"
 version = "0.1.0"
-source = "git+https://github.com/randomcash/payserver-commons.git?rev=5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba#5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba"
+source = "git+https://github.com/randomcash/payserver-commons.git?rev=6964c6ae6204c6055736b6e0e40b8bf6ae405dec#6964c6ae6204c6055736b6e0e40b8bf6ae405dec"
 dependencies = [
  "chrono",
  "serde",
@@ -431,7 +431,7 @@ checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 [[package]]
 name = "crypto"
 version = "0.1.0"
-source = "git+https://github.com/randomcash/payserver-commons.git?rev=5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba#5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba"
+source = "git+https://github.com/randomcash/payserver-commons.git?rev=6964c6ae6204c6055736b6e0e40b8bf6ae405dec#6964c6ae6204c6055736b6e0e40b8bf6ae405dec"
 dependencies = [
  "aes",
  "argon2",
@@ -1935,7 +1935,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "scrub"
 version = "0.1.0"
-source = "git+https://github.com/randomcash/payserver-commons.git?rev=5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba#5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba"
+source = "git+https://github.com/randomcash/payserver-commons.git?rev=6964c6ae6204c6055736b6e0e40b8bf6ae405dec#6964c6ae6204c6055736b6e0e40b8bf6ae405dec"
 
 [[package]]
 name = "semver"
@@ -2382,7 +2382,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 [[package]]
 name = "types"
 version = "0.1.0"
-source = "git+https://github.com/randomcash/payserver-commons.git?rev=5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba#5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba"
+source = "git+https://github.com/randomcash/payserver-commons.git?rev=6964c6ae6204c6055736b6e0e40b8bf6ae405dec#6964c6ae6204c6055736b6e0e40b8bf6ae405dec"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2398,7 +2398,7 @@ dependencies = [
 [[package]]
 name = "ui-kit"
 version = "0.1.0"
-source = "git+https://github.com/randomcash/payserver-commons.git?rev=5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba#5e5dc9539fb8a3eddc8b87cc0e32b2aa5dd888ba"
+source = "git+https://github.com/randomcash/payserver-commons.git?rev=6964c6ae6204c6055736b6e0e40b8bf6ae405dec#6964c6ae6204c6055736b6e0e40b8bf6ae405dec"
 dependencies = [
  "base64",
  "console_error_panic_hook",

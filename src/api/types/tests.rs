@@ -562,7 +562,7 @@ fn test_create_payment_method_request() {
         token_address: None,
         asset_symbol: "ETH".to_string(),
         decimals: 18,
-        xpub: "xpub6DCoCpSuQZB2jawqnGMEPS63ePKWkwWPH4TU45Q7LPXWuNd8TMtVxRrgjtEshuqpK3mdhaWHPFsBngh5GFZaM6si3yZdUsT8ddYM3PwnATt".to_string(),
+        xpub: Some("xpub6DCoCpSuQZB2jawqnGMEPS63ePKWkwWPH4TU45Q7LPXWuNd8TMtVxRrgjtEshuqpK3mdhaWHPFsBngh5GFZaM6si3yZdUsT8ddYM3PwnATt".to_string()),
     };
     let json = serde_json::to_value(&req).unwrap();
     assert_eq!(json["chain_id"], "eip155:1");
@@ -573,13 +573,33 @@ fn test_create_payment_method_request() {
 }
 
 #[test]
+fn a_method_with_no_key_omits_it_from_the_payload() {
+    // The paste-once case. The server branches on whether the field is present,
+    // so an absent key has to be absent on the wire - `null` would read as
+    // "explicitly no key" rather than "use the store's".
+    let req = CreatePaymentMethodRequest {
+        chain_id: ChainId::evm(1),
+        token_address: None,
+        asset_symbol: "ETH".to_string(),
+        decimals: 18,
+        xpub: None,
+    };
+    let json = serde_json::to_value(&req).unwrap();
+    assert!(
+        json.get("xpub").is_none(),
+        "an inherited key must be absent, not null: {json}"
+    );
+    assert_eq!(json["asset_symbol"], "ETH");
+}
+
+#[test]
 fn test_create_payment_method_request_erc20() {
     let req = CreatePaymentMethodRequest {
         chain_id: ChainId::evm(137),
         token_address: Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()),
         asset_symbol: "USDC".to_string(),
         decimals: 6,
-        xpub: "xpub123...".to_string(),
+        xpub: Some("xpub123...".to_string()),
     };
     let json = serde_json::to_value(&req).unwrap();
     assert_eq!(json["chain_id"], "eip155:137");
