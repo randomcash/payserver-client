@@ -889,6 +889,7 @@ a:hover {
 }
 
 .btn-secondary,
+.ps-btn-secondary,
 .ps-btn-ghost {
     background: var(--bg-primary);
     color: var(--text-primary);
@@ -897,6 +898,7 @@ a:hover {
 }
 
 .btn-secondary:hover:not(:disabled),
+.ps-btn-secondary:hover:not(:disabled),
 .ps-btn-ghost:hover:not(:disabled) {
     background: var(--bg-secondary);
 }
@@ -911,16 +913,47 @@ a:hover {
     color: var(--text-primary);
 }
 
-.btn-danger {
+.btn-danger,
+.ps-btn-danger {
     background: var(--color-error);
     color: white;
 }
 
-.btn-danger:hover:not(:disabled) {
+.btn-danger:hover:not(:disabled),
+.ps-btn-danger:hover:not(:disabled) {
     background: #c4162f;
 }
 
-.btn-sm {
+/* Semantic button variants. These have been referenced by the admin user table
+ * since it was written - "Lock" and "Unlock" - and styled by nothing, so both
+ * states rendered as a plain button and the colour carried no meaning. Shaped
+ * like .btn-primary because they are solid actions, not ghosts. */
+.btn-success,
+.ps-btn-success {
+    background: var(--color-success);
+    color: white;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.btn-success:hover:not(:disabled),
+.ps-btn-success:hover:not(:disabled) {
+    filter: brightness(0.95);
+}
+
+.btn-warning,
+.ps-btn-warning {
+    background: var(--color-warning);
+    color: white;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.btn-warning:hover:not(:disabled),
+.ps-btn-warning:hover:not(:disabled) {
+    filter: brightness(0.95);
+}
+
+.btn-sm,
+.ps-btn-sm {
     padding: var(--space-1) var(--space-3);
     font-size: var(--text-xs);
 }
