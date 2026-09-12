@@ -226,11 +226,11 @@ pub fn NotificationsTab() -> impl IntoView {
                 }
 
                 view! {
-                    <div class="detail-card">
-                        <div class="detail-card-header">
+                    <div class="ps-card">
+                        <div class="ps-card-header">
                             <h3>"Event notifications"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             <p class="form-help">
                                 "These settings belong to the store selected in the sidebar. \
                                  Switching an event off stops the notification for that channel; \

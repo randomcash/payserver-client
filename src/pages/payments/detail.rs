@@ -123,11 +123,11 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                 // Main Info Cards
                 <div class="payment-detail-main">
                     // Transaction Details Card
-                    <div class="detail-card">
-                        <div class="detail-card-header">
+                    <div class="ps-card">
+                        <div class="ps-card-header">
                             <h3>"Transaction Details"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             <div class="detail-row">
                                 <span class="detail-label">"Transaction Hash"</span>
                                 <div class="detail-value detail-value-mono">
@@ -168,11 +168,11 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                     </div>
 
                     // Payment Amount Card
-                    <div class="detail-card">
-                        <div class="detail-card-header">
+                    <div class="ps-card">
+                        <div class="ps-card-header">
                             <h3>"Payment Amount"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             <div class="detail-row">
                                 <span class="detail-label">"Amount Received"</span>
                                 <span class="detail-value detail-value-lg">{amount_display}</span>
@@ -196,11 +196,11 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                     </div>
 
                     // Timeline Card
-                    <div class="detail-card">
-                        <div class="detail-card-header">
+                    <div class="ps-card">
+                        <div class="ps-card-header">
                             <h3>"Activity"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             <div class="timeline">
                                 {payment.confirmed_at.is_some().then(|| view! {
                                     <div class=TimelineState::Done.row_class()>
@@ -248,11 +248,11 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
 
                 // Sidebar
                 <div class="payment-detail-sidebar">
-                    <div class="detail-card">
-                        <div class="detail-card-header">
+                    <div class="ps-card">
+                        <div class="ps-card-header">
                             <h3>"Related Invoice"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             <A href=format!("/evm/invoices/{}", invoice_link) attr:class="related-invoice-link">
                                 <div class="related-invoice-info">
                                     <IconInvoice />
@@ -263,11 +263,11 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                         </div>
                     </div>
 
-                    <div class="detail-card">
-                        <div class="detail-card-header">
+                    <div class="ps-card">
+                        <div class="ps-card-header">
                             <h3>"Status"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             <div class="status-info">
                                 <span class=format!("{} status-badge-lg", status_class)>{status}</span>
                                 {payment.reorged.then(|| view! {
@@ -284,11 +284,11 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                         </div>
                     </div>
 
-                    <div class="detail-card">
-                        <div class="detail-card-header">
+                    <div class="ps-card">
+                        <div class="ps-card-header">
                             <h3>"Raw Data"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             <pre class="metadata-json">{format!(r#"{{
   "id": "{}",
   "chain_id": {},

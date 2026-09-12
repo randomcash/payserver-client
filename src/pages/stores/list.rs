@@ -87,11 +87,11 @@ pub fn StoresPage() -> impl IntoView {
 
             // Create store form
             {move || show_create_form.get().then(|| view! {
-                <div class="detail-card" style="margin-bottom: 1.5rem;">
-                    <div class="detail-card-header">
+                <div class="ps-card" style="margin-bottom: 1.5rem;">
+                    <div class="ps-card-header">
                         <h3>"New Store"</h3>
                     </div>
-                    <div class="detail-card-body">
+                    <div class="ps-card-body">
                         {move || create_error.get().map(|e| view! {
                             <div class="form-error" style="color: var(--color-error); margin-bottom: 0.75rem;">{e}</div>
                         })}

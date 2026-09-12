@@ -129,11 +129,11 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
             // Main Info Cards
             <div class="invoice-detail-main">
                 // Invoice Summary Card
-                <div class="detail-card">
-                    <div class="detail-card-header">
+                <div class="ps-card">
+                    <div class="ps-card-header">
                         <h3>"Invoice details"</h3>
                     </div>
-                    <div class="detail-card-body">
+                    <div class="ps-card-body">
                         <div class="detail-row">
                             <span class="detail-label">"Amount due"</span>
                             <span class="detail-value detail-value-lg">
@@ -164,12 +164,12 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                 </div>
 
                 // Payments Card
-                <div class="detail-card">
-                    <div class="detail-card-header">
+                <div class="ps-card">
+                    <div class="ps-card-header">
                         <h3>"Payments"</h3>
                         <span class="payment-count">{payment_count}" payment(s)"</span>
                     </div>
-                    <div class="detail-card-body payments-body">
+                    <div class="ps-card-body payments-body">
                         {if payments.is_empty() {
                             view! {
                                 <div class="payments-empty">
@@ -236,11 +236,11 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                 {(!invoice.payment_options.is_empty()).then(|| {
                     let options = invoice.payment_options.clone();
                     view! {
-                        <div class="detail-card">
-                            <div class="detail-card-header">
+                        <div class="ps-card">
+                            <div class="ps-card-header">
                                 <h3>"Payment Options"</h3>
                             </div>
-                            <div class="detail-card-body">
+                            <div class="ps-card-body">
                                 {options.into_iter().map(|opt| {
                                     let addr_display = truncate_hex(&opt.payment_address, 10, 6);
                                     view! {
@@ -258,11 +258,11 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                 })}
 
                 // Timeline Card
-                <div class="detail-card">
-                    <div class="detail-card-header">
+                <div class="ps-card">
+                    <div class="ps-card-header">
                         <h3>"Activity"</h3>
                     </div>
-                    <div class="detail-card-body">
+                    <div class="ps-card-body">
                         <div class="timeline">
                             {is_paid.then(|| view! {
                                 <div class=TimelineState::Done.row_class()>
@@ -311,11 +311,11 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
 
             // Sidebar
             <div class="invoice-detail-sidebar">
-                <div class="detail-card">
-                    <div class="detail-card-header">
+                <div class="ps-card">
+                    <div class="ps-card-header">
                         <h3>"Customer"</h3>
                     </div>
-                    <div class="detail-card-body">
+                    <div class="ps-card-body">
                         <div class="customer-info">
                             <div class="customer-avatar">
                                 {avatar_letter}
@@ -329,11 +329,11 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                     </div>
                 </div>
 
-                <div class="detail-card">
-                    <div class="detail-card-header">
+                <div class="ps-card">
+                    <div class="ps-card-header">
                         <h3>"Status Details"</h3>
                     </div>
-                    <div class="detail-card-body">
+                    <div class="ps-card-body">
                         <div class="detail-row">
                             <span class="detail-label">"Paid"</span>
                             <span class="detail-value">{if is_paid { "Yes" } else { "No" }}</span>

@@ -79,8 +79,8 @@ pub fn WebhooksTab(store_id: String) -> impl IntoView {
 
             // Secret reveal banner (shown once after configure)
             {move || revealed_secret.get().map(|secret| view! {
-                <div class="detail-card" style="margin-bottom: 1rem; border: 1px solid var(--color-warning, #f59e0b);">
-                    <div class="detail-card-body" style="padding: 1rem;">
+                <div class="ps-card" style="margin-bottom: 1rem; border: 1px solid var(--color-warning, #f59e0b);">
+                    <div class="ps-card-body" style="padding: 1rem;">
                         <p style="font-weight: 500; margin-bottom: 0.5rem;">"Webhook secret (save this now — it won't be shown again):"</p>
                         <code style="word-break: break-all; font-size: var(--text-sm);">{secret}</code>
                         <button
@@ -98,11 +98,11 @@ pub fn WebhooksTab(store_id: String) -> impl IntoView {
             {move || show_form.get().then(|| {
                 let on_save = on_save.clone();
                 view! {
-                    <div class="detail-card" style="margin-bottom: 1rem;">
-                        <div class="detail-card-header">
+                    <div class="ps-card" style="margin-bottom: 1rem;">
+                        <div class="ps-card-header">
                             <h3>"Configure Webhook"</h3>
                         </div>
-                        <div class="detail-card-body">
+                        <div class="ps-card-body">
                             {move || save_error.get().map(|err| view! {
                                 <div style="color: var(--color-error); margin-bottom: 1rem; padding: 0.5rem; background: var(--color-error-bg, rgba(239,68,68,0.1)); border-radius: 4px;">
                                     {err}
@@ -227,11 +227,11 @@ pub fn WebhooksTab(store_id: String) -> impl IntoView {
                 }}
             </Suspense>
 
-            <div class="detail-card">
-                <div class="detail-card-header">
+            <div class="ps-card">
+                <div class="ps-card-header">
                     <h3>"Webhook Events"</h3>
                 </div>
-                <div class="detail-card-body">
+                <div class="ps-card-body">
                     <div class="webhook-events">
                         <div class="webhook-event">
                             <code>"payment.detected"</code>
@@ -277,12 +277,12 @@ fn WebhookConfig(
     let updated_display = format_date(&webhook.updated_at.to_rfc3339());
 
     view! {
-        <div class="detail-card">
-            <div class="detail-card-header">
+        <div class="ps-card">
+            <div class="ps-card-header">
                 <h3>"Endpoint"</h3>
                 <span class=status_class>{status_label}</span>
             </div>
-            <div class="detail-card-body">
+            <div class="ps-card-body">
                 <div class="webhook-url-row">
                     <code class="webhook-url">{webhook.webhook_url}</code>
                 </div>
@@ -308,8 +308,8 @@ fn WebhookConfig(
 #[component]
 fn WebhookEmpty(on_configure: impl Fn(leptos::ev::MouseEvent) + 'static) -> impl IntoView {
     view! {
-        <div class="detail-card">
-            <div class="detail-card-body webhook-empty">
+        <div class="ps-card">
+            <div class="ps-card-body webhook-empty">
                 <IconWebhook />
                 <h4>"No webhook configured"</h4>
                 <p>"Set up a webhook endpoint to receive real-time payment notifications"</p>
