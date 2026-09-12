@@ -9,6 +9,8 @@ use leptos_router::hooks::use_params_map;
 
 use send_wrapper::SendWrapper;
 
+use ui_kit::CopyButton;
+
 use crate::api::{ApiClient, ApiError, CheckoutResponse, PaymentOption};
 use crate::services::websocket::{StatusUpdate, WebSocketService};
 use crate::util::chain_name;
@@ -53,7 +55,6 @@ pub fn CheckoutPage() -> impl IntoView {
     let (selected_idx, set_selected_idx) = signal(0usize);
 
     // Clipboard feedback
-    let (copied, set_copied) = signal(false);
 
     // Refresh counter for manual retry / WS-triggered refresh
     let (refresh, set_refresh) = signal(0u32);
@@ -145,7 +146,7 @@ pub fn CheckoutPage() -> impl IntoView {
                         }.into_any(),
                         Ok(data) => {
                             let data = data.clone();
-                            render_checkout(data, selected_idx, set_selected_idx, copied, set_copied)
+                            render_checkout(data, selected_idx, set_selected_idx)
                         }
                     })}
                 </Suspense>
@@ -169,8 +170,6 @@ fn render_checkout(
     data: CheckoutResponse,
     selected_idx: ReadSignal<usize>,
     set_selected_idx: WriteSignal<usize>,
-    copied: ReadSignal<bool>,
-    set_copied: WriteSignal<bool>,
 ) -> AnyView {
     let status = data.status.clone();
 
@@ -335,24 +334,11 @@ fn render_checkout(
                                 <span class="checkout-detail-label">"Address"</span>
                                 <div class="checkout-address-value">
                                     <code class="checkout-address">{addr.clone()}</code>
-                                    <button
-                                        class="checkout-copy-btn"
-                                        on:click=move |_| {
-                                            if let Some(window) = web_sys::window() {
-                                                let clipboard = window.navigator().clipboard();
-                                                let addr = addr_for_copy.clone();
-                                                let _ = clipboard.write_text(&addr);
-                                                set_copied.set(true);
-                                                // Reset after 2 seconds
-                                                leptos::task::spawn_local(async move {
-                                                    gloo_timers::future::TimeoutFuture::new(2000).await;
-                                                    set_copied.set(false);
-                                                });
-                                            }
-                                        }
-                                    >
-                                        {move || if copied.get() { "Copied!" } else { "Copy" }}
-                                    </button>
+                                    // The payer is about to send money to whatever is on their
+                                    // clipboard. This reported success without waiting for the
+                                    // clipboard to accept the write - and this is the page most
+                                    // likely to be opened in an in-app browser, where it is refused.
+                                    <CopyButton text=addr_for_copy.clone() />
                                 </div>
                             </div>
                         </div>

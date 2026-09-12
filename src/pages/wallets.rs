@@ -275,13 +275,24 @@ pub fn WalletDetailPage() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match api.export_wallet_xpub(&id).await {
                 Ok(res) => {
+                    // The alert stays: it is a security disclosure about what the
+                    // full key exposes, not a copy confirmation, and it should be
+                    // read before the key is pasted anywhere.
+                    //
+                    // What changes is that the claim is now true. The write was
+                    // never awaited, so a refused clipboard still produced "The
+                    // full xpub is on your clipboard" - a false statement about a
+                    // key the merchant then believes they hold.
+                    let copied = ui_kit::copy_to_clipboard(&res.xpub).await;
                     if let Some(window) = web_sys::window() {
-                        let _ = window.navigator().clipboard().write_text(&res.xpub);
-                        let _ = window.alert_with_message(
+                        let _ = window.alert_with_message(if copied {
                             "The full xpub is on your clipboard. It derives every address this \
                              wallet issues, so anyone holding it can see your incoming payments. \
-                             It cannot move funds.",
-                        );
+                             It cannot move funds."
+                        } else {
+                            "Your browser refused the clipboard, so the key was NOT copied. \
+                             Nothing was exposed. Try again from a normal browser tab."
+                        });
                     }
                 }
                 Err(e) => {
@@ -398,7 +409,11 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
     let (saving, set_saving) = signal(false);
     let (deleting, set_deleting) = signal(false);
     let (message, set_message) = signal(Option::<(bool, String)>::None);
-    let (copied, set_copied) = signal(false);
+    // `Option<bool>`: None at rest, Some(true) copied, Some(false) refused. The
+    // clipboard write can be rejected - no secure context, no user gesture, some
+    // embedded browsers - and reporting "Copied" regardless leaves the merchant
+    // pasting a stale buffer.
+    let (copied, set_copied) = signal(None::<bool>);
 
     let wallet_id = wallet.id;
     let xpub_for_copy = wallet.xpub_masked.clone();
@@ -408,14 +423,16 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
         // key is a separate, deliberate export (`GET /wallets/{id}/xpub`);
         // silently copying it here would hand out the whole key from a button
         // whose label says nothing about that.
-        if let Some(window) = web_sys::window() {
-            let _ = window.navigator().clipboard().write_text(&xpub_for_copy);
-            set_copied.set(true);
-            leptos::task::spawn_local(async move {
-                gloo_timers::future::TimeoutFuture::new(2000).await;
-                let _ = set_copied.try_set(false);
-            });
-        }
+        let xpub = xpub_for_copy.clone();
+        leptos::task::spawn_local(async move {
+            // This control is an icon button, so it uses ui-kit's shared helper
+            // rather than <CopyButton/> - same awaited write and same honesty
+            // about failure, without turning the icon into a text label.
+            let ok = ui_kit::copy_to_clipboard(&xpub).await;
+            let _ = set_copied.try_set(Some(ok));
+            gloo_timers::future::TimeoutFuture::new(2000).await;
+            let _ = set_copied.try_set(None);
+        });
     };
 
     let on_save = move |_| {
@@ -507,8 +524,10 @@ fn GeneralTab(wallet: Wallet) -> impl IntoView {
                             >
                                 <IconCopy />
                             </button>
-                            {move || copied.get().then(|| view! {
-                                <span class="text-muted">"Copied"</span>
+                            {move || copied.get().map(|ok| if ok {
+                                view! { <span class="text-muted">"Copied"</span> }
+                            } else {
+                                view! { <span class="text-error">"Clipboard refused - press Ctrl+C"</span> }
                             })}
                         </div>
                         <p class="form-help">"Masked xpub used for HD address derivation"</p>
