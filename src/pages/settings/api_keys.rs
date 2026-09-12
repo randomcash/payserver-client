@@ -99,7 +99,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                     <p class="section-desc">"Manage API keys for programmatic access"</p>
                 </div>
                 <button
-                    class="btn btn-primary btn-sm"
+                    class="ps-btn ps-btn-primary ps-btn-sm"
                     on:click=move |_| set_show_create.set(true)
                 >
                     <IconPlus />
@@ -126,14 +126,14 @@ pub fn ApiKeysTab() -> impl IntoView {
                         </div>
                         <div class="form-actions">
                             <button
-                                class="btn btn-primary btn-sm"
+                                class="ps-btn ps-btn-primary ps-btn-sm"
                                 prop:disabled=move || loading.get()
                                 on:click=on_create
                             >
                                 {move || if loading.get() { "Creating..." } else { "Create key" }}
                             </button>
                             <button
-                                class="btn btn-ghost btn-sm"
+                                class="ps-btn ps-btn-ghost ps-btn-sm"
                                 on:click=move |_| set_show_create.set(false)
                             >
                                 "Cancel"
@@ -152,7 +152,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                             {key.key.clone()}
                         </code>
                         <button
-                            class="btn btn-ghost btn-sm"
+                            class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_created_key.set(None)
                         >
                             "Dismiss"
@@ -167,7 +167,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                     <div class="detail-card-body">
                         <p><strong>{msg}</strong></p>
                         <button
-                            class="btn btn-ghost btn-sm"
+                            class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_rotate_error.set(None)
                         >
                             "Dismiss"
@@ -194,7 +194,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                             {key.key.clone()}
                         </code>
                         <button
-                            class="btn btn-ghost btn-sm"
+                            class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_rotated_key.set(None)
                         >
                             "Dismiss"
@@ -247,7 +247,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                                                     <div class="api-key-actions">
                                                         {(is_active && !is_deprecated).then(|| view! {
                                                             <button
-                                                                class="btn btn-ghost btn-sm"
+                                                                class="ps-btn ps-btn-ghost ps-btn-sm"
                                                                 on:click=rotate_handler
                                                             >
                                                                 "Rotate"
@@ -255,7 +255,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                                                         })}
                                                         {is_active.then(|| view! {
                                                             <button
-                                                                class="btn btn-ghost btn-sm"
+                                                                class="ps-btn ps-btn-ghost ps-btn-sm"
                                                                 on:click=revoke_handler
                                                             >
                                                                 "Revoke"

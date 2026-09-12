@@ -283,7 +283,7 @@ pub fn NotificationsTab() -> impl IntoView {
 
                             <div class="form-actions">
                                 <button
-                                    class="btn btn-primary btn-sm"
+                                    class="ps-btn ps-btn-primary ps-btn-sm"
                                     disabled=move || saving.get() || !ready.get()
                                     on:click=on_save
                                 >

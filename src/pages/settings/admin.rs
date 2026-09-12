@@ -199,7 +199,7 @@ pub fn AdminTab() -> impl IntoView {
                                             <td class="date-cell">{created_date}</td>
                                             <td>
                                                 <button
-                                                    class=if is_locked { "btn btn-xs btn-success" } else { "btn btn-xs btn-warning" }
+                                                    class=if is_locked { "ps-btn ps-btn-xs ps-btn-success" } else { "ps-btn ps-btn-xs ps-btn-warning" }
                                                     on:click=move |_| toggle_lock(user_id_lock.clone(), is_locked)
                                                 >
                                                     {if is_locked { "Unlock" } else { "Lock" }}
@@ -314,7 +314,7 @@ pub fn AdminTab() -> impl IntoView {
                             // enabled, an admin has no way to tell a no-op from a restart
                             // that happened.
                             <button
-                                class="btn btn-secondary btn-sm"
+                                class="ps-btn ps-btn-secondary ps-btn-sm"
                                 disabled=true
                                 title="Clear cache is not implemented yet"
                             >
@@ -328,7 +328,7 @@ pub fn AdminTab() -> impl IntoView {
                                 <span class="admin-action-desc">"Restart the EVM chain monitor service"</span>
                             </div>
                             <button
-                                class="btn btn-secondary btn-sm"
+                                class="ps-btn ps-btn-secondary ps-btn-sm"
                                 disabled=true
                                 title="Restarting the monitor is not implemented yet"
                             >
@@ -342,7 +342,7 @@ pub fn AdminTab() -> impl IntoView {
                                 <span class="admin-action-desc">"Export all server data as JSON backup"</span>
                             </div>
                             <button
-                                class="btn btn-secondary btn-sm"
+                                class="ps-btn ps-btn-secondary ps-btn-sm"
                                 disabled=true
                                 title="Export is not implemented yet"
                             >
@@ -363,7 +363,7 @@ pub fn AdminTab() -> impl IntoView {
                         view! { <span class="form-status">{status}</span> }.into_any()
                     }
                 }}
-                <button class="btn btn-primary" on:click=save_settings>"Save server settings"</button>
+                <button class="ps-btn ps-btn-primary" on:click=save_settings>"Save server settings"</button>
             </div>
         </div>
     }

@@ -84,7 +84,7 @@ pub fn WebhooksTab(store_id: String) -> impl IntoView {
                         <p style="font-weight: 500; margin-bottom: 0.5rem;">"Webhook secret (save this now — it won't be shown again):"</p>
                         <code style="word-break: break-all; font-size: var(--text-sm);">{secret}</code>
                         <button
-                            class="btn btn-ghost btn-sm"
+                            class="ps-btn ps-btn-ghost ps-btn-sm"
                             style="margin-top: 0.5rem;"
                             on:click=move |_| set_revealed_secret.set(None)
                         >
@@ -134,14 +134,14 @@ pub fn WebhooksTab(store_id: String) -> impl IntoView {
                             </div>
                             <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
                                 <button
-                                    class="btn btn-primary btn-sm"
+                                    class="ps-btn ps-btn-primary ps-btn-sm"
                                     on:click=on_save
                                     disabled=move || saving.get()
                                 >
                                     {move || if saving.get() { "Saving..." } else { "Save" }}
                                 </button>
                                 <button
-                                    class="btn btn-secondary btn-sm"
+                                    class="ps-btn ps-btn-secondary ps-btn-sm"
                                     on:click=move |_| set_show_form.set(false)
                                 >
                                     "Cancel"
@@ -215,7 +215,7 @@ pub fn WebhooksTab(store_id: String) -> impl IntoView {
                             <div style="text-align: center; padding: 2rem; color: var(--color-error);">
                                 <p>"Failed to load webhook: "{e.to_string()}</p>
                                 <button
-                                    class="btn btn-secondary btn-sm"
+                                    class="ps-btn ps-btn-secondary ps-btn-sm"
                                     style="margin-top: 1rem;"
                                     on:click=move |_| set_refresh_counter.update(|c| *c += 1)
                                 >
@@ -295,9 +295,9 @@ fn WebhookConfig(
                 </div>
 
                 <div class="form-actions" style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                    <button class="btn btn-secondary btn-sm" on:click=on_edit>"Edit endpoint"</button>
-                    <button class="btn btn-secondary btn-sm" on:click=on_regenerate>"Regenerate secret"</button>
-                    <button class="btn btn-ghost btn-sm" style="color: var(--color-error);" on:click=on_delete>"Delete"</button>
+                    <button class="ps-btn ps-btn-secondary ps-btn-sm" on:click=on_edit>"Edit endpoint"</button>
+                    <button class="ps-btn ps-btn-secondary ps-btn-sm" on:click=on_regenerate>"Regenerate secret"</button>
+                    <button class="ps-btn ps-btn-ghost ps-btn-sm" style="color: var(--color-error);" on:click=on_delete>"Delete"</button>
                 </div>
             </div>
         </div>
@@ -313,7 +313,7 @@ fn WebhookEmpty(on_configure: impl Fn(leptos::ev::MouseEvent) + 'static) -> impl
                 <IconWebhook />
                 <h4>"No webhook configured"</h4>
                 <p>"Set up a webhook endpoint to receive real-time payment notifications"</p>
-                <button class="btn btn-primary btn-sm" on:click=on_configure>"Configure webhook"</button>
+                <button class="ps-btn ps-btn-primary ps-btn-sm" on:click=on_configure>"Configure webhook"</button>
             </div>
         </div>
     }

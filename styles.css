@@ -1627,7 +1627,8 @@ a:hover {
     gap: var(--space-1);
 }
 
-.btn-xs {
+.btn-xs,
+.ps-btn-xs {
     padding: var(--space-1) var(--space-2);
     font-size: var(--text-xs);
 }
@@ -2212,7 +2213,8 @@ tr.payment-row {
     color: var(--text-muted);
 }
 
-.btn-icon {
+.btn-icon,
+.ps-btn-icon {
     width: 32px;
     height: 32px;
     padding: 0;
@@ -2656,7 +2658,8 @@ tr.payment-row {
     color: var(--text-primary);
 }
 
-.btn-icon-xs {
+.btn-icon-xs,
+.ps-btn-icon-xs {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2670,7 +2673,8 @@ tr.payment-row {
     border-radius: var(--border-radius-sm);
 }
 
-.btn-icon-xs:hover {
+.btn-icon-xs:hover,
+.ps-btn-icon-xs:hover {
     color: var(--color-primary);
     background: var(--color-primary-light);
 }

@@ -88,7 +88,7 @@ pub fn PreferencesTab() -> impl IntoView {
                         // Same as Notifications: no persistence behind the form, so
                         // saving would discard the edits silently.
                         <button
-                            class="btn btn-primary btn-sm"
+                            class="ps-btn ps-btn-primary ps-btn-sm"
                             disabled=true
                             title="Saving preferences is not implemented yet"
                         >

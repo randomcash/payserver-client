@@ -70,17 +70,17 @@ where
                     <ConnectionIndicator state=ws_state />
                     // No notification centre behind the bell yet.
                     <button
-                        class="btn btn-ghost btn-sm"
+                        class="ps-btn ps-btn-ghost ps-btn-sm"
                         disabled=true
                         title="Notifications are not implemented yet"
                     >
                         <IconBell />
                     </button>
-                    <button class="btn btn-primary btn-sm" on:click=move |_| create_invoice.open()>
+                    <button class="ps-btn ps-btn-primary ps-btn-sm" on:click=move |_| create_invoice.open()>
                         <span>"Create Invoice"</span>
                     </button>
                     <div class="user-menu" node_ref=menu_ref>
-                        <button class="btn btn-ghost btn-sm user-menu-trigger" on:click=toggle_menu>
+                        <button class="ps-btn ps-btn-ghost ps-btn-sm user-menu-trigger" on:click=toggle_menu>
                             <IconUser />
                         </button>
                         <div class=move || if menu_open.get() { "user-menu-dropdown open" } else { "user-menu-dropdown" }>

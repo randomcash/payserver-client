@@ -76,7 +76,7 @@ pub fn StoresPage() -> impl IntoView {
                 </div>
                 <div class="page-actions">
                     <button
-                        class="btn btn-primary btn-sm"
+                        class="ps-btn ps-btn-primary ps-btn-sm"
                         on:click=move |_| set_show_create_form.update(|v| *v = !*v)
                     >
                         <IconPlus />
@@ -141,14 +141,14 @@ pub fn StoresPage() -> impl IntoView {
                         </div>
                         <div class="form-actions">
                             <button
-                                class="btn btn-primary btn-sm"
+                                class="ps-btn ps-btn-primary ps-btn-sm"
                                 on:click=on_create_store.clone()
                                 disabled=move || creating.get()
                             >
                                 {move || if creating.get() { "Creating..." } else { "Create" }}
                             </button>
                             <button
-                                class="btn btn-secondary btn-sm"
+                                class="ps-btn ps-btn-secondary ps-btn-sm"
                                 on:click=move |_| set_show_create_form.set(false)
                             >
                                 "Cancel"
@@ -204,7 +204,7 @@ pub fn StoresPage() -> impl IntoView {
                         <div class="stores-error" style="text-align: center; padding: 3rem; color: var(--color-error);">
                             <p>"Failed to load stores: "{e.to_string()}</p>
                             <button
-                                class="btn btn-secondary btn-sm"
+                                class="ps-btn ps-btn-secondary ps-btn-sm"
                                 style="margin-top: 1rem;"
                                 on:click=move |_| set_refresh_counter.update(|c| *c += 1)
                             >

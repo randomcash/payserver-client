@@ -42,14 +42,14 @@ fn DashboardHeader() -> impl IntoView {
                 // Nothing exports yet; disabled beats a click that looks like
                 // a download that failed.
                 <button
-                    class="btn btn-secondary btn-sm"
+                    class="ps-btn ps-btn-secondary ps-btn-sm"
                     disabled=true
                     title="Export is not implemented yet"
                 >
                     <IconDownload />
                     "Export"
                 </button>
-                <A href="/evm/invoices" attr:class="btn btn-primary btn-sm">
+                <A href="/evm/invoices" attr:class="ps-btn ps-btn-primary ps-btn-sm">
                     <IconPlus />
                     "Create Invoice"
                 </A>
@@ -233,9 +233,9 @@ fn DashboardCharts() -> impl IntoView {
                             view! {
                                 <button
                                     class=move || if days.get() == window {
-                                        "btn btn-ghost btn-xs active"
+                                        "ps-btn ps-btn-ghost ps-btn-xs active"
                                     } else {
-                                        "btn btn-ghost btn-xs"
+                                        "ps-btn ps-btn-ghost ps-btn-xs"
                                     }
                                     on:click=move |_| {
                                         set_days.set(window);
@@ -362,7 +362,7 @@ fn VolumeChart(
                         <button
                             class=move || {
                                 let active = pinned_asset.get().as_deref() == Some(symbol.as_str());
-                                if active { "btn btn-ghost btn-xs active" } else { "btn btn-ghost btn-xs" }
+                                if active { "ps-btn ps-btn-ghost ps-btn-xs active" } else { "ps-btn ps-btn-ghost ps-btn-xs" }
                             }
                             on:click=move |_| set_pinned_asset.set(Some(selected.clone()))
                         >

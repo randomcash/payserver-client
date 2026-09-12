@@ -231,7 +231,7 @@ pub fn InvoicesPage() -> impl IntoView {
                 </div>
                 <div class="page-actions">
                     <button
-                        class="btn btn-secondary btn-sm"
+                        class="ps-btn ps-btn-secondary ps-btn-sm"
                         disabled=move || !export_available()
                         on:click=move |_| {
                         let api = api.get();
@@ -252,7 +252,7 @@ pub fn InvoicesPage() -> impl IntoView {
                         <IconExport />
                         "Export"
                     </button>
-                    <button class="btn btn-primary btn-sm" on:click=move |_| create_invoice_signal.open()>
+                    <button class="ps-btn ps-btn-primary ps-btn-sm" on:click=move |_| create_invoice_signal.open()>
                         <IconPlus />
                         "Create invoice"
                     </button>
@@ -343,7 +343,7 @@ pub fn InvoicesPage() -> impl IntoView {
                     Err(e) => view! {
                         <div class="error-container">
                             <p class="error-message">{e.to_string()}</p>
-                            <button class="btn btn-secondary btn-sm" on:click=move |_| set_refresh.update(|n| *n += 1)>
+                            <button class="ps-btn ps-btn-secondary ps-btn-sm" on:click=move |_| set_refresh.update(|n| *n += 1)>
                                 "Retry"
                             </button>
                         </div>

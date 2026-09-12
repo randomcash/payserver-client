@@ -268,7 +268,7 @@ pub fn SettingsTab(store_id: String) -> impl IntoView {
                 })}
 
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary" disabled=move || saving.get()>
+                    <button type="submit" class="ps-btn ps-btn-primary" disabled=move || saving.get()>
                         {move || if saving.get() { "Saving..." } else { "Save Settings" }}
                     </button>
                 </div>
@@ -470,7 +470,7 @@ fn TokenPolicyPanel(store_id: String) -> impl IntoView {
                                     {entry.token_address.clone().unwrap_or_else(|| "(native)".to_string())}
                                 </span>
                                 <span style="flex: 1;">{entry.asset_symbol.clone()}</span>
-                                <button type="button" class="btn btn-sm btn-danger" style="width: 40px;" on:click=remove>"X"</button>
+                                <button type="button" class="ps-btn ps-btn-sm ps-btn-danger" style="width: 40px;" on:click=remove>"X"</button>
                             </div>
                         }
                     }
@@ -510,7 +510,7 @@ fn TokenPolicyPanel(store_id: String) -> impl IntoView {
                         on:input=move |ev| set_new_asset_symbol.set(event_target_value(&ev))
                     />
                 </div>
-                <button type="button" class="btn btn-secondary" on:click=add_entry>"Add"</button>
+                <button type="button" class="ps-btn ps-btn-secondary" on:click=add_entry>"Add"</button>
             </div>
 
             {move || error_msg.get().map(|msg| view! {
@@ -521,13 +521,13 @@ fn TokenPolicyPanel(store_id: String) -> impl IntoView {
             })}
 
             <div class="form-actions" style="margin-top: 0.75rem;">
-                <button type="button" class="btn btn-primary"
+                <button type="button" class="ps-btn ps-btn-primary"
                     disabled=move || saving.get()
                     on:click=on_save
                 >
                     {move || if saving.get() { "Saving..." } else { "Save Policy" }}
                 </button>
-                <button type="button" class="btn btn-danger"
+                <button type="button" class="ps-btn ps-btn-danger"
                     style=move || if has_policy.get() { "margin-left: 0.5rem;" } else { "display: none;" }
                     disabled=move || saving.get()
                     on:click=on_delete

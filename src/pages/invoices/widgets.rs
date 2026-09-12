@@ -67,7 +67,7 @@ pub(super) fn InvoiceRow(invoice: Invoice, show_store: bool) -> impl IntoView {
             <td>
                 // The overflow menu has no items behind it yet.
                 <button
-                    class="btn btn-ghost btn-sm btn-icon"
+                    class="ps-btn ps-btn-ghost ps-btn-sm ps-btn-icon"
                     disabled=true
                     title="Row actions are not implemented yet"
                 >
