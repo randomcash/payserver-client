@@ -5,11 +5,12 @@
 //! to the created invoice on success.
 
 use leptos::prelude::*;
+use leptos_router::components::A;
 use leptos_router::hooks::use_navigate;
 
 use types::currency::{EXPIRATION_PRESETS, INVOICE_CURRENCY_OPTIONS};
 
-use crate::api::{ApiClient, CreateInvoiceRequest};
+use crate::api::{ApiClient, ApiError, CreateInvoiceRequest};
 use crate::app::{StoreContext, StoresStatus};
 
 /// Shared signal that any component can use to open the create-invoice modal.
@@ -60,6 +61,10 @@ pub fn CreateInvoiceModal() -> impl IntoView {
 
     // UI state
     let (error, set_error) = signal(Option::<String>::None);
+    // Set alongside `error` specifically for the wallet gate (RCS-250), so the
+    // banner can offer the one link that actually unblocks it rather than
+    // leaving the merchant to guess where "Wallets page" is.
+    let (needs_wallet, set_needs_wallet) = signal(false);
     let (submitting, set_submitting) = signal(false);
     let (show_advanced, set_show_advanced) = signal(false);
 
@@ -81,6 +86,7 @@ pub fn CreateInvoiceModal() -> impl IntoView {
             set_notification_url.set(String::new());
             set_redirect_url.set(String::new());
             set_error.set(None);
+            set_needs_wallet.set(false);
             set_show_advanced.set(false);
         }
     });
@@ -116,6 +122,7 @@ pub fn CreateInvoiceModal() -> impl IntoView {
         let navigate = navigate.clone();
 
         set_error.set(None);
+        set_needs_wallet.set(false);
 
         // --- Client-side validation ---
         if !store_selection_valid() {
@@ -198,7 +205,14 @@ pub fn CreateInvoiceModal() -> impl IntoView {
                     navigate(&format!("/evm/invoices/{}", invoice.id), Default::default());
                 }
                 Err(e) => {
-                    set_error.set(Some(e.to_string()));
+                    if is_no_wallet_error(&e) {
+                        set_needs_wallet.set(true);
+                        set_error.set(Some(
+                            "This store has no wallet to receive payments.".to_string(),
+                        ));
+                    } else {
+                        set_error.set(Some(e.to_string()));
+                    }
                 }
             }
             set_submitting.set(false);
@@ -230,7 +244,15 @@ pub fn CreateInvoiceModal() -> impl IntoView {
                     <div class="modal-body">
                         // Error banner
                         {move || error.get().map(|e| view! {
-                            <div class="form-alert form-alert-error">{e}</div>
+                            <div class="form-alert form-alert-error">
+                                {e}
+                                {needs_wallet.get().then(|| view! {
+                                    " "
+                                    <A href="/evm/wallets" attr:class="form-alert-action">
+                                        "Add a wallet"
+                                    </A>
+                                })}
+                            </div>
                         })}
 
                         // Store picker
@@ -419,6 +441,29 @@ fn is_valid_url(url: &str) -> bool {
         || (lower.starts_with("https://") && url.len() > "https://".len())
 }
 
+/// Whether a failed create-invoice call is the wallet gate (RCS-250), not
+/// some other 400.
+///
+/// `ApiError::Http` carries the response body verbatim rather than a parsed
+/// field, so this parses just enough JSON to read the `error` code the server
+/// sends (`server/src/api/invoices/crud.rs`). A previous version of this modal
+/// treated any 400 the same way - this reads the code specifically so a
+/// different 400 (bad amount, no payment methods, ...) is never mistaken for
+/// the wallet gate and shown a link that would not fix it.
+fn is_no_wallet_error(err: &ApiError) -> bool {
+    let ApiError::Http {
+        status: 400,
+        message,
+    } = err
+    else {
+        return false;
+    };
+    serde_json::from_str::<serde_json::Value>(message)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+        .is_some_and(|code| code == "no_wallet")
+}
+
 // ===== Icons (local to this component) =====
 
 #[component]
@@ -519,5 +564,43 @@ mod tests {
     fn test_is_valid_url_accepts_case_insensitive_scheme() {
         assert!(is_valid_url("HTTP://EXAMPLE.COM"));
         assert!(is_valid_url("Https://Example.Com/path"));
+    }
+
+    #[test]
+    fn recognizes_the_wallet_gate_by_its_error_code() {
+        let err = ApiError::Http {
+            status: 400,
+            message: r#"{"error":"no_wallet","message":"This store has no wallet"}"#.to_string(),
+        };
+        assert!(is_no_wallet_error(&err));
+    }
+
+    #[test]
+    fn a_different_400_is_not_mistaken_for_the_wallet_gate() {
+        let err = ApiError::Http {
+            status: 400,
+            message:
+                r#"{"error":"no_payment_methods","message":"Store has no enabled payment methods"}"#
+                    .to_string(),
+        };
+        assert!(!is_no_wallet_error(&err));
+    }
+
+    #[test]
+    fn a_non_400_is_never_the_wallet_gate_even_with_the_same_code() {
+        let err = ApiError::Http {
+            status: 409,
+            message: r#"{"error":"no_wallet","message":"..."}"#.to_string(),
+        };
+        assert!(!is_no_wallet_error(&err));
+    }
+
+    #[test]
+    fn a_non_json_body_is_not_the_wallet_gate() {
+        let err = ApiError::Http {
+            status: 400,
+            message: "invalid status filter".to_string(),
+        };
+        assert!(!is_no_wallet_error(&err));
     }
 }
