@@ -307,6 +307,18 @@ fn render_checkout(
                         option.token_address.as_deref(),
                     )
                     .unwrap_or_else(|| addr.clone());
+
+                    // The `wallet_actions` slot signature is fixed at
+                    // (address, chain_id) — the amount travels through
+                    // context instead, read back inside the slot
+                    // implementation. See `WalletActionsContext`.
+                    provide_context(crate::WalletActionsContext {
+                        amount: option.amount.clone(),
+                        token_address: option.token_address.clone(),
+                    });
+                    let wallet_actions = (crate::checkout_plugin().wallet_actions)
+                        .and_then(|render| render(&addr, &option.chain_id));
+
                     view! {
                         <div class="checkout-payment-details">
                             <div class="checkout-qr">
@@ -341,6 +353,8 @@ fn render_checkout(
                                     <CopyButton text=addr_for_copy.clone() />
                                 </div>
                             </div>
+
+                            {wallet_actions}
                         </div>
                     }
                 })
