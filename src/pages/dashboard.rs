@@ -22,10 +22,115 @@ pub fn DashboardPage() -> impl IntoView {
     view! {
         <div class="dashboard">
             <DashboardHeader />
+            <OnboardingChecklist />
             <DashboardMetrics />
             <DashboardCharts />
             <DashboardActivity />
         </div>
+    }
+}
+
+/// The three steps a merchant needs before an invoice can be paid: a store, a
+/// wallet, and the invoice itself. Gone once all three are done - a merchant
+/// who has already set up does not need reminding forever.
+///
+/// A store with no wallet cannot receive payments (RCS-250) - the server
+/// refuses to create an invoice for one - so this is not just a tour, it is
+/// the path to clearing that gate.
+#[component]
+fn OnboardingChecklist() -> impl IntoView {
+    let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
+    let store_ctx = use_context::<StoreContext>().expect("StoreContext must be provided");
+    let stores = store_ctx.stores;
+    let stores_status = store_ctx.stores_status;
+
+    // Wallets are account-level and invoice counts aren't in `StoreContext`,
+    // so this fetches its own copy rather than widening a context every
+    // dashboard visitor pays for. Waits for `stores_status` so a checklist
+    // that briefly has zero of everything doesn't flash "all done" before the
+    // real store count arrives.
+    let progress = LocalResource::new(move || {
+        let client = api.get();
+        let status = stores_status.get();
+        let has_store = !stores.get().is_empty();
+        async move {
+            if !matches!(status, StoresStatus::Loaded) {
+                return None;
+            }
+            let has_wallet = client
+                .list_wallets()
+                .await
+                .map(|w| !w.is_empty())
+                .unwrap_or(false);
+            let has_invoice = client
+                .get_dashboard_stats()
+                .await
+                .map(|s| s.total_invoices > 0)
+                .unwrap_or(false);
+            Some((has_store, has_wallet, has_invoice))
+        }
+    });
+
+    view! {
+        <Suspense fallback=|| ()>
+            {move || Suspend::new(async move {
+                match progress.await {
+                    Some((has_store, has_wallet, has_invoice))
+                        if !(has_store && has_wallet && has_invoice) =>
+                    {
+                        view! {
+                            <div class="onboarding-checklist">
+                                <h3 class="onboarding-checklist-title">
+                                    "Get set up to accept payments"
+                                </h3>
+                                <ul class="onboarding-checklist-items">
+                                    <OnboardingStep
+                                        done=has_store
+                                        label="Create a store"
+                                        href="/evm/stores"
+                                    />
+                                    <OnboardingStep
+                                        done=has_wallet
+                                        label="Add a wallet"
+                                        href="/evm/wallets"
+                                    />
+                                    <OnboardingStep
+                                        done=has_invoice
+                                        label="Create your first invoice"
+                                        href="/evm/invoices"
+                                    />
+                                </ul>
+                            </div>
+                        }
+                        .into_any()
+                    }
+                    _ => ().into_any(),
+                }
+            })}
+        </Suspense>
+    }
+}
+
+/// One row of the onboarding checklist: a status mark, a label, and - while
+/// not yet done - a link to where the step happens.
+#[component]
+fn OnboardingStep(done: bool, label: &'static str, href: &'static str) -> impl IntoView {
+    let item_class = if done {
+        "onboarding-step onboarding-step-done"
+    } else {
+        "onboarding-step"
+    };
+    view! {
+        <li class=item_class>
+            <span class="onboarding-step-mark">
+                {if done { view! { <IconCheck /> }.into_any() } else { ().into_any() }}
+            </span>
+            <span class="onboarding-step-label">{label}</span>
+            {(!done)
+                .then(|| view! {
+                    <A href=href attr:class="onboarding-step-action">"Go"</A>
+                })}
+        </li>
     }
 }
 
@@ -881,6 +986,15 @@ fn IconPlus() -> impl IntoView {
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+    }
+}
+
+#[component]
+fn IconCheck() -> impl IntoView {
+    view! {
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
     }
 }
