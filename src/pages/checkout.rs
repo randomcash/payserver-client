@@ -16,7 +16,9 @@ use crate::services::websocket::{StatusUpdate, WebSocketService};
 use crate::util::chain_name;
 
 mod countdown;
+mod qr_picker;
 use countdown::CountdownTimer;
+use qr_picker::{QrEncoding, QrPicker};
 
 /// Format a human-readable amount from smallest units.
 ///
@@ -286,35 +288,45 @@ fn render_checkout(
                     let chain = chain_name(&option.chain_id).to_string();
                     let addr_for_copy = addr.clone();
 
-                    // EIP-681 rather than a bare address, so a scanned QR
-                    // prefills the amount and the chain instead of leaving a
-                    // customer to type `0.04735110051849455` by hand at the one
-                    // moment in the flow where a mistake costs money.
+                    // Which apps can use this QR depends on what the customer is
+                    // paying from, and neither encoding works for everyone: a
+                    // wallet wants EIP-681 (it prefills amount and chain, the
+                    // one time in the flow a typo costs money); an exchange
+                    // withdrawal form takes only a bare address and errors on
+                    // anything else. So both are offered as separate cards
+                    // rather than picking one - EIP-681 first, since a wallet
+                    // is the common case.
                     //
                     // `option.amount` is already base units - the same string
                     // `format_crypto_amount` divides for display - which is what
                     // the URI wants. Nothing converts through a float.
                     //
-                    // Falls back to the bare address when a URI cannot be built
-                    // with certainty (a non-EVM chain, an address that does not
-                    // parse). A bare address still lets a customer pay by hand;
-                    // a URI a wallet misreads can send the wrong amount to the
-                    // wrong place.
-                    let qr_data = types::payment_request_uri(
+                    // The EIP-681 card is omitted, not emptied, when a URI
+                    // cannot be built with certainty (a non-EVM chain, an
+                    // address that does not parse): a card with no URI must not
+                    // appear, since a wallet misparsing one can send the wrong
+                    // amount to the wrong place, where a bare address always
+                    // lets the customer proceed by hand.
+                    let mut encodings = Vec::with_capacity(2);
+                    if let Some(uri) = types::payment_request_uri(
                         &option.chain_id,
                         &addr,
                         &option.amount,
                         option.token_address.as_deref(),
-                    )
-                    .unwrap_or_else(|| addr.clone());
+                    ) {
+                        encodings.push(QrEncoding {
+                            label: "Scan with a wallet",
+                            data: uri,
+                        });
+                    }
+                    encodings.push(QrEncoding {
+                        label: "Copy to an exchange withdrawal",
+                        data: addr.clone(),
+                    });
                     view! {
                         <div class="checkout-payment-details">
                             <div class="checkout-qr">
-                                <ui_kit::components::crypto::QrCodeCard
-                                    data=qr_data
-                                    label="Scan to pay"
-                                    size=250
-                                />
+                                <QrPicker encodings=encodings />
                             </div>
 
                             // Amount in crypto
