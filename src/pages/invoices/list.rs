@@ -198,11 +198,10 @@ pub fn InvoicesPage() -> impl IntoView {
                 .await
             {
                 Ok(response) => Ok(Some(response)),
-                // The all-stores view is admin-only server-side; everyone else
-                // gets a 400. That is a "pick a store" situation, not a failure
-                // to show as a raw error with a Retry that cannot work — fall
-                // through to NoStoreSelected, which says exactly that.
-                Err(ApiError::Http { status: 400, .. }) if store_id.is_none() => Ok(None),
+                Err(ApiError::Http {
+                    status: 400,
+                    ref message,
+                }) if is_pick_a_store_400(store_id.is_none(), message) => Ok(None),
                 Err(e) => Err(e),
             }
         }
@@ -458,5 +457,39 @@ pub fn InvoicesPage() -> impl IntoView {
             // Create Invoice Modal is rendered at the layout level (app.rs)
             // via the shared CreateInvoiceSignal context.
         </div>
+    }
+}
+
+/// Whether a 400 with no store selected means "pick a store", rather than a
+/// real filter error to show as one.
+///
+/// The server used to answer a non-admin's all-stores query with a bare 400;
+/// it no longer does (`verify_store_access_for_query` scopes to the caller's
+/// own memberships instead), so the only 400 reachable here today is an
+/// invalid `status` filter. Matching on the status code alone, as this used
+/// to, would swallow that into `NoStoreSelected` - the reason string is what
+/// tells the two apart.
+fn is_pick_a_store_400(store_id_is_none: bool, message: &str) -> bool {
+    store_id_is_none && message != "invalid status filter"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_pick_a_store_400;
+
+    #[test]
+    fn no_store_and_no_reason_is_pick_a_store() {
+        assert!(is_pick_a_store_400(true, ""));
+    }
+
+    #[test]
+    fn an_invalid_status_filter_is_a_real_error_even_with_no_store_selected() {
+        assert!(!is_pick_a_store_400(true, "invalid status filter"));
+    }
+
+    #[test]
+    fn a_store_selected_is_never_pick_a_store_regardless_of_reason() {
+        assert!(!is_pick_a_store_400(false, ""));
+        assert!(!is_pick_a_store_400(false, "invalid status filter"));
     }
 }

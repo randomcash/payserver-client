@@ -134,7 +134,10 @@ pub fn PaymentsPage() -> impl IntoView {
                 .await
             {
                 Ok(response) => Ok(Some(response)),
-                Err(ApiError::Http { status: 400, .. }) if store_id.is_none() => Ok(None),
+                Err(ApiError::Http {
+                    status: 400,
+                    ref message,
+                }) if is_pick_a_store_400(store_id.is_none(), message) => Ok(None),
                 Err(e) => Err(e),
             }
         }
@@ -370,6 +373,19 @@ pub fn PaymentsPage() -> impl IntoView {
     }
 }
 
+/// Whether a 400 with no store selected means "pick a store", rather than a
+/// real filter error to show as one.
+///
+/// The server used to answer a non-admin's all-stores query with a bare 400;
+/// it no longer does (`verify_store_access_for_query` scopes to the caller's
+/// own memberships instead), so the only 400 reachable here today is an
+/// invalid `status` filter. Matching on the status code alone, as this used
+/// to, would swallow that into `NoStoreSelected` - the reason string is what
+/// tells the two apart.
+fn is_pick_a_store_400(store_id_is_none: bool, message: &str) -> bool {
+    store_id_is_none && message != "invalid status filter"
+}
+
 /// Label for the store a payment belongs to.
 ///
 /// Falls back to a shortened store ID when the server could not resolve a name,
@@ -509,9 +525,25 @@ fn PaymentCard(payment: Payment, show_store: bool) -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::store_label;
+    use super::{is_pick_a_store_400, store_label};
     use crate::api::Payment;
     use types::ChainId;
+
+    #[test]
+    fn no_store_and_no_reason_is_pick_a_store() {
+        assert!(is_pick_a_store_400(true, ""));
+    }
+
+    #[test]
+    fn an_invalid_status_filter_is_a_real_error_even_with_no_store_selected() {
+        assert!(!is_pick_a_store_400(true, "invalid status filter"));
+    }
+
+    #[test]
+    fn a_store_selected_is_never_pick_a_store_regardless_of_reason() {
+        assert!(!is_pick_a_store_400(false, ""));
+        assert!(!is_pick_a_store_400(false, "invalid status filter"));
+    }
 
     fn payment(store_id: Option<&str>, store_name: Option<&str>) -> Payment {
         Payment {
