@@ -2,8 +2,9 @@
 
 use super::{ApiClient, ApiError};
 use crate::api::{
-    ApiKeyListResponse, CreateApiKeyRequest, CreateApiKeyResponsePayload, DashboardAnalytics,
-    DashboardStats, RotateApiKeyResponse, ServerSettingsResponse, UpdateServerSettingsRequest,
+    ApiKeyListResponse, ConfirmEmailChangeRequest, CreateApiKeyRequest,
+    CreateApiKeyResponsePayload, DashboardAnalytics, DashboardStats, RequestEmailChangeRequest,
+    RotateApiKeyResponse, ServerSettingsResponse, UpdateServerSettingsRequest,
     UpdateUserRoleRequest, UserInfo, UserListResponse,
 };
 
@@ -33,6 +34,48 @@ impl ApiClient {
             js_sys::encode_uri_component(confirm)
         ))
         .await
+    }
+
+    /// Start changing (or setting) the account's email address (RCS-263).
+    ///
+    /// Requires re-authentication: `self` must carry the session token from a
+    /// **freshly completed** passkey or wallet login, not the caller's normal
+    /// session - the server rejects a session it does not consider recent
+    /// enough. See `ReauthGate` in `pages/settings/account.rs` for how that
+    /// fresh session is obtained without disturbing the user's ambient login.
+    ///
+    /// Sends a verification code to `new_email`; call `confirm_email_change`
+    /// with that code to complete the change. Fails (503) if the server has
+    /// no SMTP configured, rather than queuing a change nobody can confirm.
+    pub async fn request_email_change(&self, new_email: &str) -> Result<(), ApiError> {
+        self.post_ignoring_response(
+            "/api/users/me/email",
+            &RequestEmailChangeRequest {
+                new_email: new_email.to_string(),
+            },
+        )
+        .await
+    }
+
+    /// Confirm a pending email change with the code emailed to the new
+    /// address. Unauthenticated by design - the code itself, delivered only
+    /// to that address, is the proof.
+    pub async fn confirm_email_change(&self, token: &str) -> Result<(), ApiError> {
+        self.post_ignoring_response(
+            "/api/users/me/email/confirm",
+            &ConfirmEmailChangeRequest {
+                token: token.to_string(),
+            },
+        )
+        .await
+    }
+
+    /// Remove the account's email (RCS-263). Requires a freshly completed
+    /// login, same as `request_email_change`. Refused (409) if the account
+    /// has no wallet - that would leave the account id as the only way back
+    /// into recovery.
+    pub async fn remove_email(&self) -> Result<(), ApiError> {
+        self.delete("/api/users/me/email").await
     }
 
     pub async fn logout(&self) -> Result<(), ApiError> {

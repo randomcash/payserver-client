@@ -38,3 +38,22 @@ pub struct UserInfo {
     pub last_login_at: Option<String>,
     pub role: UserRole,
 }
+
+/// Body for `POST /users/me/email` (RCS-263).
+///
+/// Mirrors `RequestEmailChangePayload` (server/src/api/users.rs) rather than
+/// coming from `api-types` like most request bodies here - that type's doc
+/// comment explains why: `api-types` lives in `payserver-commons`, and this
+/// ticket cannot complete the merge-then-bump-rev cycle landing something
+/// there requires on its own. Two primitive fields, so the drift risk of a
+/// hand-mirrored copy is small.
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestEmailChangeRequest {
+    pub new_email: String,
+}
+
+/// Body for `POST /users/me/email/confirm`. See `RequestEmailChangeRequest`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfirmEmailChangeRequest {
+    pub token: String,
+}
