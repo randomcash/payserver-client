@@ -4,7 +4,7 @@ use super::{ApiClient, ApiError};
 use crate::api::{
     ApiKeyListResponse, CreateApiKeyRequest, CreateApiKeyResponsePayload, DashboardAnalytics,
     DashboardStats, RotateApiKeyResponse, ServerSettingsResponse, UpdateServerSettingsRequest,
-    UpdateUserRoleRequest, UserInfo, UserListResponse,
+    UpdateUserRoleRequest, UserInfo, UserListResponse, WalletCredential,
 };
 
 impl ApiClient {
@@ -59,6 +59,30 @@ impl ApiClient {
         }
 
         Ok(())
+    }
+
+    /// List this account's wallet login credentials - RCS-227.
+    ///
+    /// Not `Wallet` / `/api/wallets` (xpub payout wallets): this is the
+    /// Ethereum addresses that can sign in as this account.
+    pub async fn list_wallet_credentials(&self) -> Result<Vec<WalletCredential>, ApiError> {
+        self.get("/api/users/wallets").await
+    }
+
+    /// Make an existing wallet credential this account's primary.
+    ///
+    /// Sensitive: this changes the login credential wallet-based sign-in
+    /// resolves the account by. The server requires the session behind this
+    /// request to be a *fresh* one (see `FreshlyAuthenticatedUser` /
+    /// server/src/api/extractors.rs) - a 401 here can mean "log in again",
+    /// not just "not logged in", and the caller should surface that
+    /// distinction rather than bouncing to a generic sign-in page.
+    pub async fn set_primary_wallet_credential(
+        &self,
+        wallet_id: &str,
+    ) -> Result<WalletCredential, ApiError> {
+        self.patch(&format!("/api/users/wallets/{}/primary", wallet_id), &())
+            .await
     }
 
     // =========================================================================

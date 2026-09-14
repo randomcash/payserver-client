@@ -1,6 +1,6 @@
 //! Account settings tab.
 
-use crate::api::ApiClient;
+use crate::api::{ApiClient, WalletCredential};
 use leptos::prelude::*;
 use ui_kit::use_auth;
 
@@ -20,6 +20,55 @@ pub fn AccountTab() -> impl IntoView {
     let (typed, set_typed) = signal(String::new());
     let (deleting, set_deleting) = signal(false);
     let (delete_error, set_delete_error) = signal(Option::<String>::None);
+
+    // "Manage wallets" (RCS-227): which wallet is primary is a login
+    // credential, so changing it is gated server-side on a fresh
+    // re-authentication (see FreshlyAuthenticatedUser), not just a valid
+    // session. `wallets_version` re-runs the list fetch after a successful
+    // swap so the new primary shows immediately, the same pattern the API
+    // keys tab uses.
+    let (show_wallets, set_show_wallets) = signal(false);
+    let (wallets_version, set_wallets_version) = signal(0u32);
+    let (promoting, set_promoting) = signal(Option::<String>::None);
+    let (wallet_error, set_wallet_error) = signal(Option::<String>::None);
+
+    let wallets_resource = LocalResource::new(move || {
+        let api = api.get();
+        let _v = wallets_version.get();
+        let visible = show_wallets.get();
+        async move {
+            if !visible {
+                return None;
+            }
+            Some(api.list_wallet_credentials().await)
+        }
+    });
+
+    let make_set_primary_handler = move |wallet_id: String| {
+        let api = api.get();
+        move |_| {
+            let api = api.clone();
+            let id = wallet_id.clone();
+            set_promoting.set(Some(id.clone()));
+            set_wallet_error.set(None);
+            leptos::task::spawn_local(async move {
+                match api.set_primary_wallet_credential(&id).await {
+                    Ok(_) => {
+                        set_wallets_version.update(|v| *v += 1);
+                    }
+                    Err(crate::api::ApiError::Unauthorized) => {
+                        set_wallet_error.set(Some(
+                            "Please log in again to change your primary wallet.".to_string(),
+                        ));
+                    }
+                    Err(e) => {
+                        set_wallet_error.set(Some(e.to_string()));
+                    }
+                }
+                set_promoting.set(None);
+            });
+        }
+    };
 
     let user_resource = LocalResource::new(move || {
         let api = api.get();
@@ -147,10 +196,70 @@ pub fn AccountTab() -> impl IntoView {
                                         <button class="ps-btn ps-btn-secondary ps-btn-sm" disabled=true>
                                             "Manage passkeys"
                                         </button>
-                                        <button class="ps-btn ps-btn-secondary ps-btn-sm" disabled=true>
-                                            "Manage wallets"
+                                        <button
+                                            class="ps-btn ps-btn-secondary ps-btn-sm"
+                                            on:click=move |_| set_show_wallets.update(|v| *v = !*v)
+                                        >
+                                            {move || if show_wallets.get() { "Hide wallets" } else { "Manage wallets" }}
                                         </button>
                                     </div>
+
+                                    {move || show_wallets.get().then(|| view! {
+                                        <div class="settings-wallets" style="margin-top: 16px;">
+                                            {move || wallet_error.get().map(|msg| view! {
+                                                <p style="color: var(--color-error); margin-bottom: 8px;">{msg}</p>
+                                            })}
+                                            <Suspense fallback=move || view! { <p>"Loading wallets..."</p> }>
+                                                {move || Suspend::new(async move {
+                                                    match wallets_resource.await {
+                                                        Some(Ok(wallets)) => {
+                                                            if wallets.is_empty() {
+                                                                view! { <p class="empty-state">"No wallet credentials on this account."</p> }.into_any()
+                                                            } else {
+                                                                view! {
+                                                                    <div class="wallet-credentials-list">
+                                                                        {wallets.into_iter().map(|w: WalletCredential| {
+                                                                            let is_primary = w.is_primary;
+                                                                            let id_for_disabled = w.id.clone();
+                                                                            let id_for_label = w.id.clone();
+                                                                            let is_promoting_disabled = move || promoting.get().as_deref() == Some(id_for_disabled.as_str());
+                                                                            let is_promoting_label = move || promoting.get().as_deref() == Some(id_for_label.as_str());
+                                                                            let handler = make_set_primary_handler(w.id.clone());
+                                                                            view! {
+                                                                                <div class="wallet-credential-item">
+                                                                                    <div class="wallet-credential-info">
+                                                                                        <code>{w.address.clone()}</code>
+                                                                                        <span class="text-muted">{w.name.clone()}</span>
+                                                                                    </div>
+                                                                                    {if is_primary {
+                                                                                        view! { <span class="badge badge-success">"Primary"</span> }.into_any()
+                                                                                    } else {
+                                                                                        view! {
+                                                                                            <button
+                                                                                                class="ps-btn ps-btn-ghost ps-btn-sm"
+                                                                                                prop:disabled=is_promoting_disabled
+                                                                                                on:click=handler
+                                                                                            >
+                                                                                                {move || if is_promoting_label() { "Making primary..." } else { "Make primary" }}
+                                                                                            </button>
+                                                                                        }.into_any()
+                                                                                    }}
+                                                                                </div>
+                                                                            }
+                                                                        }).collect_view()}
+                                                                    </div>
+                                                                }.into_any()
+                                                            }
+                                                        }
+                                                        Some(Err(e)) => view! {
+                                                            <p class="text-error">"Failed to load wallets: "{e.to_string()}</p>
+                                                        }.into_any(),
+                                                        None => view! { <span /> }.into_any(),
+                                                    }
+                                                })}
+                                            </Suspense>
+                                        </div>
+                                    })}
                                 </div>
                             </div>
 
