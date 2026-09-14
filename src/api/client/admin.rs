@@ -1,11 +1,23 @@
 //! Auth/user, dashboard, API key, and admin API methods.
 
+use serde::Deserialize;
+
 use super::{ApiClient, ApiError};
 use crate::api::{
     ApiKeyListResponse, CreateApiKeyRequest, CreateApiKeyResponsePayload, DashboardAnalytics,
     DashboardStats, RotateApiKeyResponse, ServerSettingsResponse, UpdateServerSettingsRequest,
     UpdateUserRoleRequest, UserInfo, UserListResponse,
 };
+
+/// Whether the server booted with every plugin disabled.
+///
+/// Not in `api-types` yet: the server's `/admin/safe-mode` is itself a local,
+/// non-shared type today (see that endpoint's doc comment) pending a real
+/// plugin admin contract from RCS-260/RCS-301.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SafeModeStatus {
+    pub safe_mode: bool,
+}
 
 impl ApiClient {
     // =========================================================================
@@ -153,5 +165,11 @@ impl ApiClient {
         request: &UpdateServerSettingsRequest,
     ) -> Result<(), ApiError> {
         self.put_empty("/api/admin/settings", request).await
+    }
+
+    /// Get safe mode status - whether every plugin is disabled for this boot
+    /// (admin only).
+    pub async fn get_safe_mode(&self) -> Result<SafeModeStatus, ApiError> {
+        self.get("/api/admin/safe-mode").await
     }
 }

@@ -11,6 +11,12 @@ use super::IconShield;
 pub fn AdminTab() -> impl IntoView {
     let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
+    // Safe mode state - true when the server booted with every plugin disabled.
+    let (safe_mode, set_safe_mode) = signal(false);
+    // Whether the safe-mode check itself failed - kept distinct from `safe_mode`
+    // so a transient fetch error can't be mistaken for "plugins are fine".
+    let (safe_mode_check_failed, set_safe_mode_check_failed) = signal(false);
+
     // Settings form state
     let (default_confirmations, set_default_confirmations) = signal("3".to_string());
     let (invoice_expiry, set_invoice_expiry) = signal("60".to_string());
@@ -54,6 +60,10 @@ pub fn AdminTab() -> impl IntoView {
             if let Ok(resp) = api.list_users(0, 100).await {
                 set_user_total.set(resp.total);
                 set_users.set(resp.users);
+            }
+            match api.get_safe_mode().await {
+                Ok(status) => set_safe_mode.set(status.safe_mode),
+                Err(_) => set_safe_mode_check_failed.set(true),
             }
         }
     });
@@ -132,6 +142,36 @@ pub fn AdminTab() -> impl IntoView {
 
     view! {
         <div class="settings-tab-admin">
+            {move || {
+                if safe_mode.get() {
+                    view! {
+                        <div class="alert alert-error">
+                            <strong>"⚠ SAFE MODE: every plugin is disabled"</strong>
+                            <p>
+                                "The server booted with ETHPAY_DISABLE_PLUGINS set (or the "
+                                "--disable-plugins flag). No plugin is running - including "
+                                "billing, if it is installed as one. Plugins are not "
+                                "uninstalled and their data is untouched: clear the flag and "
+                                "restart to bring them back."
+                            </p>
+                        </div>
+                    }.into_any()
+                } else if safe_mode_check_failed.get() {
+                    view! {
+                        <div class="alert alert-warning">
+                            <strong>"⚠ Could not confirm plugin status"</strong>
+                            <p>
+                                "The safe-mode check itself failed, so whether every plugin is "
+                                "disabled for this boot is unknown - this is not the same as "
+                                "confirming plugins are running normally."
+                            </p>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <span></span> }.into_any()
+                }
+            }}
+
             <div class="admin-warning">
                 <IconShield />
                 <div>
