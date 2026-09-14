@@ -36,7 +36,7 @@ impl ApiClient {
         .await
     }
 
-    /// Start changing (or setting) the account's email address (RCS-263).
+    /// Start changing (or setting) the account's email address.
     ///
     /// Requires re-authentication: `self` must carry the session token from a
     /// **freshly completed** passkey or wallet login, not the caller's normal
@@ -70,7 +70,7 @@ impl ApiClient {
         .await
     }
 
-    /// Remove the account's email (RCS-263). Requires a freshly completed
+    /// Remove the account's email. Requires a freshly completed
     /// login, same as `request_email_change`. Refused (409) if the account
     /// has no wallet - that would leave the account id as the only way back
     /// into recovery.

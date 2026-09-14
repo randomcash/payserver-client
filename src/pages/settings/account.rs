@@ -257,7 +257,7 @@ pub fn AccountTab() -> impl IntoView {
 }
 
 // =============================================================================
-// Email change (RCS-263)
+// Email change
 //
 // SENSITIVE: this drives account-recovery-affecting endpoints. Set, change and
 // remove all require a session from a *freshly completed* passkey or wallet
@@ -687,7 +687,9 @@ fn ReauthGate(on_success: Callback<String>, on_cancel: Callback<()>) -> impl Int
                 <button
                     class="ps-btn ps-btn-secondary ps-btn-sm"
                     on:click=move |_| on_cancel.run(())
-                    disabled=move || busy.get()
+                    disabled=move || {
+                        busy.get() || matches!(passkey_state.get(), PasskeyState::Authenticating)
+                    }
                 >
                     "Cancel"
                 </button>

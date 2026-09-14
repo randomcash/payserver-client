@@ -39,7 +39,7 @@ pub struct UserInfo {
     pub role: UserRole,
 }
 
-/// Body for `POST /users/me/email` (RCS-263).
+/// Body for `POST /users/me/email`.
 ///
 /// Mirrors `RequestEmailChangePayload` (server/src/api/users.rs) rather than
 /// coming from `api-types` like most request bodies here - that type's doc
