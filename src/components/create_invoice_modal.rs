@@ -61,7 +61,7 @@ pub fn CreateInvoiceModal() -> impl IntoView {
 
     // UI state
     let (error, set_error) = signal(Option::<String>::None);
-    // Set alongside `error` specifically for the wallet gate (RCS-250), so the
+    // Set alongside `error` specifically for the no-wallet case, so the
     // banner can offer the one link that actually unblocks it rather than
     // leaving the merchant to guess where "Wallets page" is.
     let (needs_wallet, set_needs_wallet) = signal(false);
@@ -441,8 +441,8 @@ fn is_valid_url(url: &str) -> bool {
         || (lower.starts_with("https://") && url.len() > "https://".len())
 }
 
-/// Whether a failed create-invoice call is the wallet gate (RCS-250), not
-/// some other 400.
+/// Whether a failed create-invoice call is the no-wallet gate, not some
+/// other 400.
 ///
 /// `ApiError::Http` carries the response body verbatim rather than a parsed
 /// field, so this parses just enough JSON to read the `error` code the server

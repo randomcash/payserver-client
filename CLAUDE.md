@@ -10,7 +10,13 @@ against — that is the seam, and it is the reason this repo is separate.
 
 ## This repository is public
 
-No session URLs in commits or PR bodies, no secrets.
+No session URLs in commits or PR bodies, no secrets. Also no ticket ids or
+tracker links in source files — no `RCS-123`, no `linear.app` URL, anywhere in
+code or comments. A ticket id here leaks the shape of unreleased work, and an
+outside reader cannot open it anyway. Write the reason the code exists, not a
+pointer to where someone once explained it; the ticket id belongs in the
+commit message and PR title. `scripts/check-no-ticket-refs.sh` enforces this
+in CI; `CLAUDE.md`, `AGENTS.md` and `docs/` are exempt.
 
 ## It is compiled, which changes what a plugin or theme can be
 
