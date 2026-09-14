@@ -1,4 +1,4 @@
-//! Parsing of the errex (Sentry-protocol) DSN into an ingest endpoint.
+//! Parsing of the Sentry-protocol DSN into an ingest endpoint.
 
 /// A parsed DSN, reduced to the one URL the client actually posts to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,14 +62,14 @@ mod tests {
     use super::Dsn;
 
     #[test]
-    fn parses_the_errex_dsn_shape() {
+    fn parses_the_dsn_shape() {
         let dsn = Dsn::parse(
-            "https://00000000000000000000000000000000@errex.example.internal/random.cash",
+            "https://00000000000000000000000000000000@telemetry.example.com/random.cash",
         )
         .expect("valid DSN");
         assert!(
             dsn.ingest_url
-                .starts_with("https://errex.example.internal/api/random.cash/envelope/?"),
+                .starts_with("https://telemetry.example.com/api/random.cash/envelope/?"),
             "{}",
             dsn.ingest_url
         );
@@ -93,10 +93,10 @@ mod tests {
 
     #[test]
     fn tolerates_surrounding_whitespace_and_a_trailing_slash() {
-        let dsn = Dsn::parse("  https://key@errex.example/proj/  ").expect("valid DSN");
+        let dsn = Dsn::parse("  https://key@telemetry.example.com/proj/  ").expect("valid DSN");
         assert!(
             dsn.ingest_url
-                .starts_with("https://errex.example/api/proj/envelope/?")
+                .starts_with("https://telemetry.example.com/api/proj/envelope/?")
         );
     }
 
@@ -105,11 +105,11 @@ mod tests {
         for raw in [
             "",
             "not-a-dsn",
-            "https://errex.example/random.cash", // no public key
-            "https://key@errex.example",         // no project
-            "ftp://key@errex.example/proj",      // unsupported scheme
-            "https://key@errex.example/proj?evil=1", // query injection
-            "https://key@errex.example/proj/../../other", // path traversal
+            "https://telemetry.example.com/random.cash", // no public key
+            "https://key@telemetry.example.com",         // no project
+            "ftp://key@telemetry.example.com/proj",      // unsupported scheme
+            "https://key@telemetry.example.com/proj?evil=1", // query injection
+            "https://key@telemetry.example.com/proj/../../other", // path traversal
         ] {
             assert!(Dsn::parse(raw).is_none(), "should reject: {raw}");
         }

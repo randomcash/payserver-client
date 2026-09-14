@@ -1,15 +1,15 @@
-//! Client-side error capture for the self-hosted errex (Sentry-protocol)
-//! backend — the browser half of the telemetry the Rust binaries already send.
+//! Client-side error capture for a Sentry-protocol error telemetry backend —
+//! the browser half of the telemetry the Rust binaries already send.
 //!
 //! # Reachability (read before enabling)
 //!
-//! errex is tailnet-only (its host is supplied at build time): an
+//! The collector is tailnet-only (its host is supplied at build time): an
 //! end-user browser cannot reach it, and there is deliberately no public
-//! ingress in front of errex ingest from this repo's side. Client capture is
+//! ingress in front of its ingest from this repo's side. Client capture is
 //! therefore **off unless explicitly configured**, and is meant to be turned on
 //! for internal/dev traffic (developer machines, the testnet VPS) where the
-//! tailnet is reachable. When errex grows a public ingest hostname, pointing
-//! the meta tag at it is the only change needed here.
+//! tailnet is reachable. When the collector grows a public ingest hostname,
+//! pointing the meta tag at it is the only change needed here.
 //!
 //! # Configuration
 //!
@@ -17,20 +17,22 @@
 //! the WASM bundle. `client/index.html` carries:
 //!
 //! ```html
-//! <meta name="errex-dsn" content="">
-//! <meta name="errex-environment" content="">
+//! <meta name="telemetry-dsn" content="">
+//! <meta name="telemetry-environment" content="">
 //! ```
 //!
-//! An empty or malformed `errex-dsn` disables reporting entirely. `release` is
-//! taken from `CI_COMMIT_SHORT_SHA` at build time, matching the server.
+//! An empty or malformed `telemetry-dsn` disables reporting entirely.
+//! `release` is taken from `CI_COMMIT_SHORT_SHA` at build time, matching the
+//! server.
 //!
 //! # What is sent
 //!
 //! Panics (via the panic hook), uncaught JS errors and unhandled promise
-//! rejections: a message, a raw stack trace (errex has no source maps yet) and
-//! the route path. Never cookies, request bodies, user identity or query
-//! strings — see the `event` module for the full payload, and the `scrub`
-//! crate in payserver-commons for the redaction every payserver also runs.
+//! rejections: a message, a raw stack trace (the collector has no source maps
+//! yet) and the route path. Never cookies, request bodies, user identity or
+//! query strings — see the `event` module for the full payload, and the
+//! `scrub` crate in payserver-commons for the redaction every payserver also
+//! runs.
 
 mod dsn;
 mod event;
@@ -47,8 +49,8 @@ use event::{Meta, Report};
 
 /// Upper bound on events reported per page load.
 ///
-/// A render loop that panics every frame would otherwise hammer errex ingest
-/// (and the user's connection) until the tab is closed.
+/// A render loop that panics every frame would otherwise hammer the ingest
+/// endpoint (and the user's connection) until the tab is closed.
 const MAX_EVENTS_PER_PAGE: u32 = 20;
 
 thread_local! {
@@ -74,8 +76,8 @@ impl Config {
     fn from_document() -> Option<Self> {
         let document = web_sys::window()?.document()?;
         Some(Self {
-            ingest_url: Dsn::parse(&meta(&document, "errex-dsn")?)?.ingest_url,
-            environment: meta(&document, "errex-environment"),
+            ingest_url: Dsn::parse(&meta(&document, "telemetry-dsn")?)?.ingest_url,
+            environment: meta(&document, "telemetry-environment"),
             release: option_env!("CI_COMMIT_SHORT_SHA").map(str::to_string),
         })
     }
@@ -173,9 +175,10 @@ fn capture(kind: &str, message: &str, stack: Option<String>) {
 /// POST the envelope, fire and forget.
 fn send(url: String, body: String) {
     spawn_local(async move {
-        // Failures are swallowed on purpose: with errex on the tailnet an
-        // unreachable ingest is the expected case in a public browser, and a
-        // telemetry error must never become a user-visible one.
+        // Failures are swallowed on purpose: with the collector on the
+        // tailnet an unreachable ingest is the expected case in a public
+        // browser, and a telemetry error must never become a user-visible
+        // one.
         let request = Request::post(&url)
             .header("Content-Type", "application/x-sentry-envelope")
             .body(body);
@@ -215,7 +218,7 @@ fn meta(document: &web_sys::Document, name: &str) -> Option<String> {
 
 /// Read `Error.stack`. It is non-standard — hence no js-sys getter — but every
 /// engine this app runs on implements it, and a raw trace is exactly what
-/// errex wants until it grows source-map support.
+/// the collector wants until it grows source-map support.
 fn stack_of(value: &JsValue) -> Option<String> {
     js_sys::Reflect::get(value, &JsValue::from_str("stack"))
         .ok()
