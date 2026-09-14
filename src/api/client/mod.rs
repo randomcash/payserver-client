@@ -10,6 +10,8 @@ mod invoices;
 mod payments;
 mod stores;
 
+pub use admin::SafeModeStatus;
+
 /// API client errors.
 #[derive(Error, Debug, Clone)]
 pub enum ApiError {
