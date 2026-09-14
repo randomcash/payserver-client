@@ -40,6 +40,28 @@ pub struct QrEncoding {
 /// rather than a tap or a scroll wobble.
 const SWIPE_THRESHOLD_PX: i32 = 40;
 
+/// Wrap a page index by `delta`, cycling past either end rather than
+/// panicking or sticking at an edge.
+fn wrapped_index(count: usize, from: usize, delta: i32) -> usize {
+    if count == 0 {
+        return from;
+    }
+    (from as i32 + delta).rem_euclid(count as i32) as usize
+}
+
+/// Interpret a horizontal drag as a page step, or `None` if it fell short of
+/// `SWIPE_THRESHOLD_PX` and should be read as a tap or scroll wobble instead.
+fn swipe_to_page_step(start_x: i32, end_x: i32) -> Option<i32> {
+    let delta = end_x - start_x;
+    if delta <= -SWIPE_THRESHOLD_PX {
+        Some(1)
+    } else if delta >= SWIPE_THRESHOLD_PX {
+        Some(-1)
+    } else {
+        None
+    }
+}
+
 /// A labelled, paged QR display: one card per encoding.
 ///
 /// `encodings` is built once by the caller for the payment option currently
@@ -59,9 +81,7 @@ pub fn QrPicker(encodings: Vec<QrEncoding>) -> impl IntoView {
         if count == 0 {
             return;
         }
-        set_active.update(|i| {
-            *i = (*i as i32 + delta).rem_euclid(count as i32) as usize;
-        });
+        set_active.update(|i| *i = wrapped_index(count, *i, delta));
     };
 
     let on_keydown = move |ev: KeyboardEvent| match ev.key().as_str() {
@@ -77,13 +97,10 @@ pub fn QrPicker(encodings: Vec<QrEncoding>) -> impl IntoView {
         set_drag_start_x.set(Some(ev.client_x()));
     };
     let on_pointer_up = move |ev: web_sys::PointerEvent| {
-        if let Some(start_x) = drag_start_x.get_untracked() {
-            let delta = ev.client_x() - start_x;
-            if delta <= -SWIPE_THRESHOLD_PX {
-                go(1);
-            } else if delta >= SWIPE_THRESHOLD_PX {
-                go(-1);
-            }
+        if let Some(start_x) = drag_start_x.get_untracked()
+            && let Some(delta) = swipe_to_page_step(start_x, ev.client_x())
+        {
+            go(delta);
         }
         set_drag_start_x.set(None);
     };
@@ -167,37 +184,56 @@ pub fn QrPicker(encodings: Vec<QrEncoding>) -> impl IntoView {
 mod tests {
     use super::*;
 
-    /// Pure enough to test without a browser: paging wraps rather than
-    /// panicking or sticking at an edge, in both directions.
-    fn step(count: usize, from: usize, delta: i32) -> usize {
-        if count == 0 {
-            return from;
-        }
-        (from as i32 + delta).rem_euclid(count as i32) as usize
-    }
+    // These call `wrapped_index` and `swipe_to_page_step` themselves, the
+    // same functions `go` and `on_pointer_up` call - not a copy of the
+    // wrapping/threshold math re-derived in the test module. A wrong sign, a
+    // flipped comparison or a swapped base in the production code fails
+    // these directly, since there is nothing else to fail.
 
     #[test]
     fn wraps_forward_past_the_last_card() {
-        assert_eq!(step(3, 2, 1), 0);
+        assert_eq!(wrapped_index(3, 2, 1), 0);
     }
 
     #[test]
     fn wraps_backward_past_the_first_card() {
-        assert_eq!(step(3, 0, -1), 2);
+        assert_eq!(wrapped_index(3, 0, -1), 2);
     }
 
     #[test]
     fn single_card_stays_put() {
-        assert_eq!(step(1, 0, 1), 0);
-        assert_eq!(step(1, 0, -1), 0);
+        assert_eq!(wrapped_index(1, 0, 1), 0);
+        assert_eq!(wrapped_index(1, 0, -1), 0);
     }
 
     #[test]
-    fn swipe_direction_matches_a_left_drag_advancing() {
+    fn a_left_drag_past_threshold_advances_to_the_next_card() {
         // A drag to the left (finger moves toward negative x) reads as "next
         // page", the same direction a page turns in left-to-right reading.
-        let start_x = 200;
-        let end_x = start_x - SWIPE_THRESHOLD_PX - 1;
-        assert!(end_x - start_x <= -SWIPE_THRESHOLD_PX);
+        assert_eq!(
+            swipe_to_page_step(200, 200 - SWIPE_THRESHOLD_PX - 1),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn a_right_drag_past_threshold_goes_back_a_card() {
+        assert_eq!(
+            swipe_to_page_step(200, 200 + SWIPE_THRESHOLD_PX + 1),
+            Some(-1)
+        );
+    }
+
+    #[test]
+    fn a_drag_under_threshold_does_not_page() {
+        assert_eq!(swipe_to_page_step(200, 200 - SWIPE_THRESHOLD_PX + 1), None);
+        assert_eq!(swipe_to_page_step(200, 200 + SWIPE_THRESHOLD_PX - 1), None);
+        assert_eq!(swipe_to_page_step(200, 200), None);
+    }
+
+    #[test]
+    fn a_drag_exactly_at_the_threshold_pages() {
+        assert_eq!(swipe_to_page_step(200, 200 - SWIPE_THRESHOLD_PX), Some(1));
+        assert_eq!(swipe_to_page_step(200, 200 + SWIPE_THRESHOLD_PX), Some(-1));
     }
 }
