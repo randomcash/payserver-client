@@ -161,9 +161,12 @@ fn render_wallet_actions(
 
     use crate::services::eip6963::discover_wallets;
 
-    if !chain_id.is_evm() {
-        return None;
-    }
+    // `evm_chain_id()` is `None` both for non-EVM chains and for a malformed
+    // `eip155:` reference that isn't a number — either way there's no id to
+    // check the wallet against, so degrade to no button rather than reach
+    // `connect_and_send` with nothing to compare and skip the network guard
+    // it exists to enforce.
+    let evm_chain_id = chain_id.evm_chain_id()?;
 
     // Not provided means whoever called this slot isn't checkout's payment
     // flow (or forgot to set it up) — degrade to nothing rather than a
@@ -172,7 +175,7 @@ fn render_wallet_actions(
 
     let payment_address = payment_address.to_string();
     let chain_id = chain_id.clone();
-    let expected_chain_hex = chain_id.evm_chain_id().map(|id| format!("0x{id:x}"));
+    let expected_chain_hex = format!("0x{evm_chain_id:x}");
     let chain_label = crate::util::chain_name(&chain_id).to_string();
 
     let wallets = discover_wallets();
@@ -221,7 +224,7 @@ fn render_wallet_actions(
                                                     let outcome = connect_and_send(
                                                         &provider,
                                                         &payment_address,
-                                                        expected_chain_hex.as_deref(),
+                                                        &expected_chain_hex,
                                                         &chain_label,
                                                         &transfer,
                                                     )
@@ -269,7 +272,7 @@ fn render_wallet_actions(
 async fn connect_and_send(
     provider: &wasm_bindgen::JsValue,
     payment_address: &str,
-    expected_chain_hex: Option<&str>,
+    expected_chain_hex: &str,
     chain_label: &str,
     transfer: &WalletActionsContext,
 ) -> WalletActionStatus {
@@ -289,18 +292,16 @@ async fn connect_and_send(
         return WalletActionStatus::Error("wallet returned no account".to_string());
     }
 
-    if let Some(expected) = expected_chain_hex {
-        let reported =
-            match provider_request(provider, "eth_chainId", &js_sys::Array::new().into()).await {
-                Ok(v) => v,
-                Err(e) => return WalletActionStatus::Error(e),
-            };
-        let matches = reported
-            .as_string()
-            .is_some_and(|r| r.eq_ignore_ascii_case(expected));
-        if !matches {
-            return WalletActionStatus::WrongNetwork(chain_label.to_string());
-        }
+    let reported =
+        match provider_request(provider, "eth_chainId", &js_sys::Array::new().into()).await {
+            Ok(v) => v,
+            Err(e) => return WalletActionStatus::Error(e),
+        };
+    let matches = reported
+        .as_string()
+        .is_some_and(|r| r.eq_ignore_ascii_case(expected_chain_hex));
+    if !matches {
+        return WalletActionStatus::WrongNetwork(chain_label.to_string());
     }
 
     let tx = js_sys::Object::new();
@@ -317,9 +318,9 @@ async fn connect_and_send(
             }
         }
         None => {
-            let value_hex = match transfer.amount.parse::<u128>() {
-                Ok(amount) => format!("0x{amount:x}"),
-                Err(_) => return WalletActionStatus::Error("malformed invoice amount".to_string()),
+            let value_hex = match native_transfer_value_hex(&transfer.amount) {
+                Ok(v) => v,
+                Err(e) => return WalletActionStatus::Error(e),
             };
             if js_sys::Reflect::set(&tx, &"to".into(), &payment_address.into()).is_err()
                 || js_sys::Reflect::set(&tx, &"value".into(), &value_hex.into()).is_err()
@@ -336,6 +337,22 @@ async fn connect_and_send(
         Ok(_) => WalletActionStatus::Sent,
         Err(e) => WalletActionStatus::Error(e),
     }
+}
+
+/// Native-asset transfer value, hex-encoded for `eth_sendTransaction`.
+///
+/// `amount_base_units` must already be base units (wei), never a display
+/// amount — `PaymentOptionResponse::amount` is documented in
+/// `payserver-commons` as "amount in the asset's smallest unit", the same
+/// contract `format_crypto_amount` and `payment_request_uri` already rely on
+/// in `checkout.rs` for this same field. A display string like `"1"` (meaning
+/// 1 ETH) would parse here without error and send 1 wei instead — refusing
+/// non-integer input catches the obvious case of that mistake.
+fn native_transfer_value_hex(amount_base_units: &str) -> Result<String, String> {
+    amount_base_units
+        .parse::<u128>()
+        .map(|amount| format!("0x{amount:x}"))
+        .map_err(|_| "malformed invoice amount".to_string())
 }
 
 /// ABI-encoded `transfer(address,uint256)` call — the selector is the first
@@ -390,6 +407,28 @@ mod wallet_action_tests {
     fn a_non_integer_amount_is_refused() {
         assert!(erc20_transfer_calldata(RECIPIENT, "0.047").is_err());
         assert!(erc20_transfer_calldata(RECIPIENT, "").is_err());
+    }
+
+    /// Wei-scale, not display-scale — the same magnitude `option.amount`
+    /// actually carries from the checkout API (e.g. ~0.047 ETH is a
+    /// 17-digit wei string, not `"0.047"`).
+    #[test]
+    fn native_transfer_value_hex_encodes_wei_scale_base_units() {
+        assert_eq!(
+            native_transfer_value_hex("47351100518494550").unwrap(),
+            "0xa839933620f156"
+        );
+        assert_eq!(native_transfer_value_hex("0").unwrap(), "0x0");
+    }
+
+    /// A display amount like `"1"` (meaning 1 ETH) parses as `u128` without
+    /// error and would silently send 1 wei — this only catches the
+    /// non-integer shape of that mistake, but a decimal display amount
+    /// specifically must still be refused rather than mis-encoded.
+    #[test]
+    fn a_decimal_display_amount_is_refused_not_silently_miscoded() {
+        assert!(native_transfer_value_hex("0.047").is_err());
+        assert!(native_transfer_value_hex("").is_err());
     }
 }
 
