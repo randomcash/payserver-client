@@ -6461,7 +6461,7 @@ tr.payment-row {
 }
 
 /* ============================================
-   Plugin pages (RCS-302)
+   Plugin pages
 
    A plugin ships a descriptor, not markup, and this client draws it with
    ui-kit's own vocabulary - so the elements below reuse `.ps-card`,
@@ -6651,10 +6651,10 @@ tr.payment-row {
     margin-bottom: var(--space-2);
 }
 
-/* The RCS-302 placeholder: what an element type this client does not
-   recognise renders as. Visible on purpose - a dashed border and muted
-   warning text, not the blank space a silently dropped element would leave
-   beside a paywall. */
+/* The unrecognised-element placeholder: what an element type this client
+   does not recognise renders as. Visible on purpose - a dashed border and
+   muted warning text, not the blank space a silently dropped element would
+   leave beside a paywall. */
 .ps-placeholder {
     padding: var(--space-3);
     border: 1px dashed var(--border-color-strong);
