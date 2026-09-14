@@ -242,6 +242,35 @@ impl ApiClient {
         Ok(())
     }
 
+    /// Make a POST request with a body, ignoring the response body.
+    async fn post_ignoring_response<B: Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<(), ApiError> {
+        let request = self
+            .build_request("POST", path)
+            .json(body)
+            .map_err(|e| ApiError::Parse(e.to_string()))?;
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+
+        if response.status() == 401 {
+            return Err(ApiError::Unauthorized);
+        }
+        if !response.ok() {
+            let message = response.text().await.unwrap_or_default();
+            return Err(ApiError::Http {
+                status: response.status(),
+                message,
+            });
+        }
+        Ok(())
+    }
+
     /// Make a PATCH request with body, ignoring response body.
     async fn patch_empty<B: Serialize>(&self, path: &str, body: &B) -> Result<(), ApiError> {
         let request = self
