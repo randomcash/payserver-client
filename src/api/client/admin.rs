@@ -3,8 +3,9 @@
 use super::{ApiClient, ApiError};
 use crate::api::{
     ApiKeyListResponse, CreateApiKeyRequest, CreateApiKeyResponsePayload, DashboardAnalytics,
-    DashboardStats, RotateApiKeyResponse, ServerSettingsResponse, UpdateServerSettingsRequest,
-    UpdateUserRoleRequest, UserInfo, UserListResponse,
+    DashboardStats, PromoteWalletCredentialRequest, RotateApiKeyResponse, ServerSettingsResponse,
+    UpdateServerSettingsRequest, UpdateUserRoleRequest, UserInfo, UserListResponse,
+    WalletCredential, WalletReauthChallenge,
 };
 
 impl ApiClient {
@@ -59,6 +60,52 @@ impl ApiClient {
         }
 
         Ok(())
+    }
+
+    /// List this account's wallet login credentials.
+    ///
+    /// Not `Wallet` / `/api/wallets` (xpub payout wallets): this is the
+    /// Ethereum addresses that can sign in as this account.
+    pub async fn list_wallet_credentials(&self) -> Result<Vec<WalletCredential>, ApiError> {
+        self.get("/api/users/wallets").await
+    }
+
+    /// Request a proof-of-possession challenge for wallet credential
+    /// `wallet_id` — the message the wallet extension must sign before
+    /// `set_primary_wallet_credential` below will accept the promotion.
+    pub async fn create_wallet_reauth_challenge(
+        &self,
+        wallet_id: &str,
+    ) -> Result<WalletReauthChallenge, ApiError> {
+        self.post(
+            &format!("/api/users/wallets/{}/reauth-challenge", wallet_id),
+            &(),
+        )
+        .await
+    }
+
+    /// Make an existing wallet credential this account's primary.
+    ///
+    /// Sensitive: this changes the login credential wallet-based sign-in
+    /// resolves the account by. `signature` must answer the challenge from
+    /// `create_wallet_reauth_challenge` above, proving the caller currently
+    /// controls this address's private key. A valid session — even a
+    /// freshly-minted one — is not enough on its own: a hijacked session has
+    /// no way to produce that signature, which is exactly the point. A 401
+    /// here can mean "no valid signature for this wallet", not just "not
+    /// logged in".
+    pub async fn set_primary_wallet_credential(
+        &self,
+        wallet_id: &str,
+        signature: &str,
+    ) -> Result<WalletCredential, ApiError> {
+        self.patch(
+            &format!("/api/users/wallets/{}/primary", wallet_id),
+            &PromoteWalletCredentialRequest {
+                signature: signature.to_string(),
+            },
+        )
+        .await
     }
 
     // =========================================================================
