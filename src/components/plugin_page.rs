@@ -329,21 +329,179 @@ mod tests {
         assert_eq!(tab_class(false), "ps-tabs-tab");
     }
 
+    // `RenderHtml::to_html` panics unless leptos's `ssr` feature is active
+    // (it is a runtime check inside `tachys::view::any_view`, not a compile
+    // gate). That feature is a dev-dependency only - see the `Cargo.toml`
+    // comment - so it is never present in the wasm bundle this crate ships;
+    // it exists solely so these host-target tests can inspect real markup
+    // instead of asserting on the string literals inside `view!` by eye.
+    fn to_html(element: &PageElement) -> String {
+        use leptos::prelude::RenderHtml;
+        render(element).to_html()
+    }
+
+    fn from_json(json: &str) -> PageElement {
+        serde_json::from_str(json).unwrap()
+    }
+
+    // Every test below is the ticket's round-trip in full: a JSON string (the
+    // wire shape a plugin actually sends) deserializes into `PageElement`,
+    // `render` turns that into a real view tree, and `to_html` renders that
+    // tree so the assertion is against markup a browser would receive - not
+    // against a class-literal helper or a hand-built enum value. This is what
+    // catches a `view!` class typo that `badge_class`/`button_class`/etc.
+    // above cannot: those only check the helper functions, not that `render`
+    // actually wires the helper's output into the tag it returns.
+
+    #[test]
+    fn card_round_trips_with_and_without_a_title() {
+        let with_title = from_json(r#"{"type": "card", "title": "Balance", "children": []}"#);
+        let html = to_html(&with_title);
+        assert!(html.contains("ps-card"));
+        assert!(html.contains("ps-card-header"));
+        assert!(html.contains("ps-card-body"));
+        assert!(html.contains("Balance"));
+
+        let untitled = from_json(r#"{"type": "card", "children": []}"#);
+        let html = to_html(&untitled);
+        assert!(html.contains("ps-card ps-card-padded"));
+    }
+
+    #[test]
+    fn badge_round_trips() {
+        let element = from_json(r#"{"type": "badge", "text": "Paid", "tone": "success"}"#);
+        let html = to_html(&element);
+        assert!(html.contains("ps-badge ps-badge-success"));
+        assert!(html.contains("Paid"));
+    }
+
+    #[test]
+    fn button_round_trips() {
+        let element = from_json(r#"{"type": "button", "label": "Retry", "variant": "danger"}"#);
+        let html = to_html(&element);
+        assert!(html.contains("ps-btn ps-btn-danger"));
+        assert!(html.contains("Retry"));
+    }
+
+    #[test]
+    fn table_round_trips() {
+        let element = from_json(r#"{"type": "table", "headers": ["Amount"], "rows": [["1.00"]]}"#);
+        let html = to_html(&element);
+        assert!(html.contains("ps-table"));
+        assert!(html.contains("Amount"));
+        assert!(html.contains("1.00"));
+    }
+
+    #[test]
+    fn form_round_trips() {
+        let element = from_json(r#"{"type": "form", "children": []}"#);
+        let html = to_html(&element);
+        assert!(html.contains("ps-form"));
+    }
+
+    #[test]
+    fn input_round_trips() {
+        let element =
+            from_json(r#"{"type": "input", "label": "Email", "placeholder": "you@example.com"}"#);
+        let html = to_html(&element);
+        assert!(html.contains("ps-form-group"));
+        assert!(html.contains("ps-form-label"));
+        assert!(html.contains("ps-form-input"));
+        assert!(html.contains("Email"));
+    }
+
+    #[test]
+    fn select_round_trips() {
+        let element =
+            from_json(r#"{"type": "select", "label": "Chain", "options": ["ETH", "MATIC"]}"#);
+        let html = to_html(&element);
+        assert!(html.contains("ps-form-group"));
+        assert!(html.contains("ps-select"));
+        assert!(html.contains("ETH"));
+    }
+
+    #[test]
+    fn notice_round_trips() {
+        let element = from_json(r#"{"type": "notice", "text": "Rate limited", "tone": "warning"}"#);
+        let html = to_html(&element);
+        assert!(html.contains("ps-notice ps-notice-warning"));
+        assert!(html.contains("Rate limited"));
+    }
+
+    #[test]
+    fn tabs_round_trips() {
+        let element = from_json(
+            r#"{"type": "tabs", "tabs": [
+                {"label": "Overview", "content": [{"type": "badge", "text": "Live", "tone": "info"}]},
+                {"label": "History", "content": []}
+            ]}"#,
+        );
+        let html = to_html(&element);
+        assert!(html.contains("ps-tabs"));
+        assert!(html.contains("ps-tabs-list"));
+        assert!(html.contains("ps-tabs-tab ps-tabs-tab-active"));
+        assert!(html.contains("ps-tabs-panel"));
+        assert!(html.contains("Overview"));
+        assert!(html.contains("History"));
+        assert!(html.contains("ps-badge ps-badge-info"));
+    }
+
+    #[test]
+    fn stack_round_trips() {
+        let element = from_json(
+            r#"{"type": "stack", "direction": "row", "children": [{"type": "badge", "text": "A", "tone": "neutral"}]}"#,
+        );
+        let html = to_html(&element);
+        assert!(html.contains("ps-stack ps-stack-row"));
+        assert!(html.contains("ps-badge"));
+    }
+
+    #[test]
+    fn row_round_trips() {
+        let element = from_json(
+            r#"{"type": "row", "children": [{"type": "badge", "text": "A", "tone": "neutral"}]}"#,
+        );
+        let html = to_html(&element);
+        assert!(html.contains("ps-row"));
+        assert!(html.contains("ps-badge"));
+    }
+
+    #[test]
+    fn grid_round_trips() {
+        let element = from_json(r#"{"type": "grid", "columns": 3, "children": []}"#);
+        let html = to_html(&element);
+        assert!(html.contains("ps-grid"));
+        assert!(html.contains("repeat(3, minmax(0, 1fr))"));
+    }
+
+    #[test]
+    fn section_round_trips() {
+        let element = from_json(
+            r#"{"type": "section", "title": "Settings", "children": [{"type": "badge", "text": "A", "tone": "neutral"}]}"#,
+        );
+        let html = to_html(&element);
+        assert!(html.contains("ps-section"));
+        assert!(html.contains("ps-section-title"));
+        assert!(html.contains("Settings"));
+        assert!(html.contains("ps-badge"));
+    }
+
     /// The property the module doc calls out: an element type this client
     /// does not recognise deserializes as `Unknown`, and `render` draws it
-    /// as a visible placeholder rather than nothing. `render`'s `match` has
-    /// no wildcard arm, so deleting this case is a compile error - the
-    /// strongest version of "confirm the page renders blank without it"
-    /// available in a plain `match`.
+    /// as a visible placeholder rather than nothing - checked here against
+    /// real rendered markup, not just the deserialized enum value. `render`'s
+    /// `match` has no wildcard arm, so deleting this arm is a compile error:
+    /// the strongest version of "confirm the page renders blank without it"
+    /// available in a plain `match` - there is no way to silently fall
+    /// through to nothing.
     #[test]
     fn an_unrecognised_element_type_becomes_the_placeholder() {
         let json = r#"{"type": "chart", "series": [1, 2, 3]}"#;
         let element: PageElement = serde_json::from_str(json).unwrap();
         assert_eq!(element, PageElement::Unknown);
-        // render() itself needs a DOM to inspect output; this crate builds
-        // `csr`-only, so what is checkable natively is that the exhaustive
-        // match compiles with this arm present, and that the class it emits
-        // ("ps-placeholder") has a rule - verified by
-        // scripts/check-classes-styled.py, not here.
+
+        let html = to_html(&element);
+        assert!(html.contains("ps-placeholder"));
+        assert!(html.contains("Unsupported plugin element"));
     }
 }
