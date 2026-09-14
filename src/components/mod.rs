@@ -6,6 +6,7 @@ mod feedback;
 mod gas_estimator;
 mod network_selector;
 mod pagination;
+pub mod plugin_page;
 mod timeline;
 mod token_selector;
 

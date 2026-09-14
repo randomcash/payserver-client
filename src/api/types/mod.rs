@@ -38,9 +38,14 @@ pub use api_types::{
 pub use types::{ChainId, InvoiceStatus};
 
 mod local;
+mod plugin_page;
 mod user;
 
 pub use local::*;
+pub use plugin_page::{
+    Badge, Button, ButtonVariant, Card, Direction, Form, Grid, Input, Notice, PageElement, Row,
+    Section, Select, Stack, Tab, Table, Tabs, Tone, Viewer as PluginViewer,
+};
 pub use user::*;
 
 #[cfg(test)]
