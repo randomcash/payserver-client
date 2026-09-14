@@ -1,4 +1,4 @@
-//! Renders a plugin's page descriptor tree into ui-kit markup (RCS-302).
+//! Renders a plugin's page descriptor tree into ui-kit markup.
 //!
 //! `render` is a `match` over [`PageElement`], not a set of `#[component]`s:
 //! the tree is recursive and arrives over the wire as data, so there is no
@@ -267,7 +267,7 @@ fn render_section(section: &Section) -> AnyView {
 
 /// The visible placeholder for an element this client does not recognise.
 /// See the module doc: this arm existing (and staying non-blank) is the
-/// property RCS-302 exists to guarantee.
+/// property this renderer exists to guarantee.
 fn render_placeholder() -> AnyView {
     view! { <div class="ps-placeholder">"Unsupported plugin element"</div> }.into_any()
 }

@@ -1,9 +1,9 @@
 //! The page descriptor, hand-mirrored from `payserver_plugin_api::page`.
 //!
 //! This crate pins `payserver-commons` by `rev` in its own `Cargo.toml`, and
-//! moving that pin needs the commons PR merged first. RCS-302 adds the
-//! descriptor to commons in the same session that adds this renderer, so the
-//! new module cannot be on the pinned revision yet - a single autonomous run
+//! moving that pin needs the commons PR merged first. The descriptor is
+//! added to commons in the same session that adds this renderer, so the new
+//! module cannot be on the pinned revision yet - a single autonomous run
 //! cannot get a sibling-repo PR merged and then depend on that merge within
 //! the same run. See `api/types/mod.rs` for the general rule (most DTOs come
 //! from `api-types` directly) and its documented exception for cases like
