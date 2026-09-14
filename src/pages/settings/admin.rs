@@ -13,6 +13,9 @@ pub fn AdminTab() -> impl IntoView {
 
     // Safe mode state - true when the server booted with every plugin disabled.
     let (safe_mode, set_safe_mode) = signal(false);
+    // Whether the safe-mode check itself failed - kept distinct from `safe_mode`
+    // so a transient fetch error can't be mistaken for "plugins are fine".
+    let (safe_mode_check_failed, set_safe_mode_check_failed) = signal(false);
 
     // Settings form state
     let (default_confirmations, set_default_confirmations) = signal("3".to_string());
@@ -58,8 +61,9 @@ pub fn AdminTab() -> impl IntoView {
                 set_user_total.set(resp.total);
                 set_users.set(resp.users);
             }
-            if let Ok(status) = api.get_safe_mode().await {
-                set_safe_mode.set(status.safe_mode);
+            match api.get_safe_mode().await {
+                Ok(status) => set_safe_mode.set(status.safe_mode),
+                Err(_) => set_safe_mode_check_failed.set(true),
             }
         }
     });
@@ -149,6 +153,17 @@ pub fn AdminTab() -> impl IntoView {
                                 "billing, if it is installed as one. Plugins are not "
                                 "uninstalled and their data is untouched: clear the flag and "
                                 "restart to bring them back."
+                            </p>
+                        </div>
+                    }.into_any()
+                } else if safe_mode_check_failed.get() {
+                    view! {
+                        <div class="alert alert-warning">
+                            <strong>"⚠ Could not confirm plugin status"</strong>
+                            <p>
+                                "The safe-mode check itself failed, so whether every plugin is "
+                                "disabled for this boot is unknown - this is not the same as "
+                                "confirming plugins are running normally."
                             </p>
                         </div>
                     }.into_any()
