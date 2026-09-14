@@ -2,6 +2,7 @@
 
 use crate::api::{ApiClient, WalletCredential};
 use leptos::prelude::*;
+use ui_kit::auth::wallet;
 use ui_kit::use_auth;
 
 use super::format_date;
@@ -21,15 +22,19 @@ pub fn AccountTab() -> impl IntoView {
     let (deleting, set_deleting) = signal(false);
     let (delete_error, set_delete_error) = signal(Option::<String>::None);
 
-    // "Manage wallets": which wallet is primary is a login
-    // credential, so changing it is gated server-side on a fresh
-    // re-authentication (see FreshlyAuthenticatedUser), not just a valid
-    // session. `wallets_version` re-runs the list fetch after a successful
-    // swap so the new primary shows immediately, the same pattern the API
-    // keys tab uses.
+    // "Manage wallets": which wallet is primary is a login credential, so
+    // promoting one requires proving current possession of its private key,
+    // not just a valid session - a hijacked session cannot produce a wallet
+    // signature it never held the key for. Clicking "Make primary" opens an
+    // inline confirmation (the same expand-in-place pattern as Danger Zone
+    // below) rather than firing immediately; confirming drives the browser
+    // wallet extension through connect -> fetch challenge -> sign -> submit.
+    // `wallets_version` re-runs the list fetch after a successful swap so the
+    // new primary shows immediately, the same pattern the API keys tab uses.
     let (show_wallets, set_show_wallets) = signal(false);
     let (wallets_version, set_wallets_version) = signal(0u32);
-    let (promoting, set_promoting) = signal(Option::<String>::None);
+    let (confirming_wallet, set_confirming_wallet) = signal(Option::<(String, String)>::None);
+    let (signing, set_signing) = signal(false);
     let (wallet_error, set_wallet_error) = signal(Option::<String>::None);
 
     let wallets_resource = LocalResource::new(move || {
@@ -44,30 +49,60 @@ pub fn AccountTab() -> impl IntoView {
         }
     });
 
-    let make_set_primary_handler = move |wallet_id: String| {
-        let api = api.get();
+    let start_confirm = move |id: String, address: String| {
         move |_| {
-            let api = api.clone();
-            let id = wallet_id.clone();
-            set_promoting.set(Some(id.clone()));
+            set_confirming_wallet.set(Some((id.clone(), address.clone())));
             set_wallet_error.set(None);
-            leptos::task::spawn_local(async move {
-                match api.set_primary_wallet_credential(&id).await {
-                    Ok(_) => {
-                        set_wallets_version.update(|v| *v += 1);
-                    }
-                    Err(crate::api::ApiError::Unauthorized) => {
-                        set_wallet_error.set(Some(
-                            "Please log in again to change your primary wallet.".to_string(),
-                        ));
-                    }
-                    Err(e) => {
-                        set_wallet_error.set(Some(e.to_string()));
-                    }
-                }
-                set_promoting.set(None);
-            });
         }
+    };
+
+    let cancel_confirm = move |_| {
+        set_confirming_wallet.set(None);
+        set_wallet_error.set(None);
+    };
+
+    let confirm_and_sign = move |_| {
+        let Some((id, address)) = confirming_wallet.get() else {
+            return;
+        };
+        let api = api.get();
+        set_signing.set(true);
+        set_wallet_error.set(None);
+        leptos::task::spawn_local(async move {
+            let outcome: Result<(), String> = async {
+                // The extension may be connected as a different account than
+                // the one being promoted - ask it to sign with this specific
+                // address rather than whatever is currently active, and fail
+                // clearly if the two do not match.
+                let connected = wallet::connect_wallet().await.map_err(|e| e.to_string())?;
+                if !connected.eq_ignore_ascii_case(&address) {
+                    return Err(format!(
+                        "Your wallet extension is connected as {connected}. Switch it to {address} in your extension and try again."
+                    ));
+                }
+                let challenge = api
+                    .create_wallet_reauth_challenge(&id)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let signature = wallet::sign_message(&address, &challenge.message)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                api.set_primary_wallet_credential(&id, &signature)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            .await;
+
+            match outcome {
+                Ok(()) => {
+                    set_wallets_version.update(|v| *v += 1);
+                    set_confirming_wallet.set(None);
+                }
+                Err(e) => set_wallet_error.set(Some(e)),
+            }
+            set_signing.set(false);
+        });
     };
 
     let user_resource = LocalResource::new(move || {
@@ -220,11 +255,17 @@ pub fn AccountTab() -> impl IntoView {
                                                                     <div class="wallet-credentials-list">
                                                                         {wallets.into_iter().map(|w: WalletCredential| {
                                                                             let is_primary = w.is_primary;
-                                                                            let id_for_disabled = w.id.clone();
-                                                                            let id_for_label = w.id.clone();
-                                                                            let is_promoting_disabled = move || promoting.get().as_deref() == Some(id_for_disabled.as_str());
-                                                                            let is_promoting_label = move || promoting.get().as_deref() == Some(id_for_label.as_str());
-                                                                            let handler = make_set_primary_handler(w.id.clone());
+                                                                            let id = w.id.clone();
+                                                                            let address = w.address.clone();
+                                                                            let id_for_open = id.clone();
+                                                                            let id_for_disabled = id.clone();
+                                                                            let id_for_panel = id.clone();
+                                                                            let is_confirming_disabled = move || {
+                                                                                confirming_wallet.get().as_ref().map(|(cid, _)| cid.as_str()) == Some(id_for_disabled.as_str())
+                                                                            };
+                                                                            let is_confirming_panel = move || {
+                                                                                confirming_wallet.get().as_ref().map(|(cid, _)| cid.as_str()) == Some(id_for_panel.as_str())
+                                                                            };
                                                                             view! {
                                                                                 <div class="wallet-credential-item">
                                                                                     <div class="wallet-credential-info">
@@ -237,14 +278,37 @@ pub fn AccountTab() -> impl IntoView {
                                                                                         view! {
                                                                                             <button
                                                                                                 class="ps-btn ps-btn-ghost ps-btn-sm"
-                                                                                                prop:disabled=is_promoting_disabled
-                                                                                                on:click=handler
+                                                                                                prop:disabled=is_confirming_disabled
+                                                                                                on:click=start_confirm(id_for_open, address)
                                                                                             >
-                                                                                                {move || if is_promoting_label() { "Making primary..." } else { "Make primary" }}
+                                                                                                "Make primary"
                                                                                             </button>
                                                                                         }.into_any()
                                                                                     }}
                                                                                 </div>
+                                                                                {move || is_confirming_panel().then(|| view! {
+                                                                                    <div class="wallet-credential-confirm" style="margin: 4px 0 12px; padding-left: 4px;">
+                                                                                        <p class="form-help">
+                                                                                            "This changes the wallet your account signs in with. Confirm in your browser wallet extension to prove you control it."
+                                                                                        </p>
+                                                                                        <div class="form-actions">
+                                                                                            <button
+                                                                                                class="ps-btn ps-btn-primary ps-btn-sm"
+                                                                                                on:click=confirm_and_sign
+                                                                                                disabled=move || signing.get()
+                                                                                            >
+                                                                                                {move || if signing.get() { "Confirming..." } else { "Sign & confirm" }}
+                                                                                            </button>
+                                                                                            <button
+                                                                                                class="ps-btn ps-btn-secondary ps-btn-sm"
+                                                                                                on:click=cancel_confirm
+                                                                                                disabled=move || signing.get()
+                                                                                            >
+                                                                                                "Cancel"
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                })}
                                                                             }
                                                                         }).collect_view()}
                                                                     </div>

@@ -60,3 +60,22 @@ pub struct WalletCredential {
     pub created_at: String,
     pub last_used_at: Option<String>,
 }
+
+/// The message to sign to prove current ownership of a wallet credential,
+/// returned by `POST /api/users/wallets/{id}/reauth-challenge`.
+///
+/// Hand-mirrors the server's `WalletReauthChallengeResponse` for the same
+/// reason as `WalletCredential` above.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletReauthChallenge {
+    pub message: String,
+    pub expires_in_secs: i64,
+}
+
+/// Body for `PATCH /api/users/wallets/{id}/primary`.
+///
+/// Hand-mirrors the server's `PromoteWalletCredentialRequest`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromoteWalletCredentialRequest {
+    pub signature: String,
+}
