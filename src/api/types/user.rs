@@ -39,7 +39,7 @@ pub struct UserInfo {
     pub role: UserRole,
 }
 
-/// A wallet login credential belonging to this account - RCS-227.
+/// A wallet login credential belonging to this account.
 ///
 /// Not the same thing as `Wallet` (`WalletResponse` from `api-types`), which
 /// is an xpub payout wallet the account receives crypto into. This is the

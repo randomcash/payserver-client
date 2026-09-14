@@ -61,7 +61,7 @@ impl ApiClient {
         Ok(())
     }
 
-    /// List this account's wallet login credentials - RCS-227.
+    /// List this account's wallet login credentials.
     ///
     /// Not `Wallet` / `/api/wallets` (xpub payout wallets): this is the
     /// Ethereum addresses that can sign in as this account.

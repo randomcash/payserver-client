@@ -21,7 +21,7 @@ pub fn AccountTab() -> impl IntoView {
     let (deleting, set_deleting) = signal(false);
     let (delete_error, set_delete_error) = signal(Option::<String>::None);
 
-    // "Manage wallets" (RCS-227): which wallet is primary is a login
+    // "Manage wallets": which wallet is primary is a login
     // credential, so changing it is gated server-side on a fresh
     // re-authentication (see FreshlyAuthenticatedUser), not just a valid
     // session. `wallets_version` re-runs the list fetch after a successful
