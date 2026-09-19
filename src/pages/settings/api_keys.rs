@@ -1,7 +1,12 @@
 //! API Keys settings tab.
 
+use std::collections::BTreeSet;
+
 use crate::api::{
-    ApiClient, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponsePayload, RotateApiKeyResponse,
+    API_KEY_GRANTABLE_PERMISSIONS, API_KEY_UNRESTRICTED_PERMISSION, ApiClient,
+    ApiKeyInfoWithPermissions, CreateApiKeyRequestWithPermissions,
+    CreateApiKeyResponseWithPermissions, RotateApiKeyResponseWithPermissions,
+    describe_api_key_permissions,
 };
 use leptos::prelude::*;
 
@@ -25,8 +30,24 @@ pub fn ApiKeysTab() -> impl IntoView {
     // State for create form
     let (show_create, set_show_create) = signal(false);
     let (new_key_name, set_new_key_name) = signal(String::new());
-    let (created_key, set_created_key) = signal(Option::<CreateApiKeyResponsePayload>::None);
+    let (new_key_permissions, set_new_key_permissions) = signal(BTreeSet::<String>::new());
+    let (created_key, set_created_key) =
+        signal(Option::<CreateApiKeyResponseWithPermissions>::None);
     let (loading, set_loading) = signal(false);
+
+    // Toggle a single permission checkbox on or off.
+    let toggle_permission = move |policy: String| {
+        move |ev: leptos::ev::Event| {
+            let checked = event_target_checked(&ev);
+            set_new_key_permissions.update(|set| {
+                if checked {
+                    set.insert(policy.clone());
+                } else {
+                    set.remove(&policy);
+                }
+            });
+        }
+    };
 
     // Create handler
     let on_create = move |_| {
@@ -35,9 +56,10 @@ pub fn ApiKeysTab() -> impl IntoView {
             return;
         }
         let client = api.get();
-        let request = CreateApiKeyRequest {
+        let request = CreateApiKeyRequestWithPermissions {
             name: name.trim().to_string(),
             expires_at: None,
+            permissions: new_key_permissions.get().into_iter().collect(),
         };
         set_loading.set(true);
         wasm_bindgen_futures::spawn_local(async move {
@@ -45,6 +67,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                 set_created_key.set(Some(resp));
                 set_show_create.set(false);
                 set_new_key_name.set(String::new());
+                set_new_key_permissions.set(BTreeSet::new());
                 set_version.update(|v| *v += 1);
             }
             set_loading.set(false);
@@ -65,7 +88,8 @@ pub fn ApiKeysTab() -> impl IntoView {
     };
 
     // State for rotated key display
-    let (rotated_key, set_rotated_key) = signal(Option::<RotateApiKeyResponse>::None);
+    let (rotated_key, set_rotated_key) =
+        signal(Option::<RotateApiKeyResponseWithPermissions>::None);
     // Error surfaced on a failed rotation — previously the handler swallowed
     // errors silently, leaving the user wondering if the click had any effect.
     let (rotate_error, set_rotate_error) = signal(Option::<String>::None);
@@ -124,6 +148,44 @@ pub fn ApiKeysTab() -> impl IntoView {
                                 on:input=move |ev| set_new_key_name.set(event_target_value(&ev))
                             />
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">"Permissions"</label>
+                            <p class="section-desc">
+                                "Nothing is granted by default. A key can never do more than "
+                                "your own account can - pick only what this key needs."
+                            </p>
+                            <div class="api-key-permissions-list">
+                                {API_KEY_GRANTABLE_PERMISSIONS.iter().map(|(policy, label)| {
+                                    let policy = policy.to_string();
+                                    let policy_for_checked = policy.clone();
+                                    view! {
+                                        <label class="api-key-permission-item">
+                                            <input
+                                                type="checkbox"
+                                                prop:checked=move || new_key_permissions.get().contains(&policy_for_checked)
+                                                on:change=toggle_permission(policy.clone())
+                                            />
+                                            {*label}
+                                        </label>
+                                    }
+                                }).collect_view()}
+                            </div>
+                            <div class="api-key-permissions-list" style="border-color: var(--color-danger); margin-top: 8px;">
+                                <label class="api-key-permission-item">
+                                    <input
+                                        type="checkbox"
+                                        prop:checked=move || new_key_permissions.get().contains(API_KEY_UNRESTRICTED_PERMISSION)
+                                        on:change=toggle_permission(API_KEY_UNRESTRICTED_PERMISSION.to_string())
+                                    />
+                                    <strong>"Unrestricted (full account access)"</strong>
+                                </label>
+                                <p class="section-desc">
+                                    "Equivalent to your own full role, including installing plugins "
+                                    "- which runs arbitrary SQL and arbitrary code on the server. "
+                                    "Only check this if the key genuinely needs to act as you."
+                                </p>
+                            </div>
+                        </div>
                         <div class="form-actions">
                             <button
                                 class="ps-btn ps-btn-primary ps-btn-sm"
@@ -151,6 +213,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">
                             {key.key.clone()}
                         </code>
+                        <p class="section-desc">"Can do: "{describe_api_key_permissions(&Some(key.permissions.clone()))}</p>
                         <button
                             class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_created_key.set(None)
@@ -185,6 +248,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                     "The old key remains valid until {}.",
                     key.old_key_grace_expires_at.to_rfc3339()
                 );
+                let permissions_line = format!("Can do: {}", describe_api_key_permissions(&key.permissions));
                 view! {
                 <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-warning);">
                     <div class="ps-card-body">
@@ -193,6 +257,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">
                             {key.key.clone()}
                         </code>
+                        <p class="section-desc">{permissions_line}</p>
                         <button
                             class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_rotated_key.set(None)
@@ -214,7 +279,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                             } else {
                                 view! {
                                     <div class="api-keys-list">
-                                        {keys.into_iter().map(|key: ApiKeyInfo| {
+                                        {keys.into_iter().map(|key: ApiKeyInfoWithPermissions| {
                                             let (status_class, status_label) = if !key.is_active {
                                                 ("badge badge-neutral".to_string(), "Revoked".to_string())
                                             } else if key.deprecated_at.is_some() {
@@ -231,6 +296,14 @@ pub fn ApiKeysTab() -> impl IntoView {
                                             };
                                             let is_active = key.is_active;
                                             let is_deprecated = key.deprecated_at.is_some();
+                                            let permissions_summary = describe_api_key_permissions(&key.permissions);
+                                            let is_unrestricted = key.permissions.is_none()
+                                                || key.permissions.as_ref().is_some_and(|p| p.iter().any(|p| p == API_KEY_UNRESTRICTED_PERMISSION));
+                                            let permissions_class = if is_unrestricted {
+                                                "api-key-permissions-summary api-key-permissions-summary-unrestricted"
+                                            } else {
+                                                "api-key-permissions-summary"
+                                            };
                                             let revoke_handler = make_revoke_handler(key.id.to_string());
                                             let rotate_handler = make_rotate_handler(key.id.to_string());
 
@@ -243,6 +316,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                                                         </div>
                                                         <code class="api-key-value">{key.key_prefix}</code>
                                                         <span class="api-key-created">"Created "{key.created_at.to_rfc3339()}</span>
+                                                        <span class=permissions_class>"Can do: "{permissions_summary}</span>
                                                     </div>
                                                     <div class="api-key-actions">
                                                         {(is_active && !is_deprecated).then(|| view! {

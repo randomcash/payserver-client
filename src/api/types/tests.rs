@@ -1015,3 +1015,57 @@ fn test_user_info_deserialize_minimal() {
     assert!(user.last_login_at.is_none());
     assert!(!user.role.is_admin());
 }
+
+#[test]
+fn a_null_permission_set_reads_as_inheriting_the_role() {
+    assert_eq!(
+        describe_api_key_permissions(&None),
+        "Full access (inherits your role)"
+    );
+}
+
+#[test]
+fn an_empty_permission_set_reads_as_nothing_granted() {
+    assert_eq!(
+        describe_api_key_permissions(&Some(vec![])),
+        "No permissions granted"
+    );
+}
+
+#[test]
+fn unrestricted_reads_as_full_access_even_alongside_other_entries() {
+    // A key scoped to `unrestricted` plus anything else is still fully
+    // privileged - the dangerous case this whole feature exists to make
+    // visible, so it must never be mistaken for a narrow grant.
+    let perms = vec![
+        "ethpay.user.canviewprofile".to_string(),
+        API_KEY_UNRESTRICTED_PERMISSION.to_string(),
+    ];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "Full access (unrestricted)"
+    );
+}
+
+#[test]
+fn a_narrow_scope_lists_the_human_labels_of_what_it_grants() {
+    let perms = vec![
+        "ethpay.user.canviewprofile".to_string(),
+        "ethpay.server.canmanagetokens".to_string(),
+    ];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "View own profile, Manage tokens"
+    );
+}
+
+#[test]
+fn an_unrecognised_policy_falls_back_to_the_raw_string() {
+    // Forward-compatible with a server that grants something this client
+    // build does not yet know the label for, rather than hiding it.
+    let perms = vec!["ethpay.store.somethingnew".to_string()];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "ethpay.store.somethingnew"
+    );
+}
