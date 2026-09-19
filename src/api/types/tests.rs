@@ -1022,50 +1022,24 @@ fn a_null_permission_set_reads_as_inheriting_the_role() {
         describe_api_key_permissions(&None),
         "Full access (inherits your role)"
     );
+    assert!(api_key_is_unrestricted(&None));
 }
 
 #[test]
-fn an_empty_permission_set_reads_as_nothing_granted() {
+fn an_empty_permission_set_reads_as_restricted() {
     assert_eq!(
         describe_api_key_permissions(&Some(vec![])),
-        "No permissions granted"
+        "Restricted (no admin access)"
     );
+    assert!(!api_key_is_unrestricted(&Some(vec![])));
 }
 
 #[test]
-fn unrestricted_reads_as_full_access_even_alongside_other_entries() {
-    // A key scoped to `unrestricted` plus anything else is still fully
-    // privileged - the dangerous case this whole feature exists to make
-    // visible, so it must never be mistaken for a narrow grant.
-    let perms = vec![
-        "ethpay.user.canviewprofile".to_string(),
-        API_KEY_UNRESTRICTED_PERMISSION.to_string(),
-    ];
+fn unrestricted_reads_as_full_access() {
+    let perms = vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()];
     assert_eq!(
-        describe_api_key_permissions(&Some(perms)),
+        describe_api_key_permissions(&Some(perms.clone())),
         "Full access (unrestricted)"
     );
-}
-
-#[test]
-fn a_narrow_scope_lists_the_human_labels_of_what_it_grants() {
-    let perms = vec![
-        "ethpay.user.canviewprofile".to_string(),
-        "ethpay.server.canmanagetokens".to_string(),
-    ];
-    assert_eq!(
-        describe_api_key_permissions(&Some(perms)),
-        "View own profile, Manage tokens"
-    );
-}
-
-#[test]
-fn an_unrecognised_policy_falls_back_to_the_raw_string() {
-    // Forward-compatible with a server that grants something this client
-    // build does not yet know the label for, rather than hiding it.
-    let perms = vec!["ethpay.store.somethingnew".to_string()];
-    assert_eq!(
-        describe_api_key_permissions(&Some(perms)),
-        "ethpay.store.somethingnew"
-    );
+    assert!(api_key_is_unrestricted(&Some(perms)));
 }

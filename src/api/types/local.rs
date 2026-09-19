@@ -106,71 +106,44 @@ pub struct PluginPageInfo {
 // field.
 // =========================================================================
 
-/// A permission policy string the client can offer as a checkbox when
-/// scoping an API key, paired with a short human label.
+/// The only key scope this server currently enforces beyond "nothing extra
+/// past the owner's non-admin baseline": unrestricted access, equivalent to
+/// the key owner's full role - including installing a plugin, which runs
+/// arbitrary SQL migrations and arbitrary wasm on the server.
 ///
-/// Hand-mirrors the small, stable vocabulary `auth::Policies` defines
-/// server-side (payserver-commons) - the client does not depend on that
-/// crate (it is server-only; auth lives behind the API, not in the browser
-/// bundle), so the strings are duplicated here rather than pulled in whole.
-/// Store-scoped policies are not included: a user's `Role` never grants
-/// them (they come from per-store membership instead), so a key could never
-/// actually be scoped to one - listing them here would be a checkbox that
-/// silently does nothing.
-pub const API_KEY_GRANTABLE_PERMISSIONS: &[(&str, &str)] = &[
-    (
-        "ethpay.server.canmodifyserversettings",
-        "Modify server settings",
-    ),
-    ("ethpay.server.canmanagetokens", "Manage tokens"),
-    (
-        "ethpay.server.canviewserversettings",
-        "View server settings",
-    ),
-    ("ethpay.server.canmanageusers", "Manage users"),
-    ("ethpay.server.canviewusers", "View users"),
-    ("ethpay.user.canviewprofile", "View own profile"),
-    ("ethpay.user.canmodifyprofile", "Modify own profile"),
-    ("ethpay.user.candeleteaccount", "Delete own account"),
-    (
-        "ethpay.user.canmanagenotifications",
-        "Manage own notifications",
-    ),
-];
-
-/// The single most dangerous grant: unrestricted access, equivalent to the
-/// key owner's full role - including installing a plugin, which runs
-/// arbitrary SQL migrations and arbitrary wasm on the server. Kept separate
-/// from the list above so the UI can present it apart from, and more
-/// prominently than, the ordinary entries.
+/// There used to be a longer list here, one entry per named policy
+/// (`auth::Policies` in payserver-commons), offered as individual
+/// checkboxes. It was removed: every admin gate in the server is a bare
+/// `role == Role::ServerAdmin` comparison, never a check against one of
+/// those named permissions individually (see the server's
+/// `validate_requested_permissions`, `server/src/api/users.rs`), so
+/// checking one specific box and checking none of them produced the exact
+/// same access. A checklist that implies fine-grained control it cannot
+/// deliver is worse than a plain toggle that says what it does.
 pub const API_KEY_UNRESTRICTED_PERMISSION: &str = "unrestricted";
 
-/// The human label for a policy string, or the raw string itself for one
-/// this client does not recognise (forward-compatible with a server that
-/// grants something newer).
-pub fn api_key_permission_label(policy: &str) -> &str {
-    API_KEY_GRANTABLE_PERMISSIONS
-        .iter()
-        .find(|(p, _)| *p == policy)
-        .map(|(_, label)| *label)
-        .unwrap_or(policy)
+/// Whether a stored permission scope grants full, unrestricted access - the
+/// same test the server applies when deciding whether to downgrade a
+/// request's effective role. `None` (inherits the owner's role in full)
+/// counts, same as an explicit `["unrestricted"]` entry.
+pub fn api_key_is_unrestricted(permissions: &Option<Vec<String>>) -> bool {
+    match permissions {
+        None => true,
+        Some(perms) => perms.iter().any(|p| p == API_KEY_UNRESTRICTED_PERMISSION),
+    }
 }
 
 /// Human-readable summary of an API key's scope, for the key list - the
 /// whole point being that "testnet e2e key" should never again read as
 /// harmless when it is not.
 pub fn describe_api_key_permissions(permissions: &Option<Vec<String>>) -> String {
-    match permissions {
-        None => "Full access (inherits your role)".to_string(),
-        Some(perms) if perms.is_empty() => "No permissions granted".to_string(),
-        Some(perms) if perms.iter().any(|p| p == API_KEY_UNRESTRICTED_PERMISSION) => {
-            "Full access (unrestricted)".to_string()
+    if api_key_is_unrestricted(permissions) {
+        match permissions {
+            None => "Full access (inherits your role)".to_string(),
+            Some(_) => "Full access (unrestricted)".to_string(),
         }
-        Some(perms) => perms
-            .iter()
-            .map(|p| api_key_permission_label(p))
-            .collect::<Vec<_>>()
-            .join(", "),
+    } else {
+        "Restricted (no admin access)".to_string()
     }
 }
 
