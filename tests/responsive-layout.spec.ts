@@ -203,6 +203,16 @@ test.describe('table column alignment', () => {
  * `<tr class="payment-method-row">`. `display: flex` on that `<tr>` drops it
  * out of table layout, so its cells stop sharing the widths `<thead>`
  * computed - full-width headers over a left-bunched strip of cells.
+ *
+ * This suite is CSS-only by design (see playwright.config.ts): the markup
+ * below is hand-authored, not rendered by the app, so it proves the stylesheet
+ * behaves correctly against table markup shaped like the real thing - it does
+ * not by itself prove the live component emits that shape. That question (is
+ * the row's `<tr>` actually a direct child of `<tbody>`, or does something
+ * hoist or wrap it) was checked separately by mounting the real
+ * `PaymentMethodsTab` component in a browser against a stubbed API response
+ * and inspecting the live tree; see the comment on `tr.payment-method-row` in
+ * styles.css for what that found.
  */
 test.describe('payment methods table column alignment', () => {
   const TABLE = `

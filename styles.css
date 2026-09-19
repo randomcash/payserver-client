@@ -1817,7 +1817,15 @@ a:hover {
    and wants the flex layout above, but the payment-methods table's <tr>
    reuses this class name too - `display: flex` takes it out of table layout,
    so its cells stop sharing the header's column widths. Same collision
-   already fixed for tr.payment-row below; give this one the same override. */
+   already fixed for tr.payment-row below; give this one the same override.
+
+   Confirmed against the real rendered DOM, not just the markup in this file:
+   mounted PaymentMethodsTab in a browser with a stubbed API response and
+   inspected the live tree. The row's <tr> is a direct child of <tbody> with
+   or without this rule - so the table-nesting/parser-hoisting theory this
+   ticket also suspected does not apply here. Removing this rule reproduces
+   the reported symptom exactly (computed display: flex, headers 626-819px
+   right of their columns); restoring it makes every header sit at dx=0. */
 tr.payment-method-row {
     display: table-row;
 }
