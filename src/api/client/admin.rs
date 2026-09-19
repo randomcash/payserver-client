@@ -104,8 +104,14 @@ impl ApiClient {
         self.delete(&format!("/api/users/api-keys/{}", id)).await
     }
 
-    /// Narrow (or, for a still-unrestricted caller, widen back to inherit)
-    /// an API key's permission scope.
+    /// Narrow, or (for a still-unrestricted caller) widen back to
+    /// unrestricted, an API key's permission scope. The server also accepts
+    /// `permissions: None` here to clear a key back to literally inheriting
+    /// its owner's role rather than storing an explicit `unrestricted`
+    /// entry, but the two are equivalent at request time - the extractor
+    /// re-checks the owner's *current* role either way - so this client
+    /// never sends `None`; every call narrows to `[]` or widens to
+    /// `["unrestricted"]`.
     pub async fn update_api_key_permissions(
         &self,
         id: &str,

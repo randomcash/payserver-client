@@ -32,6 +32,10 @@ pub fn ApiKeysTab() -> impl IntoView {
     let (created_key, set_created_key) =
         signal(Option::<CreateApiKeyResponseWithPermissions>::None);
     let (loading, set_loading) = signal(false);
+    // Error surfaced on a failed creation — previously the handler swallowed
+    // errors silently, leaving the form open with no feedback while the
+    // spinner just stopped.
+    let (create_error, set_create_error) = signal(Option::<String>::None);
 
     // Error surfaced on a failed permission change — granting unrestricted
     // access is refused server-side unless the caller's own role currently
@@ -57,13 +61,19 @@ pub fn ApiKeysTab() -> impl IntoView {
             },
         };
         set_loading.set(true);
+        set_create_error.set(None);
         wasm_bindgen_futures::spawn_local(async move {
-            if let Ok(resp) = client.create_api_key(&request).await {
-                set_created_key.set(Some(resp));
-                set_show_create.set(false);
-                set_new_key_name.set(String::new());
-                set_new_key_unrestricted.set(false);
-                set_version.update(|v| *v += 1);
+            match client.create_api_key(&request).await {
+                Ok(resp) => {
+                    set_created_key.set(Some(resp));
+                    set_show_create.set(false);
+                    set_new_key_name.set(String::new());
+                    set_new_key_unrestricted.set(false);
+                    set_version.update(|v| *v += 1);
+                }
+                Err(err) => {
+                    set_create_error.set(Some(format!("Failed to create key: {err}")));
+                }
             }
             set_loading.set(false);
         });
@@ -213,6 +223,22 @@ pub fn ApiKeysTab() -> impl IntoView {
                                 "Cancel"
                             </button>
                         </div>
+                    </div>
+                </div>
+            })}
+
+            // Creation error — a failed click must not just close the form
+            // silently.
+            {move || create_error.get().map(|msg| view! {
+                <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-danger);">
+                    <div class="ps-card-body">
+                        <p><strong>{msg}</strong></p>
+                        <button
+                            class="ps-btn ps-btn-ghost ps-btn-sm"
+                            on:click=move |_| set_create_error.set(None)
+                        >
+                            "Dismiss"
+                        </button>
                     </div>
                 </div>
             })}
