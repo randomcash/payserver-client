@@ -1825,7 +1825,25 @@ a:hover {
    or without this rule - so the table-nesting/parser-hoisting theory this
    ticket also suspected does not apply here. Removing this rule reproduces
    the reported symptom exactly (computed display: flex, headers 626-819px
-   right of their columns); restoring it makes every header sit at dx=0. */
+   right of their columns); restoring it makes every header sit at dx=0.
+
+   Re-verified independently on a later pass, against a fresh mount of the
+   same component with a stubbed response: `tr.parentElement === tbody` is
+   true both with and without this rule; with it removed, computed display
+   flips to `flex` and every header lands 714-973px right of its column
+   (dx 0, -714, -772, -784, -960, -973 across the six columns); with it
+   restored, every dx is 0. Numbers differ slightly from the pass above
+   because the stub payload's field lengths differ - the shape doesn't.
+
+   The DOM-nesting theory isn't just empirically absent here, it's
+   structurally impossible: table-content-model hoisting (the algorithm
+   that can move a <tr> out from under a non-<table> ancestor) is part of
+   the HTML tree-construction algorithm and runs only while the browser's
+   HTML parser is tokenizing markup - `innerHTML`, `document.write`, the
+   initial page load. This app is CSR: Leptos's `view!` macro builds nodes
+   with `document.createElement`/`appendChild`, which never invokes that
+   parser, so there is no mechanism available to hoist anything regardless
+   of what any one test run happens to observe. */
 tr.payment-method-row {
     display: table-row;
 }

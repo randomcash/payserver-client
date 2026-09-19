@@ -211,8 +211,11 @@ test.describe('table column alignment', () => {
  * the row's `<tr>` actually a direct child of `<tbody>`, or does something
  * hoist or wrap it) was checked separately by mounting the real
  * `PaymentMethodsTab` component in a browser against a stubbed API response
- * and inspecting the live tree; see the comment on `tr.payment-method-row` in
- * styles.css for what that found.
+ * and inspecting the live tree, twice now on separate passes with the same
+ * result; see the comment on `tr.payment-method-row` in styles.css for the
+ * measurements and for why hoisting can't happen at all in a CSR app (the
+ * browser algorithm that does it only runs while parsing HTML text, and this
+ * app never produces any - it builds DOM nodes directly).
  */
 test.describe('payment methods table column alignment', () => {
   const TABLE = `
