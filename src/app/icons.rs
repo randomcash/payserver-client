@@ -72,6 +72,22 @@ pub(super) fn IconSettings() -> impl IntoView {
     }
 }
 
+/// Used for any plugin's navigation entry. Generic on purpose: the client
+/// does not know what a given plugin is, so it cannot pick an icon that
+/// means anything more specific.
+#[component]
+pub(super) fn IconPlugin() -> impl IntoView {
+    view! {
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v6"></path>
+            <path d="M5 8h14v5a7 7 0 0 1-14 0Z"></path>
+            <path d="M9 2v3"></path>
+            <path d="M15 2v3"></path>
+            <path d="M12 20v2"></path>
+        </svg>
+    }
+}
+
 #[component]
 pub(super) fn IconHelp() -> impl IntoView {
     view! {

@@ -15,7 +15,8 @@ use ui_kit::{AuthProvider, LoginPage, RegisterPage, UiKitStyles};
 use crate::api::Store;
 use crate::pages::{
     CheckoutPage, DashboardPage, InvoiceDetailPage, InvoicesPage, NotFoundPage, PaymentDetailPage,
-    PaymentsPage, SettingsPage, StoreDetailPage, StoresPage, WalletDetailPage, WalletsPage,
+    PaymentsPage, PluginPageView, SettingsPage, StoreDetailPage, StoresPage, WalletDetailPage,
+    WalletsPage,
 };
 
 use layout::ProtectedLayout;
@@ -118,6 +119,10 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/wallets") view=WalletsPage />
                             <Route path=path!("/wallets/:id") view=WalletDetailPage />
                             <Route path=path!("/settings") view=SettingsPage />
+                            // Any plugin's page. This client knows nothing
+                            // about which plugins exist - the id and path
+                            // come from what the server declared.
+                            <Route path=path!("/plugins/:id/:path") view=PluginPageView />
                         </ParentRoute>
                     </ParentRoute>
                 </Routes>

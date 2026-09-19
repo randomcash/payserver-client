@@ -60,3 +60,32 @@ pub struct UserStoreInfo {
     pub store: Store,
     pub role: StoreRole,
 }
+
+/// One page a plugin serves, flattened for navigation.
+///
+/// The server groups pages by plugin; navigation wants a flat list, and the
+/// plugin id has to travel with each entry because it is half the URL.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginPage {
+    pub plugin_id: String,
+    pub path: String,
+    pub label: String,
+}
+
+/// `GET /api/plugins`, as the server sends it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PluginPagesResponse {
+    pub plugins: Vec<PluginPagesInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PluginPagesInfo {
+    pub id: String,
+    pub pages: Vec<PluginPageInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PluginPageInfo {
+    pub path: String,
+    pub label: String,
+}

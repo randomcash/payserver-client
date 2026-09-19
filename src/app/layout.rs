@@ -18,7 +18,7 @@ use crate::services::WebSocketService;
 use super::header::MainHeader;
 use super::icons::{
     IconCheck, IconChevron, IconClose, IconDashboard, IconHelp, IconInvoice, IconLayers,
-    IconPayment, IconSettings, IconStore, IconWallet,
+    IconPayment, IconPlugin, IconSettings, IconStore, IconWallet,
 };
 use super::{SELECTED_STORE_KEY, StoreContext, StoresStatus};
 
@@ -337,6 +337,8 @@ where
                         <IconSettings />
                     </SidebarLink>
                 </div>
+
+                <PluginLinks />
             </nav>
 
             <div class="sidebar-footer">
@@ -346,6 +348,74 @@ where
                 </a>
             </div>
         </aside>
+    }
+}
+
+/// Navigation entries for whatever plugins this server has loaded.
+///
+/// The client does not know which plugins exist, and deliberately does not:
+/// the server lists what each plugin declared, and this renders the labels
+/// it is given. A hard-coded entry here would put one plugin's vocabulary
+/// into a client that is public and shared by every deployment.
+///
+/// A server with no plugins, or one that cannot be reached, renders nothing
+/// - not an empty heading, and not an error. Navigation that a merchant
+/// cannot act on is worse than navigation that is simply absent.
+#[component]
+fn PluginLinks() -> impl IntoView {
+    let api = expect_context::<Signal<ApiClient>>();
+    let pages = LocalResource::new(move || {
+        let api = api.get();
+        async move { api.list_plugin_pages().await.unwrap_or_default() }
+    });
+
+    view! {
+        <Suspense fallback=|| ()>
+            {move || Suspend::new(async move {
+                let pages = pages.await;
+                (!pages.is_empty()).then(|| {
+                    view! {
+                        <div class="sidebar-section">
+                            <div class="sidebar-section-title">"Account"</div>
+                            {pages
+                                .into_iter()
+                                .map(|page| {
+                                    let href = format!(
+                                        "/evm/plugins/{}/{}",
+                                        page.plugin_id, page.path,
+                                    );
+                                    view! {
+                                        <DynamicSidebarLink href=href label=page.label>
+                                            <IconPlugin />
+                                        </DynamicSidebarLink>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    }
+                })
+            })}
+        </Suspense>
+    }
+}
+
+/// A sidebar link whose target is not known at compile time.
+///
+/// [`SidebarLink`] takes `&'static str`, which a plugin's page cannot be.
+#[component]
+fn DynamicSidebarLink(href: String, label: String, children: Children) -> impl IntoView {
+    let location = use_location();
+    let target = href.clone();
+    let is_active = move || location.pathname.get() == target;
+
+    view! {
+        <a
+            href=href
+            class=move || if is_active() { "sidebar-link active" } else { "sidebar-link" }
+        >
+            {children()}
+            <span>{label}</span>
+        </a>
     }
 }
 

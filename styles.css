@@ -6391,3 +6391,131 @@ tr.payment-row {
         height: 180px;
     }
 }
+
+/* ==========================================================================
+   Plugin pages
+
+   A plugin ships a component tree and this client draws it, so these rules
+   dress a vocabulary rather than a screen: nothing here knows what any
+   particular plugin is for. They reuse the existing .card, .table, .badge
+   and .btn rules wherever the vocabulary maps onto something this client
+   already has, and only add what it does not.
+   ========================================================================== */
+
+.plugin-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.plugin-section-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.plugin-stack {
+    display: flex;
+    gap: var(--space-3);
+}
+
+.plugin-stack-column {
+    flex-direction: column;
+}
+
+.plugin-stack-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Grid column count is set inline: it comes from the plugin, and a class per
+   possible count would be a fixed menu of layouts the vocabulary does not
+   have. Falls back to a single column on narrow screens regardless. */
+.plugin-grid {
+    display: grid;
+    gap: var(--space-3);
+    align-items: center;
+}
+
+@media (max-width: 640px) {
+    .plugin-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+.plugin-notice {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--border-radius);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    border-left: 3px solid transparent;
+}
+
+.plugin-notice-neutral {
+    background: var(--color-gray-100);
+    color: var(--text-secondary);
+    border-left-color: var(--color-gray-400);
+}
+
+.plugin-notice-info {
+    background: var(--color-info-light);
+    color: var(--color-info);
+    border-left-color: var(--color-info);
+}
+
+.plugin-notice-success {
+    background: var(--color-success-light);
+    color: var(--color-success);
+    border-left-color: var(--color-success);
+}
+
+.plugin-notice-warning {
+    background: var(--color-warning-light);
+    color: #9e6c00;
+    border-left-color: var(--color-warning);
+}
+
+.plugin-notice-danger {
+    background: var(--color-error-light);
+    color: var(--color-error);
+    border-left-color: var(--color-error);
+}
+
+.plugin-form,
+.plugin-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.plugin-field-label {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.plugin-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.plugin-tab-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-2);
+}
+
+/* A button the plugin gave no link to. Drawn, and visibly unable to act -
+   the vocabulary has no actions, so a live-looking control would lie. */
+.plugin-section .btn:disabled,
+.plugin-tabs .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
