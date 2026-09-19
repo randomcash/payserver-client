@@ -1813,6 +1813,15 @@ a:hover {
     gap: var(--space-3);
 }
 
+/* Same class, two different elements: the dashboard breakdown uses a <div>
+   and wants the flex layout above, but the payment-methods table's <tr>
+   reuses this class name too - `display: flex` takes it out of table layout,
+   so its cells stop sharing the header's column widths. Same collision
+   already fixed for tr.payment-row below; give this one the same override. */
+tr.payment-method-row {
+    display: table-row;
+}
+
 .payment-method-info {
     display: flex;
     align-items: center;
