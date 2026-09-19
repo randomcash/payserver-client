@@ -1,6 +1,8 @@
 //! Admin settings tab - server settings and user management (admin only).
 
-use crate::api::{AdminUserInfo, ApiClient, UpdateServerSettingsRequest, UpdateUserRoleRequest};
+use crate::api::{
+    AdminUserInfo, ApiClient, Store, UpdateServerSettingsRequest, UpdateUserRoleRequest,
+};
 use leptos::prelude::*;
 use types::ChainId;
 
@@ -17,6 +19,15 @@ pub fn AdminTab() -> impl IntoView {
     let (rate_limit, set_rate_limit) = signal("100".to_string());
     let (enabled_chain_ids, set_enabled_chain_ids) = signal(Vec::<ChainId>::new());
     let (settings_status, set_settings_status) = signal(String::new());
+
+    // The store this instance bills its own subscriptions through. Empty
+    // string means none - an instance that sells nothing to itself.
+    let (billing_store, set_billing_store) = signal(String::new());
+    // Whether the saved value is the one the server is actually running with.
+    // It is read at boot, so a change sits pending until a restart, and an
+    // admin looking at this page needs to be able to tell the difference.
+    let (billing_store_active, set_billing_store_active) = signal(true);
+    let (stores, set_stores) = signal(Vec::<Store>::new());
 
     // User list state
     let (users, set_users) = signal(Vec::<AdminUserInfo>::new());
@@ -50,6 +61,20 @@ pub fn AdminTab() -> impl IntoView {
                 set_invoice_expiry.set(settings.invoice_expiry_minutes.to_string());
                 set_rate_limit.set(settings.rate_limit_rpm.to_string());
                 set_enabled_chain_ids.set(settings.enabled_chain_ids);
+                set_billing_store.set(
+                    settings
+                        .billing_store_id
+                        .map(|id| id.0.to_string())
+                        .unwrap_or_default(),
+                );
+                set_billing_store_active.set(settings.billing_store_id_active);
+            }
+            // Offered as a list rather than a UUID field. An operator should
+            // not have to copy an identifier out of a URL to configure where
+            // their own revenue lands, and a typo there is silent until a
+            // merchant cannot pay.
+            if let Ok(list) = api.list_stores().await {
+                set_stores.set(list.into_iter().filter(|s| !s.archived).collect());
             }
             if let Ok(resp) = api.list_users(0, 100).await {
                 set_user_total.set(resp.total);
@@ -68,15 +93,37 @@ pub fn AdminTab() -> impl IntoView {
         let expiry = invoice_expiry.get_untracked().parse::<i32>().unwrap_or(60);
         let rpm = rate_limit.get_untracked().parse::<i32>().unwrap_or(100);
         let chains = enabled_chain_ids.get_untracked();
+        let billing = billing_store.get_untracked();
         leptos::task::spawn_local(async move {
+            // Always `Some(..)`: this form knows about the field, so it is
+            // always talking about it. The inner option is the value - `None`
+            // clears the setting. An absent field would mean "leave it
+            // alone", which is what an older client sends and is not what a
+            // save from this page means.
+            let billing_store_id = Some(if billing.is_empty() {
+                None
+            } else {
+                billing.parse().ok().map(types::StoreId)
+            });
+
             let request = UpdateServerSettingsRequest {
                 default_confirmations: confirmations,
                 invoice_expiry_minutes: expiry,
                 rate_limit_rpm: rpm,
                 enabled_chain_ids: chains,
+                billing_store_id,
             };
             match api.update_server_settings(&request).await {
-                Ok(()) => set_settings_status.set("Settings saved".to_string()),
+                Ok(()) => {
+                    // Saved is not applied. Saying only "saved" would leave an
+                    // admin believing the server is billing on the store they
+                    // just picked, which it is not until it restarts.
+                    set_settings_status.set(
+                        "Settings saved. The billing store takes effect when the server restarts."
+                            .to_string(),
+                    );
+                    set_billing_store_active.set(false);
+                }
                 Err(e) => set_settings_status.set(format!("Error: {}", e)),
             }
         });
@@ -210,6 +257,47 @@ pub fn AdminTab() -> impl IntoView {
                                 }).collect_view()}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            // Billing
+            //
+            // Its own card rather than a field among the payment defaults:
+            // this is the only setting on the page that decides where money
+            // is invoiced, and it is the only one that does not take effect
+            // until a restart.
+            <div class="ps-card">
+                <div class="ps-card-header">
+                    <h3>"Billing"</h3>
+                </div>
+                <div class="ps-card-body">
+                    <div class="form-group">
+                        <label class="form-label">"Subscription store"</label>
+                        <select
+                            class="form-input"
+                            prop:value=move || billing_store.get()
+                            on:change=move |ev| set_billing_store.set(event_target_value(&ev))
+                        >
+                            <option value="">"None - this server bills nothing for itself"</option>
+                            <For
+                                each=move || stores.get()
+                                key=|store| store.id
+                                let:store
+                            >
+                                <option value=store.id.to_string()>{store.name.clone()}</option>
+                            </For>
+                        </select>
+                        <p class="form-help">
+                            "Subscription invoices are issued on this store, and payments to it \
+                             are what a billing plugin is told about. It needs an enabled payment \
+                             method whose wallet resolves, or it will be refused."
+                        </p>
+                        <Show when=move || !billing_store_active.get()>
+                            <p class="form-help" style="color: var(--color-warning);">
+                                "Pending restart - the server is not billing on this store yet."
+                            </p>
+                        </Show>
                     </div>
                 </div>
             </div>
