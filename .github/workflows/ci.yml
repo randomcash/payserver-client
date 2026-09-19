@@ -228,19 +228,19 @@ jobs:
         env:
           # Same secret name ethpayserver uses to dispatch its own deploy.
           # central-infrastructure is private, so GITHUB_TOKEN cannot reach it.
-          DEPLOY_PAT: ${{ secrets.DEPLOY_PAT }}
+          RCS_DISPATCH_PAT: ${{ secrets.RCS_DISPATCH_PAT }}
         run: |
           set -e
-          if [ -z "$DEPLOY_PAT" ]; then
-            echo "::error::DEPLOY_PAT is not set on this repository, so the image was"
+          if [ -z "$RCS_DISPATCH_PAT" ]; then
+            echo "::error::RCS_DISPATCH_PAT is not set on this repository, so the image was"
             echo "published but nothing was deployed. Add a PAT with repo scope on"
             echo "randomcash/central-infrastructure:"
-            echo "  gh secret set DEPLOY_PAT --repo randomcash/payserver-client"
+            echo "  gh secret set RCS_DISPATCH_PAT --repo randomcash/payserver-client"
             exit 1
           fi
           curl -sS --fail-with-body -X POST \
             -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $DEPLOY_PAT" \
+            -H "Authorization: Bearer $RCS_DISPATCH_PAT" \
             https://api.github.com/repos/randomcash/central-infrastructure/dispatches \
             -d '{"event_type":"deploy-client","client_payload":{"environment":"testnet","sha_tag":"${{ steps.tag.outputs.sha_tag }}"}}'
           echo "dispatched deploy-client testnet ${{ steps.tag.outputs.sha_tag }}" >> "$GITHUB_STEP_SUMMARY"
