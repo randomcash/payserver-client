@@ -197,6 +197,62 @@ test.describe('table column alignment', () => {
 });
 
 /**
+ * `.payment-method-row` has the identical collision: the dashboard's payment
+ * methods breakdown renders each entry as `<div class="payment-method-row">`
+ * and wants a flex layout, while the Payment Methods tab's table renders
+ * `<tr class="payment-method-row">`. `display: flex` on that `<tr>` drops it
+ * out of table layout, so its cells stop sharing the widths `<thead>`
+ * computed - full-width headers over a left-bunched strip of cells.
+ */
+test.describe('payment methods table column alignment', () => {
+  const TABLE = `
+    <div class="payment-methods-table-container">
+      <table class="payment-methods-table">
+        <thead><tr>
+          <th>Asset</th><th>Network</th><th>Type</th>
+          <th>Derivation Index</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          <tr class="payment-method-row">
+            <td><div class="payment-method-asset"><span class="payment-method-symbol">USDC</span></div></td>
+            <td><span class="payment-method-network">Sepolia</span></td>
+            <td><span class="payment-method-type">ERC20</span></td>
+            <td><code class="payment-method-index">0</code></td>
+            <td><button class="badge badge-success">Enabled</button></td>
+            <td><button class="ps-btn ps-btn-ghost ps-btn-sm">Delete</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  test('every header sits exactly over its column', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setContent(`<style>${CSS}</style><div style="padding:24px">${TABLE}</div>`);
+
+    const cols = await page.evaluate(() => {
+      const ths = [...document.querySelectorAll('.payment-methods-table thead th')];
+      const tds = [...document.querySelectorAll('.payment-methods-table tbody td')];
+      return ths.map((th, i) => ({
+        col: (th.textContent || 'actions').trim() || 'actions',
+        dx: Math.round(tds[i].getBoundingClientRect().left - th.getBoundingClientRect().left),
+      }));
+    });
+
+    expect(cols.length, 'header and body must have the same number of cells').toBe(6);
+    for (const { col, dx } of cols) {
+      expect(dx, `"${col}" header must sit over its column`).toBe(0);
+    }
+  });
+
+  test('a table row stays a table row', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setContent(`<style>${CSS}</style>${TABLE}`);
+    const display = await page.locator('.payment-methods-table tbody tr').evaluate((el) => getComputedStyle(el).display);
+    expect(display, 'flex here silently destroys column alignment').toBe('table-row');
+  });
+});
+
+/**
  * `.ps-recovery-confirm` carried a copy of the `.ps-checkbox-label` rule -
  * `display: flex` with the warning background and padding. Applied to the step
  * container instead of the checkbox, it laid the four children out as four
