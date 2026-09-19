@@ -8,6 +8,7 @@ mod admin;
 mod health;
 mod invoices;
 mod payments;
+mod plugins;
 mod stores;
 
 /// API client errors.

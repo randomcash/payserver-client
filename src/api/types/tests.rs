@@ -91,6 +91,7 @@ fn test_wallet_serialization() {
         derivation_index: 3,
         name: Some("Main Wallet".to_string()),
         is_primary: true,
+        namespace: "eip155".to_string(),
         created_at: "2024-01-01T00:00:00Z".parse().unwrap(),
     };
 

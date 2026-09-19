@@ -76,6 +76,18 @@ pub fn WalletsPage() -> impl IntoView {
             let req = CreateWalletRequest {
                 xpub: xpub_value,
                 name: (!name.is_empty()).then_some(name),
+                // The same value the server applies when the field is
+                // absent, so this changes nothing about what this form has
+                // always created. It is spelled out because the field is now
+                // required by the type and a silent `..Default::default()`
+                // would hide that this form does not ask.
+                //
+                // It should ask. An account-level xpub has its BIP-44 coin
+                // type baked in and cannot be told apart from another
+                // family's by looking at it, so a merchant pasting a Tron
+                // key here gets valid-looking addresses their wallet never
+                // watches. Adding that control is its own change.
+                namespace: "eip155".to_string(),
             };
             match api.create_wallet(&req).await {
                 Ok(_) => {
