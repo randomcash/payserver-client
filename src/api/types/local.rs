@@ -70,6 +70,7 @@ pub struct PluginPage {
     pub plugin_id: String,
     pub path: String,
     pub label: String,
+    pub icon: payserver_plugin_api::PageIcon,
 }
 
 /// `GET /api/plugins`, as the server sends it.
@@ -88,4 +89,5 @@ pub struct PluginPagesInfo {
 pub struct PluginPageInfo {
     pub path: String,
     pub label: String,
+    pub icon: payserver_plugin_api::PageIcon,
 }

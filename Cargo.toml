@@ -12,15 +12,15 @@ resolver = "3"
 # commons. To work against a local checkout run `scripts/commons.sh link`,
 # which writes an uncommitted `.cargo/config.toml` patch — do not edit this.
 [workspace.dependencies]
-api-types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "cddb1491240437f704181294a31ab0620809f1bb" }
-scrub = { git = "https://github.com/randomcash/payserver-commons.git", rev = "cddb1491240437f704181294a31ab0620809f1bb" }
-types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "cddb1491240437f704181294a31ab0620809f1bb" }
-ui-kit = { git = "https://github.com/randomcash/payserver-commons.git", rev = "cddb1491240437f704181294a31ab0620809f1bb" }
+api-types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "4798eb73b515dea3798bc0d50b6d3a9cf89990fe" }
+scrub = { git = "https://github.com/randomcash/payserver-commons.git", rev = "4798eb73b515dea3798bc0d50b6d3a9cf89990fe" }
+types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "4798eb73b515dea3798bc0d50b6d3a9cf89990fe" }
+ui-kit = { git = "https://github.com/randomcash/payserver-commons.git", rev = "4798eb73b515dea3798bc0d50b6d3a9cf89990fe" }
 # The plugin page vocabulary. Taken from the crate that defines it rather
 # than redeclared here: a plugin page is a contract between a plugin this
 # client has never heard of and this renderer, and a renamed variant should
 # be a build failure rather than a blank panel.
-payserver-plugin-api = { git = "https://github.com/randomcash/payserver-commons.git", rev = "cddb1491240437f704181294a31ab0620809f1bb" }
+payserver-plugin-api = { git = "https://github.com/randomcash/payserver-commons.git", rev = "4798eb73b515dea3798bc0d50b6d3a9cf89990fe" }
 
 [package]
 name = "payserver-client"

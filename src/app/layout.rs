@@ -8,6 +8,7 @@ use leptos_router::{
     components::{A, Outlet},
     hooks::use_location,
 };
+use payserver_plugin_api::PageIcon;
 use ui_kit::hooks::use_storage::{get_local, set_local};
 use ui_kit::{AuthGuard, use_auth};
 
@@ -17,8 +18,9 @@ use crate::services::WebSocketService;
 
 use super::header::MainHeader;
 use super::icons::{
-    IconCheck, IconChevron, IconClose, IconDashboard, IconHelp, IconInvoice, IconLayers,
-    IconPayment, IconPlugin, IconSettings, IconStore, IconWallet,
+    IconBell, IconChart, IconCheck, IconChevron, IconClose, IconCoins, IconDashboard, IconHelp,
+    IconInvoice, IconKey, IconLayers, IconPayment, IconPlugin, IconSettings, IconShield, IconStore,
+    IconTag, IconUser, IconWallet,
 };
 use super::{SELECTED_STORE_KEY, StoreContext, StoresStatus};
 
@@ -384,9 +386,10 @@ fn PluginLinks() -> impl IntoView {
                                         "/evm/plugins/{}/{}",
                                         page.plugin_id, page.path,
                                     );
+                                    let icon = page.icon;
                                     view! {
                                         <DynamicSidebarLink href=href label=page.label>
-                                            <IconPlugin />
+                                            {plugin_page_icon(icon)}
                                         </DynamicSidebarLink>
                                     }
                                 })
@@ -396,6 +399,28 @@ fn PluginLinks() -> impl IntoView {
                 })
             })}
         </Suspense>
+    }
+}
+
+/// The icon a plugin page's declared [`PageIcon`] maps to.
+///
+/// A closed vocabulary, not the plugin's own markup: an `<svg>` a plugin
+/// supplied would render inside the host's own interface, which makes it a
+/// script-injection surface, not a decoration. [`PageIcon::Plug`] - the
+/// default, and also where an icon this build has never heard of already
+/// deserialized to - draws the same [`IconPlugin`] every plugin page showed
+/// before this existed.
+fn plugin_page_icon(icon: PageIcon) -> impl IntoView {
+    match icon {
+        PageIcon::Card => view! { <IconPayment /> }.into_any(),
+        PageIcon::Coins => view! { <IconCoins /> }.into_any(),
+        PageIcon::Chart => view! { <IconChart /> }.into_any(),
+        PageIcon::Users => view! { <IconUser /> }.into_any(),
+        PageIcon::Shield => view! { <IconShield /> }.into_any(),
+        PageIcon::Bell => view! { <IconBell /> }.into_any(),
+        PageIcon::Key => view! { <IconKey /> }.into_any(),
+        PageIcon::Tag => view! { <IconTag /> }.into_any(),
+        PageIcon::Plug => view! { <IconPlugin /> }.into_any(),
     }
 }
 
