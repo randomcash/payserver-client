@@ -658,6 +658,25 @@ a:hover {
     margin-bottom: var(--space-6);
 }
 
+/* The page shell every screen in this app has, written down once.
+ *
+ * `.invoices-page`, `.stores-page` and `.wallets-page` each spell out these
+ * exact five declarations for themselves, which is how a sixth screen ends up
+ * with none of them: a plugin page was rendering into `.page`, a class this
+ * stylesheet does not define at all, so it had no max width, no column and no
+ * gap - it was the one screen in the product with no layout.
+ *
+ * Named in the `ps-` vocabulary the rest of the client is migrating to, so
+ * folding the other three in is an edit to their selector lists rather than
+ * another copy of this block. */
+.ps-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    width: 100%;
+    max-width: var(--content-max-width);
+}
+
 .page-header-row {
     display: flex;
     align-items: flex-start;
@@ -6569,6 +6588,16 @@ tr.payment-row {
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
+}
+
+/* A tab's content, stacked. The renderer draws every tab's content at once -
+ * switching one is an interaction it cannot tell the plugin about - so these
+ * need separating from each other the way sections do. Emitted since the
+ * renderer was written and never defined until now. */
+.plugin-tab {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
 }
 
 .plugin-tab-label {
