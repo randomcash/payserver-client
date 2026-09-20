@@ -18,6 +18,15 @@ pub fn AdminTab() -> impl IntoView {
     let (invoice_expiry, set_invoice_expiry) = signal("60".to_string());
     let (rate_limit, set_rate_limit) = signal("100".to_string());
     let (enabled_chain_ids, set_enabled_chain_ids) = signal(Vec::<ChainId>::new());
+    // Whether the operator actually touched the chain list on this visit.
+    //
+    // The server treats a stored list as authoritative - every chain not in
+    // it is refused - and answers `GET` with compiled-in *mainnet* defaults
+    // when nothing is stored. Sending back whatever was loaded would
+    // therefore write a list nobody chose, and on a testnet deployment that
+    // list has no Sepolia in it, so the instance would stop accepting the
+    // only chain it watches. Saving the billing store must not do that.
+    let (chains_edited, set_chains_edited) = signal(false);
     let (settings_status, set_settings_status) = signal(String::new());
 
     // The store this instance bills its own subscriptions through. Empty
@@ -92,7 +101,11 @@ pub fn AdminTab() -> impl IntoView {
             .unwrap_or(3);
         let expiry = invoice_expiry.get_untracked().parse::<i32>().unwrap_or(60);
         let rpm = rate_limit.get_untracked().parse::<i32>().unwrap_or(100);
-        let chains = enabled_chain_ids.get_untracked();
+        // `None` means "not talking about chains", which is not the same as
+        // an empty list. Only a deliberate edit sends one.
+        let chains = chains_edited
+            .get_untracked()
+            .then(|| enabled_chain_ids.get_untracked());
         let billing = billing_store.get_untracked();
         leptos::task::spawn_local(async move {
             // Always `Some(..)`: this form knows about the field, so it is
@@ -115,6 +128,7 @@ pub fn AdminTab() -> impl IntoView {
             };
             match api.update_server_settings(&request).await {
                 Ok(()) => {
+                    set_chains_edited.set(false);
                     // Saved is not applied. Saying only "saved" would leave an
                     // admin believing the server is billing on the store they
                     // just picked, which it is not until it restarts.
@@ -131,6 +145,7 @@ pub fn AdminTab() -> impl IntoView {
 
     // Toggle network handler
     let toggle_network = move |chain_id: ChainId| {
+        set_chains_edited.set(true);
         set_enabled_chain_ids.update(|ids| {
             if ids.contains(&chain_id) {
                 ids.retain(|id| id != &chain_id);
