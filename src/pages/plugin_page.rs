@@ -28,6 +28,7 @@ use payserver_plugin_api::page::{
 };
 
 use crate::api::ApiClient;
+use crate::components::LoadingState;
 
 /// Whether a plugin-supplied link may be followed.
 ///
@@ -142,12 +143,18 @@ fn render(element: &PageElement) -> AnyView {
             }
         }
 
+        // `ps-card`, not `card`. Both are defined, and they are not the same:
+        // `ps-card` clips its children and `ps-card-header` styles its own
+        // `h3`, which is why the title needs no class of its own. The rest of
+        // this client draws 41 cards the `ps-` way and this renderer drew the
+        // only one that did not - a plugin's page sat beside screens it did
+        // not match, in the one place a merchant is asked for money.
         PageElement::Card(Card { title, children }) => {
             let children = render_all(children);
             view! {
-                <div class="card">
-                    {title.clone().map(|t| view! { <div class="card-header"><h3 class="card-title">{t}</h3></div> })}
-                    <div class="card-body">{children}</div>
+                <div class="ps-card">
+                    {title.clone().map(|t| view! { <div class="ps-card-header"><h3>{t}</h3></div> })}
+                    <div class="ps-card-body">{children}</div>
                 </div>
             }
             .into_any()
@@ -225,7 +232,7 @@ fn render(element: &PageElement) -> AnyView {
             view! {
                 <label class="plugin-field">
                     {label.clone().map(|l| view! { <span class="plugin-field-label">{l}</span> })}
-                    <input class="input" placeholder=placeholder disabled=true />
+                    <input class="form-input" placeholder=placeholder disabled=true />
                 </label>
             }
             .into_any()
@@ -236,7 +243,7 @@ fn render(element: &PageElement) -> AnyView {
             view! {
                 <label class="plugin-field">
                     {label.clone().map(|l| view! { <span class="plugin-field-label">{l}</span> })}
-                    <select class="input" disabled=true>
+                    <select class="form-input" disabled=true>
                         {options.into_iter().map(|o| view! { <option>{o}</option> }).collect_view()}
                     </select>
                 </label>
@@ -279,6 +286,24 @@ fn render_all(children: &[PageElement]) -> Vec<AnyView> {
 }
 
 /// A plugin page, addressed by plugin id and path.
+///
+/// # The page around the page
+///
+/// A plugin ships the *contents* of a screen. Everything that makes it one of
+/// this product's screens rather than a panel floating on a background - the
+/// column, the gap, the width it stops at, the title at the top - belongs
+/// here, because a plugin has no way to express any of it and should not.
+///
+/// It was missing. This rendered into `class="page"`, which the stylesheet
+/// does not define, so a plugin page had no max width, no vertical rhythm and
+/// no heading while every screen beside it had all three. That is the whole
+/// of why these looked like they came from somewhere else.
+///
+/// The title comes from the plugin's own manifest - the same `label` the
+/// sidebar entry is drawn from - so the heading on the page and the link that
+/// reached it always say the same thing. Fetched alongside the page itself
+/// rather than passed down, because a page reached by its URL directly has no
+/// navigation state to have been passed anything by.
 #[component]
 pub fn PluginPageView() -> impl IntoView {
     let params = use_params_map();
@@ -292,16 +317,38 @@ pub fn PluginPageView() -> impl IntoView {
             if plugin_id.is_empty() || path.is_empty() {
                 return Err(crate::api::ApiError::Parse("no page requested".to_string()));
             }
-            api.get_plugin_page(&plugin_id, &path).await
+
+            // The heading is not worth failing the page over: a merchant who
+            // can see what they owe under an untitled heading is better off
+            // than one who sees an error because the nav list timed out.
+            let title = api
+                .list_plugin_pages()
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .find(|listed| listed.plugin_id == plugin_id && listed.path == path)
+                .map(|listed| listed.label);
+
+            api.get_plugin_page(&plugin_id, &path)
+                .await
+                .map(|element| (title, element))
         }
     });
 
     view! {
-        <div class="page">
-            <Suspense fallback=|| view! { <div class="loading">"Loading…"</div> }>
+        <div class="ps-page">
+            <Suspense fallback=|| view! { <LoadingState message="Loading…" /> }.into_any()>
                 {move || Suspend::new(async move {
                     match page.await {
-                        Ok(element) => render(&element),
+                        Ok((title, element)) => view! {
+                            {title.map(|title| view! {
+                                <div class="page-header-row">
+                                    <div><h1 class="page-title">{title}</h1></div>
+                                </div>
+                            })}
+                            {render(&element)}
+                        }
+                        .into_any(),
                         // The server answers 502 for a plugin that could not
                         // draw its page and 404 for one that has no such
                         // page. Neither is something a merchant can act on,
@@ -326,6 +373,154 @@ pub fn PluginPageView() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The stylesheet, read at compile time so the check below is against the
+    /// file that actually ships.
+    const STYLES: &str = include_str!("../../styles.css");
+
+    /// This file, likewise, so the class names in its markup are checked
+    /// rather than a list of them that someone has to remember to update.
+    const SOURCE: &str = include_str!("plugin_page.rs");
+
+    /// Whether `styles.css` has any rule that could match `class`.
+    ///
+    /// Looks for the selector as a whole token - `.ps-card` must not be
+    /// satisfied by `.ps-card-body` - and accepts it anywhere a selector may
+    /// legally end: a brace, a comma, whitespace, a combinator, a pseudo, or
+    /// another class in a compound selector.
+    fn is_defined(class: &str) -> bool {
+        // Comments stripped first. This stylesheet contains a comment that
+        // mentions `.page` by name - written while fixing the very bug this
+        // guard exists to catch - and a scan that counted it would report the
+        // class as defined because someone described it.
+        let styles = strip_comments(STYLES);
+        let needle = format!(".{class}");
+        let mut from = 0;
+        while let Some(at) = styles[from..].find(&needle) {
+            let start = from + at;
+            let after = styles[start + needle.len()..].chars().next();
+            let before = styles[..start].chars().next_back();
+            // Not preceded by an identifier character, or `.ps-page` would be
+            // found inside `.x.ps-page` only - which is fine - but also
+            // inside a longer name it is not part of.
+            let boundary_before =
+                before.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
+            let boundary_after =
+                after.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
+            if boundary_before && boundary_after {
+                return true;
+            }
+            from = start + 1;
+        }
+        false
+    }
+
+    /// `/* ... */` removed, so a class named in prose is not mistaken for a
+    /// class that is styled.
+    fn strip_comments(css: &str) -> String {
+        let mut out = String::with_capacity(css.len());
+        let mut rest = css;
+        while let Some(open) = rest.find("/*") {
+            out.push_str(&rest[..open]);
+            match rest[open + 2..].find("*/") {
+                Some(close) => rest = &rest[open + 2 + close + 2..],
+                None => return out,
+            }
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// Every class this renderer puts in the markup must exist in the
+    /// stylesheet.
+    ///
+    /// This is the check that was missing. The page shell was
+    /// `class="page"` - a class `styles.css` does not define at all - so a
+    /// plugin page had no max width, no column and no gap while every screen
+    /// beside it had all three, and nothing anywhere said so. A class name is
+    /// a reference to a rule, and a reference that resolves to nothing is the
+    /// one kind of styling mistake that is completely silent: the markup is
+    /// valid, the build is green, and the page is simply unstyled.
+    #[test]
+    fn every_class_this_renderer_emits_is_defined_in_the_stylesheet() {
+        let mut missing = Vec::new();
+
+        // The literal `class` attributes in the markup above, with this
+        // file's own comments dropped first - the doc comments here quote
+        // class names while explaining them.
+        let code: String = SOURCE
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut rest = code.as_str();
+        while let Some(at) = rest.find("class=\"") {
+            rest = &rest[at + 7..];
+            let Some(end) = rest.find('"') else { break };
+            let (value, tail) = rest.split_at(end);
+            rest = tail;
+            for class in value.split_whitespace() {
+                if !is_defined(class) {
+                    missing.push(class.to_string());
+                }
+            }
+        }
+
+        // And the ones chosen by a function, taken by calling it rather than
+        // by reading it - a variant added to any of these enums shows up here
+        // without anyone remembering to extend a list.
+        let from_functions = [
+            Tone::Neutral,
+            Tone::Info,
+            Tone::Success,
+            Tone::Warning,
+            Tone::Danger,
+        ]
+        .into_iter()
+        .flat_map(|tone| [tone_class(tone), notice_class(tone)])
+        .chain(
+            [
+                ButtonVariant::Primary,
+                ButtonVariant::Secondary,
+                ButtonVariant::Danger,
+                ButtonVariant::Ghost,
+                ButtonVariant::Outline,
+            ]
+            .into_iter()
+            .map(button_class),
+        );
+        for value in from_functions {
+            for class in value.split_whitespace() {
+                if !is_defined(class) {
+                    missing.push(class.to_string());
+                }
+            }
+        }
+
+        missing.sort();
+        missing.dedup();
+        assert!(
+            missing.is_empty(),
+            "these classes are emitted by the plugin page renderer and defined nowhere \
+             in styles.css, so they style nothing: {missing:?}"
+        );
+    }
+
+    /// The check above only means something if it can fail.
+    #[test]
+    fn a_class_the_stylesheet_does_not_define_is_detected() {
+        assert!(
+            !is_defined("definitely-not-a-class-in-this-stylesheet"),
+            "the detector must not report an undefined class as present"
+        );
+        assert!(is_defined("ps-page"), "and must find one that is present");
+        assert!(
+            !is_defined("page"),
+            "`.page` is exactly the class this renderer used to emit and the \
+             stylesheet has never defined; if this starts passing, the guard above \
+             has stopped guarding"
+        );
+    }
 
     /// A plugin is not a trusted source of somewhere to send a merchant who
     /// is about to pay. Only a path on this origin is followed.
