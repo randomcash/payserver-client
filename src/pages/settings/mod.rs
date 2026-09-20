@@ -1,4 +1,4 @@
-//! Settings page - Stripe-inspired design with multiple tabs.
+//! Settings page, across several tabs.
 //!
 //! Contains user settings, preferences, API keys, and admin-only server settings.
 

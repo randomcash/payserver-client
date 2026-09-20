@@ -55,10 +55,10 @@ puts no literal on the line. `plugin_page.rs` covers its own three such helpers
 in a unit test that *calls* them, which is the pattern to copy if you add
 another.
 
-## The design system is Stripe-inspired, and it is written down in tokens
+## The design system is written down in tokens
 
-`styles.css` says so on line 1 and seven module docs repeat it. What that means
-in practice, and what to reach for before inventing anything:
+There is one, and it is in `styles.css`. What to reach for before inventing
+anything:
 
 - **Tokens, not values.** `--space-*`, `--text-*`, `--border-radius-*`,
   `--shadow-*`, and the palette on `:root`. A hard-coded `12px` or `#635bff` in
