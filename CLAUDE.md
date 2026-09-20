@@ -37,6 +37,46 @@ testnet**. Nothing caught it —
 *"No selector was lost"* and *"every class the markup emits has a rule"* sound
 like the same check. Only the second one catches this.
 
+It checked only `ps-`-prefixed classes until 2026-09-20, and the scoping cost
+something: a plugin page rendered into `class="page"`, which this stylesheet has
+never defined, so it had no width, column, gap or heading while every screen
+beside it had all four. Unprefixed, so nothing looked. Generalising it found 78
+more — every class on the 404 page, and the whole of `LoadingState`, which
+renders two empty divs and a paragraph on the invoice list and detail pages.
+
+Those 78 are in `scripts/classes-unstyled-baseline.txt`. **It is meant to
+shrink.** The check fails on a class that is not in it, and also on one that is
+in it and has since been styled — a list that only grows stops meaning anything.
+Never add to it to make a build pass; add the rule, or point the markup at a
+class that has one.
+
+What it cannot see is a class chosen by a function — `class=tone_class(tone)`
+puts no literal on the line. `plugin_page.rs` covers its own three such helpers
+in a unit test that *calls* them, which is the pattern to copy if you add
+another.
+
+## The design system is written down in tokens
+
+There is one, and it is in `styles.css`. What to reach for before inventing
+anything:
+
+- **Tokens, not values.** `--space-*`, `--text-*`, `--border-radius-*`,
+  `--shadow-*`, and the palette on `:root`. A hard-coded `12px` or `#635bff` in
+  a new rule is a bug.
+- **`ps-` is the current component vocabulary**, migrating from unprefixed
+  legacy names. Where both exist they are *not* always the same: `ps-card` clips
+  its children and `ps-card-header` styles its own `h3`; `card` does neither.
+  Prefer `ps-`. `.btn` and `.ps-btn` are aliased and either is fine.
+- **A page is `.ps-page`** — column, `--space-5` gap, `--content-max-width` —
+  with a `.page-header-row` carrying `.page-title` and optionally
+  `.page-description`. Several pages still spell the shell out for themselves;
+  that is history, not a pattern to copy.
+- **Status goes on the card header line**, opposite the title.
+  `.ps-card-header` is a flex row with `justify-content: space-between` for
+  exactly that.
+- **Loading and error states are components** — `LoadingState`, `LoadingInline`,
+  `ErrorState`, `EmptyState` in `components/feedback.rs` — not hand-rolled divs.
+
 ## Renaming a class is a cross-repo change
 
 `ethpayserver`'s e2e suite locates elements by class, and tests against the
