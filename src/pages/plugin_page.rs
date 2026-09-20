@@ -149,11 +149,31 @@ fn render(element: &PageElement) -> AnyView {
         // this client draws 41 cards the `ps-` way and this renderer drew the
         // only one that did not - a plugin's page sat beside screens it did
         // not match, in the one place a merchant is asked for money.
-        PageElement::Card(Card { title, children }) => {
+        PageElement::Card(Card {
+            title,
+            badge,
+            children,
+        }) => {
             let children = render_all(children);
+            // The header is a flex row with `space-between`, which is what
+            // makes this a status *on* the card rather than the first thing
+            // in it - the same slot the invoice detail page puts its payment
+            // count in. A badge with no title still gets one, right-aligned,
+            // because a status with nothing to be about is still a status.
+            let header = (title.is_some() || badge.is_some()).then(|| {
+                let badge = badge.clone().map(|badge| {
+                    view! { <span class=tone_class(badge.tone)>{badge.text}</span> }
+                });
+                view! {
+                    <div class="ps-card-header">
+                        <h3>{title.clone().unwrap_or_default()}</h3>
+                        {badge}
+                    </div>
+                }
+            });
             view! {
                 <div class="ps-card">
-                    {title.clone().map(|t| view! { <div class="ps-card-header"><h3>{t}</h3></div> })}
+                    {header}
                     <div class="ps-card-body">{children}</div>
                 </div>
             }
