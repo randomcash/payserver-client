@@ -73,8 +73,11 @@ Weigh new dependencies accordingly.
 ## Error reporting
 
 Off unless configured. `index.html` carries `telemetry-dsn` and
-`telemetry-environment` meta tags, read at runtime so a deployment can enable
-reporting without rebuilding the bundle. The collector is not reachable from
+`telemetry-environment` meta tags, read out of the DOM at page load rather
+than compiled into the WASM binary — so setting them needs no Rust rebuild,
+only an edit to `index.html` before CI builds it in. There is no deploy-time
+templating step that fills these in today; the served value is whatever is
+committed. The collector is not reachable from
 the public internet, so an end-user browser cannot reach it — this is for
 internal and dev traffic. Panics, uncaught errors and
 unhandled rejections are sent; never cookies, request bodies, user identity or

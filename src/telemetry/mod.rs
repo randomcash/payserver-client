@@ -14,8 +14,12 @@
 //!
 //! # Configuration
 //!
-//! Runtime, not compile-time — so a deployment can flip it without rebuilding
-//! the WASM bundle. `client/index.html` carries:
+//! Runtime, not compile-time: the WASM binary never encodes a DSN, it reads
+//! one out of the DOM on page load, so flipping this needs no Rust rebuild —
+//! only whatever wrote `index.html`. There is no deploy-time templating step
+//! that populates these tags today; the values are exactly whatever is
+//! committed to `client/index.html` at the point CI builds and bakes it into
+//! the served image. `client/index.html` carries:
 //!
 //! ```html
 //! <meta name="telemetry-dsn" content="">
