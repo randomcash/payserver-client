@@ -74,9 +74,9 @@ Weigh new dependencies accordingly.
 
 Off unless configured. `index.html` carries `telemetry-dsn` and
 `telemetry-environment` meta tags, read at runtime so a deployment can enable
-reporting without rebuilding the bundle. The collector is tailnet-only, so an
-end-user browser cannot reach it — this is for internal and dev traffic.
-Panics, uncaught errors and
+reporting without rebuilding the bundle. The collector is not reachable from
+the public internet, so an end-user browser cannot reach it — this is for
+internal and dev traffic. Panics, uncaught errors and
 unhandled rejections are sent; never cookies, request bodies, user identity or
 query strings. Every free-text field goes through `scrub::redact_secrets`, the
 same implementation the payservers run. See `src/telemetry`.

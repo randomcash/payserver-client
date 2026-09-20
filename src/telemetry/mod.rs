@@ -3,13 +3,14 @@
 //!
 //! # Reachability (read before enabling)
 //!
-//! The collector is tailnet-only (its host is supplied at build time): an
-//! end-user browser cannot reach it, and there is deliberately no public
-//! ingress in front of its ingest from this repo's side. Client capture is
-//! therefore **off unless explicitly configured**, and is meant to be turned on
-//! for internal/dev traffic (developer machines, the testnet VPS) where the
-//! tailnet is reachable. When the collector grows a public ingest hostname,
-//! pointing the meta tag at it is the only change needed here.
+//! The collector is not reachable from the public internet (its host is
+//! supplied at build time): an end-user browser cannot reach it, and there
+//! is deliberately no public ingress in front of its ingest from this
+//! repo's side. Client capture is therefore **off unless explicitly
+//! configured**, and is meant to be turned on for internal/dev traffic
+//! (developer machines, the testnet VPS) where the collector is reachable.
+//! When the collector grows a public ingest hostname, pointing the meta tag
+//! at it is the only change needed here.
 //!
 //! # Configuration
 //!
@@ -175,10 +176,10 @@ fn capture(kind: &str, message: &str, stack: Option<String>) {
 /// POST the envelope, fire and forget.
 fn send(url: String, body: String) {
     spawn_local(async move {
-        // Failures are swallowed on purpose: with the collector on the
-        // tailnet an unreachable ingest is the expected case in a public
-        // browser, and a telemetry error must never become a user-visible
-        // one.
+        // Failures are swallowed on purpose: with the collector unreachable
+        // from the public internet, an unreachable ingest is the expected
+        // case in a public browser, and a telemetry error must never become
+        // a user-visible one.
         let request = Request::post(&url)
             .header("Content-Type", "application/x-sentry-envelope")
             .body(body);

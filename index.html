@@ -7,9 +7,8 @@
     <link data-trunk rel="css" href="styles.css">
     <!-- Client error capture (Sentry-protocol error telemetry) — see src/telemetry.
          Empty content disables reporting, which is the default: the collector
-         lives on the tailnet and is unreachable from an end-user
-         browser, so only fill this in for internal/dev deployments whose
-         browsers are on the tailnet. -->
+         is not reachable from the public internet, so only fill this in for
+         internal/dev deployments whose browsers can reach it. -->
     <meta name="telemetry-dsn" content="">
     <meta name="telemetry-environment" content="">
     <style>
