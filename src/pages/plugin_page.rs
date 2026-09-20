@@ -23,8 +23,8 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 use payserver_plugin_api::page::{
-    Badge, Button, ButtonVariant, Card, Direction, Form, Grid, Input, Notice, PageElement, Row,
-    Section, Select, Stack, Tab, Table, Tabs, Tone,
+    Badge, Button, ButtonVariant, Card, Direction, Fields, Form, Grid, Input, Notice, PageElement,
+    Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone,
 };
 
 use crate::api::ApiClient;
@@ -84,6 +84,37 @@ fn render(element: &PageElement) -> AnyView {
             <span class=tone_class(*tone)>{text.clone()}</span>
         }
         .into_any(),
+
+        // Prose. Drawn with the host's own type styles rather than anything
+        // the plugin chose - a plugin says what the text is doing, never how
+        // big it is, so a plugin page cannot drift away from the screens
+        // beside it.
+        PageElement::Text(Text { text, style }) => {
+            let class = match style {
+                TextStyle::Body => "plugin-text",
+                TextStyle::Muted => "plugin-text plugin-text-muted",
+                TextStyle::Strong => "plugin-text plugin-text-strong",
+            };
+            view! { <p class=class>{text.clone()}</p> }.into_any()
+        }
+
+        // Label-and-value pairs, as a definition list. A `<dl>` because that
+        // is what this is, and because it lets the stylesheet collapse to one
+        // column on a narrow screen without the renderer knowing the width.
+        PageElement::Fields(Fields { fields }) => {
+            let rows = fields
+                .iter()
+                .map(|field| {
+                    view! {
+                        <div class="plugin-field-row">
+                            <dt class="plugin-field-key">{field.label.clone()}</dt>
+                            <dd class="plugin-field-value">{field.value.clone()}</dd>
+                        </div>
+                    }
+                })
+                .collect_view();
+            view! { <dl class="plugin-fields">{rows}</dl> }.into_any()
+        }
 
         PageElement::Notice(Notice { text, tone }) => view! {
             <div class=notice_class(*tone) role="status">{text.clone()}</div>

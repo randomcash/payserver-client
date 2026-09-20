@@ -6587,3 +6587,75 @@ tr.payment-row {
     opacity: 0.55;
     cursor: not-allowed;
 }
+
+/* Plugin pages: prose and label/value pairs.
+   These two are why a plugin page can look like the rest of the product at
+   all - before them every piece of text had to be a badge, so a detail page
+   rendered as rows of coloured pills. */
+
+.plugin-text {
+    margin: 0;
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.plugin-text-muted {
+    color: var(--text-muted);
+}
+
+.plugin-text-strong {
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+}
+
+.plugin-fields {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* A row per pair, label left and value right, with a hairline between - the
+   same shape the rest of the app uses for detail panels. */
+.plugin-field-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.plugin-field-row:last-child {
+    border-bottom: none;
+}
+
+.plugin-field-key {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+
+.plugin-field-value {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    word-break: break-word;
+}
+
+/* Stacked on a narrow screen: a long value pushed hard right against its
+   label is unreadable well before the row actually overflows. */
+@media (max-width: 480px) {
+    .plugin-field-row {
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .plugin-field-value {
+        text-align: left;
+    }
+}
