@@ -21,6 +21,7 @@ impl ApiClient {
                     plugin_id: plugin.id.clone(),
                     path: page.path,
                     label: page.label,
+                    icon: page.icon,
                 })
             })
             .collect())

@@ -72,9 +72,9 @@ pub(super) fn IconSettings() -> impl IntoView {
     }
 }
 
-/// Used for any plugin's navigation entry. Generic on purpose: the client
-/// does not know what a given plugin is, so it cannot pick an icon that
-/// means anything more specific.
+/// The generic navigation icon: what every plugin page showed before it
+/// could declare its own, and still the fallback for a plugin page that
+/// declares none.
 #[component]
 pub(super) fn IconPlugin() -> impl IntoView {
     view! {
@@ -84,6 +84,55 @@ pub(super) fn IconPlugin() -> impl IntoView {
             <path d="M9 2v3"></path>
             <path d="M15 2v3"></path>
             <path d="M12 20v2"></path>
+        </svg>
+    }
+}
+
+#[component]
+pub(super) fn IconCoins() -> impl IntoView {
+    view! {
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="9" r="6"></circle>
+            <circle cx="15" cy="15" r="6"></circle>
+        </svg>
+    }
+}
+
+#[component]
+pub(super) fn IconChart() -> impl IntoView {
+    view! {
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+        </svg>
+    }
+}
+
+#[component]
+pub(super) fn IconShield() -> impl IntoView {
+    view! {
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+    }
+}
+
+#[component]
+pub(super) fn IconKey() -> impl IntoView {
+    view! {
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+        </svg>
+    }
+}
+
+#[component]
+pub(super) fn IconTag() -> impl IntoView {
+    view! {
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+            <line x1="7" y1="7" x2="7.01" y2="7"></line>
         </svg>
     }
 }
