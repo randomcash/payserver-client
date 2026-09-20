@@ -1,4 +1,4 @@
-//! Dashboard page - Stripe-inspired overview of EVM payment activity.
+//! Dashboard page: an overview of EVM payment activity.
 
 use std::cell::RefCell;
 use std::rc::Rc;

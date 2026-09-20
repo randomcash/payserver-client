@@ -1,4 +1,4 @@
-/* EVM PayServer Client - Stripe-inspired Design */
+/* EVM PayServer Client - design tokens and component styles */
 
 /* Inter font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -7,7 +7,9 @@
    Design Tokens
    ============================================ */
 :root {
-    /* Primary Colors - Stripe-like indigo */
+    /* Primary colours. Indigo: high enough contrast on both grounds to
+     * carry a primary action without shouting, and distinct from the
+     * semantic green/amber/red so an accent never reads as a status. */
     --color-primary: #635bff;
     --color-primary-hover: #5851ea;
     --color-primary-light: #e8e7ff;
@@ -59,7 +61,8 @@
     --border-radius-xl: 12px;
     --border-radius-full: 9999px;
 
-    /* Shadows - Stripe's subtle layered shadows */
+    /* Shadows. Layered and shallow: a card should read as lifted off the
+     * page, not as floating above it. */
     --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
@@ -1487,7 +1490,7 @@ a:hover {
 .evm-network-status-item.disconnected .evm-network-status-indicator { color: var(--color-error); }
 
 /* ============================================
-   Dashboard - Stripe-inspired
+   Dashboard
    ============================================ */
 .dashboard {
     display: flex;
@@ -2105,7 +2108,7 @@ tr.payment-row {
 }
 
 /* ============================================
-   Invoices Page - Stripe-inspired
+   Invoices Page
    ============================================ */
 .invoices-page {
     display: flex;
