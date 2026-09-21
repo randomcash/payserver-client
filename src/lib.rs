@@ -212,10 +212,8 @@ fn render_wallet_actions(
                                     view! {
                                         <button
                                             class="ps-btn ps-btn-secondary"
-                                            // A connect-and-send is already an approval round-trip
-                                            // through the wallet; without this a double-click (or
-                                            // picking two wallets) fires two concurrent sends for
-                                            // one invoice.
+                                            // Disabled while connecting, and permanently once any
+                                            // wallet here has sent — see wallet_button_disabled.
                                             disabled=move || {
                                                 wallet_button_disabled(&status.get())
                                             }
@@ -315,33 +313,25 @@ async fn connect_and_send(
         return WalletActionStatus::WrongNetwork(chain_label.to_string());
     }
 
+    let fields = match build_transfer_tx_fields(payment_address, transfer) {
+        Ok(fields) => fields,
+        Err(e) => return WalletActionStatus::Error(e),
+    };
+
     let tx = js_sys::Object::new();
-    if js_sys::Reflect::set(&tx, &"from".into(), &from_address.into()).is_err() {
+    let set_ok = js_sys::Reflect::set(&tx, &"from".into(), &from_address.into()).is_ok()
+        && match fields {
+            TransferTxFields::Erc20 { to, data } => {
+                js_sys::Reflect::set(&tx, &"to".into(), &to.into()).is_ok()
+                    && js_sys::Reflect::set(&tx, &"data".into(), &data.into()).is_ok()
+            }
+            TransferTxFields::Native { to, value } => {
+                js_sys::Reflect::set(&tx, &"to".into(), &to.into()).is_ok()
+                    && js_sys::Reflect::set(&tx, &"value".into(), &value.into()).is_ok()
+            }
+        };
+    if !set_ok {
         return WalletActionStatus::Error("failed to build transaction".to_string());
-    }
-    match &transfer.token_address {
-        Some(token) => {
-            let calldata = match erc20_transfer_calldata(payment_address, &transfer.amount) {
-                Ok(data) => data,
-                Err(e) => return WalletActionStatus::Error(e),
-            };
-            if js_sys::Reflect::set(&tx, &"to".into(), &token.as_str().into()).is_err()
-                || js_sys::Reflect::set(&tx, &"data".into(), &calldata.into()).is_err()
-            {
-                return WalletActionStatus::Error("failed to build transaction".to_string());
-            }
-        }
-        None => {
-            let value_hex = match native_transfer_value_hex(&transfer.amount) {
-                Ok(v) => v,
-                Err(e) => return WalletActionStatus::Error(e),
-            };
-            if js_sys::Reflect::set(&tx, &"to".into(), &payment_address.into()).is_err()
-                || js_sys::Reflect::set(&tx, &"value".into(), &value_hex.into()).is_err()
-            {
-                return WalletActionStatus::Error("failed to build transaction".to_string());
-            }
-        }
     }
 
     let params = js_sys::Array::new();
@@ -361,6 +351,38 @@ async fn connect_and_send(
 /// wasm.
 fn network_matches(reported: Option<&str>, expected_chain_hex: &str) -> bool {
     reported.is_some_and(|r| r.eq_ignore_ascii_case(expected_chain_hex))
+}
+
+/// The `to`/`data`/`value` fields `connect_and_send` puts on the
+/// transaction, decided by whether the invoice is a token transfer or a
+/// native-asset one.
+enum TransferTxFields {
+    Erc20 { to: String, data: String },
+    Native { to: String, value: String },
+}
+
+/// Which of the two transfer shapes to send, and the fields for it. Pulled
+/// out of `connect_and_send` so the branch that decides *where a customer's
+/// funds go* — a token payment must land `to` the token contract with ABI
+/// calldata, a native one `to` the payment address with a `value` — can be
+/// unit-tested without a mocked EIP-1193 provider, same reasoning as
+/// `network_matches` and `wallet_actions_gate`.
+fn build_transfer_tx_fields(
+    payment_address: &str,
+    transfer: &WalletActionsContext,
+) -> Result<TransferTxFields, String> {
+    match &transfer.token_address {
+        Some(token) => erc20_transfer_calldata(payment_address, &transfer.amount).map(|data| {
+            TransferTxFields::Erc20 {
+                to: token.clone(),
+                data,
+            }
+        }),
+        None => native_transfer_value_hex(&transfer.amount).map(|value| TransferTxFields::Native {
+            to: payment_address.to_string(),
+            value,
+        }),
+    }
 }
 
 /// The two bail-outs that decide whether `render_wallet_actions` has enough
@@ -384,12 +406,18 @@ fn should_show_wallet_list(wallets: &[crate::services::eip6963::DiscoveredWallet
     !wallets.is_empty()
 }
 
-/// Whether a wallet button should be disabled: only while a send from it is
-/// already in flight. A connect-and-send is already an approval round-trip
-/// through the wallet, so without this a double-click (or picking two
-/// wallets) fires two concurrent sends for one invoice.
+/// Whether a wallet button should be disabled: while a send is in flight,
+/// and permanently once any wallet in the list has sent. `status` is one
+/// signal shared by the whole list, and nothing ever moves it back to
+/// `Idle` — so without also covering `Sent`, the instant
+/// `eth_sendTransaction` is accepted (well before the block confirms) every
+/// button re-enables, and a second click on it or a different wallet
+/// submits the same payment again.
 fn wallet_button_disabled(status: &WalletActionStatus) -> bool {
-    matches!(status, WalletActionStatus::Connecting)
+    matches!(
+        status,
+        WalletActionStatus::Connecting | WalletActionStatus::Sent
+    )
 }
 
 /// Native-asset transfer value, hex-encoded for `eth_sendTransaction`.
@@ -518,6 +546,52 @@ mod wallet_action_tests {
         }
     }
 
+    /// A token invoice must target the token contract with ABI calldata,
+    /// never the payment address directly — sending `value` instead of
+    /// `data` here would move nothing, and sending `to = payment_address`
+    /// would send the native asset instead of the token.
+    #[test]
+    fn build_transfer_tx_fields_targets_the_token_contract_for_a_token_invoice() {
+        let transfer = WalletActionsContext {
+            amount: "1000000".to_string(),
+            token_address: Some("0xTokenContract".to_string()),
+        };
+        match build_transfer_tx_fields(RECIPIENT, &transfer).expect("fields") {
+            TransferTxFields::Erc20 { to, data } => {
+                assert_eq!(to, "0xTokenContract");
+                assert_eq!(data, erc20_transfer_calldata(RECIPIENT, "1000000").unwrap());
+            }
+            TransferTxFields::Native { .. } => {
+                panic!("a token invoice must not build a native transfer")
+            }
+        }
+    }
+
+    /// A native-asset invoice must target the payment address with a
+    /// `value`, never the (absent) token contract.
+    #[test]
+    fn build_transfer_tx_fields_targets_the_payment_address_for_a_native_invoice() {
+        let transfer = some_transfer();
+        match build_transfer_tx_fields(RECIPIENT, &transfer).expect("fields") {
+            TransferTxFields::Native { to, value } => {
+                assert_eq!(to, RECIPIENT);
+                assert_eq!(value, native_transfer_value_hex("1000000").unwrap());
+            }
+            TransferTxFields::Erc20 { .. } => {
+                panic!("a native invoice must not build an ERC-20 transfer")
+            }
+        }
+    }
+
+    #[test]
+    fn build_transfer_tx_fields_rejects_a_malformed_amount() {
+        let transfer = WalletActionsContext {
+            amount: "0.047".to_string(),
+            token_address: None,
+        };
+        assert!(build_transfer_tx_fields(RECIPIENT, &transfer).is_err());
+    }
+
     /// A non-EVM chain (or a malformed `eip155:` reference) has no chain id
     /// to check the wallet against — the slot must degrade to nothing rather
     /// than skip the network guard it exists to enforce.
@@ -564,17 +638,24 @@ mod wallet_action_tests {
         assert!(should_show_wallet_list(&[wallet("one")]));
     }
 
-    /// The one state a button must be disabled in: a send from it is already
-    /// in flight.
+    /// A send from this button is already in flight.
     #[test]
     fn a_connecting_wallet_button_is_disabled() {
         assert!(wallet_button_disabled(&WalletActionStatus::Connecting));
     }
 
+    /// `eth_sendTransaction` already broadcast a payment for this invoice —
+    /// nothing moves `status` back to `Idle`, so the button must stay
+    /// disabled rather than let a second click submit the same payment
+    /// again before the first one confirms.
     #[test]
-    fn wallet_buttons_stay_enabled_outside_a_pending_send() {
+    fn a_sent_wallet_button_stays_disabled() {
+        assert!(wallet_button_disabled(&WalletActionStatus::Sent));
+    }
+
+    #[test]
+    fn wallet_buttons_stay_enabled_outside_a_pending_or_completed_send() {
         assert!(!wallet_button_disabled(&WalletActionStatus::Idle));
-        assert!(!wallet_button_disabled(&WalletActionStatus::Sent));
         assert!(!wallet_button_disabled(&WalletActionStatus::WrongNetwork(
             "Ethereum".to_string()
         )));
