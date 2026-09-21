@@ -34,9 +34,9 @@ pub fn DashboardPage() -> impl IntoView {
 /// wallet, and the invoice itself. Gone once all three are done - a merchant
 /// who has already set up does not need reminding forever.
 ///
-/// A store with no wallet cannot receive payments (RCS-250) - the server
-/// refuses to create an invoice for one - so this is not just a tour, it is
-/// the path to clearing that gate.
+/// A store with no wallet cannot receive payments - the server refuses to
+/// create an invoice for one - so this is not just a tour, it is the path to
+/// clearing that gate.
 #[component]
 fn OnboardingChecklist() -> impl IntoView {
     let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
