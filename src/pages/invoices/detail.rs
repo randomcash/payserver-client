@@ -11,22 +11,33 @@ use crate::components::{TimelineState, payment_state};
 
 use super::helpers::{
     IconExport, chain_name, confirmed_payment_count, format_amount, format_date,
-    get_metadata_field, payment_status, payment_status_class, truncate_hex,
+    get_metadata_field, payment_status, payment_status_class, scale_smallest_units, truncate_hex,
 };
 
-/// The customer-facing checkout URL for an invoice.
+/// The customer-facing checkout URL for an invoice, or `None` if the origin
+/// can't be read.
 ///
 /// Not the current (admin) URL - a merchant copying this link is sending it
 /// to whoever owes them money, so it has to be the public one regardless of
-/// where in the dashboard the button was clicked.
-fn checkout_url(invoice_id: &str) -> String {
-    let origin = web_sys::window()
-        .and_then(|w| w.location().origin().ok())
-        .unwrap_or_default();
-    format!(
+/// where in the dashboard the button was clicked. `/checkout/:id` is mounted
+/// in the same `Router` as the admin routes (`src/app/mod.rs`), so the
+/// browser's own origin is always the right one - there is no separate
+/// public/admin split to get wrong.
+///
+/// `None` rather than defaulting to an empty origin: a relative
+/// `/checkout/{id}` with no scheme or host still looks like a link and
+/// `CopyButton` would still report success, so the merchant copies something
+/// that resolves to nothing. The caller renders a disabled control instead,
+/// same as every other not-actually-available action on this page.
+fn checkout_url(invoice_id: &str) -> Option<String> {
+    let origin = web_sys::window().and_then(|w| w.location().origin().ok())?;
+    if origin.is_empty() {
+        return None;
+    }
+    Some(format!(
         "{origin}/checkout/{}",
         js_sys::encode_uri_component(invoice_id)
-    )
+    ))
 }
 
 /// Escape a field for CSV output: quote it if it holds a comma, quote or
@@ -98,10 +109,11 @@ fn invoice_csv(invoice: &Invoice, payments: &[Payment]) -> String {
         for p in payments {
             let from = p.from_address.clone().unwrap_or_default();
             let confirmed = p.confirmed_at.map(|t| t.to_rfc3339()).unwrap_or_default();
+            let amount = scale_smallest_units(&p.amount, p.decimals);
             content.push_str(&csv_row(&[
                 &p.tx_hash,
                 &p.asset_symbol,
-                &p.amount,
+                &amount,
                 payment_status(p),
                 &from,
                 &p.detected_at.to_rfc3339(),
@@ -205,11 +217,20 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                 })}
             </div>
             <div class="invoice-detail-actions">
-                <CopyButton
-                    text=checkout_url(&invoice.id)
-                    label="Copy link"
-                    class="ps-btn-sm"
-                />
+                {match checkout_url(&invoice.id) {
+                    Some(url) => view! {
+                        <CopyButton text=url label="Copy link" class="ps-btn-sm" />
+                    }.into_any(),
+                    None => view! {
+                        <button
+                            class="ps-btn ps-btn-secondary ps-btn-sm"
+                            disabled=true
+                            title="Couldn't read this site's address, so there's no link to copy"
+                        >
+                            "Copy link"
+                        </button>
+                    }.into_any(),
+                }}
                 <button
                     class="ps-btn ps-btn-secondary ps-btn-sm"
                     on:click={
@@ -517,7 +538,10 @@ mod tests {
             store_name: None,
             chain_id: ChainId::evm(1),
             invoice_id: "inv-1".into(),
-            amount: "30".into(),
+            // Raw wei, deliberately not equal to its human amount (0.05 ETH):
+            // a test that used a value where raw and scaled agree couldn't
+            // have caught the CSV export writing the unscaled amount.
+            amount: "50000000000000000".into(),
             asset_symbol: "ETH".into(),
             token_address: None,
             tx_hash: "0xabc".into(),
@@ -539,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn invoice_csv_carries_the_raw_amount_and_escapes_metadata() {
+    fn invoice_csv_scales_payment_amounts_and_escapes_metadata() {
         let csv = invoice_csv(&sample_invoice(), &[sample_payment()]);
         let mut lines = csv.lines();
         assert_eq!(
@@ -556,7 +580,7 @@ mod tests {
             "payment_tx_hash,asset_symbol,amount,status,from_address,detected_at,confirmed_at"
         ));
         assert!(csv.contains(
-            "0xabc,ETH,30,confirmed,0xdef,2024-01-01T00:05:00+00:00,2024-01-01T00:10:00+00:00"
+            "0xabc,ETH,0.05,confirmed,0xdef,2024-01-01T00:05:00+00:00,2024-01-01T00:10:00+00:00"
         ));
     }
 
