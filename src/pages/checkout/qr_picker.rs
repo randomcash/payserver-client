@@ -9,14 +9,14 @@
 //!
 //! Built to take any number of cards, not a two-card special case: a chain
 //! with only one sensible encoding (Tron has no EIP-681 equivalent) offers
-//! one card without looking broken, and RCS-243 means a third encoding
-//! (BIP-21, Solana Pay) is coming for a different chain, not a rewrite.
+//! one card without looking broken, and a third encoding for a different
+//! chain (BIP-21, Solana Pay) is an extra card rather than a rewrite.
 //!
-//! Client-local for now. This is a ui-kit component in spirit — RCS-249 notes
-//! the picker will need styling that travels with it — but landing it in
-//! commons is a three-step dance (merge, bump the pin, `cargo update`) that a
-//! single change here can't complete in one step. Mirrored locally in the
-//! meantime, same reasoning as the api-types DTO precedent.
+//! Client-local for now. This is a ui-kit component in spirit, and it will
+//! eventually need styling that travels with it — but landing it in commons
+//! is a three-step dance (merge, bump the pin, `cargo update`) that a single
+//! change here can't complete in one step. Mirrored locally in the meantime,
+//! same reasoning as the api-types DTO precedent.
 
 use leptos::ev::KeyboardEvent;
 use leptos::prelude::*;
@@ -136,7 +136,7 @@ pub fn QrPicker(encodings: Vec<QrEncoding>) -> impl IntoView {
                     view! {
                         <button
                             type="button"
-                            class="checkout-qr-arrow checkout-qr-arrow-prev"
+                            class="checkout-qr-arrow"
                             aria-label="Previous encoding"
                             on:click=move |_| go(-1)
                         >
@@ -149,7 +149,7 @@ pub fn QrPicker(encodings: Vec<QrEncoding>) -> impl IntoView {
                     view! {
                         <button
                             type="button"
-                            class="checkout-qr-arrow checkout-qr-arrow-next"
+                            class="checkout-qr-arrow"
                             aria-label="Next encoding"
                             on:click=move |_| go(1)
                         >
