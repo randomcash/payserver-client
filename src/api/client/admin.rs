@@ -12,8 +12,9 @@ use crate::api::{
 /// Whether the server booted with every plugin disabled.
 ///
 /// Not in `api-types` yet: the server's `/admin/safe-mode` is itself a local,
-/// non-shared type today (see that endpoint's doc comment) pending a real
-/// plugin admin contract from RCS-260/RCS-301.
+/// non-shared type today (see that endpoint's doc comment) pending a fuller
+/// plugin admin contract - listing plugins and disabling them individually -
+/// that doesn't exist yet.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SafeModeStatus {
     pub safe_mode: bool,
