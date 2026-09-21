@@ -130,3 +130,106 @@ pub fn NoStoreSelected(
     }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    /// The stylesheet, read at compile time so the check below is against the
+    /// file that actually ships.
+    const STYLES: &str = include_str!("../../styles.css");
+
+    /// This file, likewise, so the class names in its markup are checked
+    /// rather than a list of them that someone has to remember to update.
+    const SOURCE: &str = include_str!("feedback.rs");
+
+    /// Whether `styles.css` has any rule that could match `class`. Same
+    /// matcher as the one in `plugin_page.rs` - see there for why it needs to
+    /// be a whole-token search rather than a substring one.
+    fn is_defined(class: &str) -> bool {
+        let styles = strip_comments(STYLES);
+        let needle = format!(".{class}");
+        let mut from = 0;
+        while let Some(at) = styles[from..].find(&needle) {
+            let start = from + at;
+            let after = styles[start + needle.len()..].chars().next();
+            let before = styles[..start].chars().next_back();
+            let boundary_before =
+                before.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
+            let boundary_after =
+                after.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
+            if boundary_before && boundary_after {
+                return true;
+            }
+            from = start + 1;
+        }
+        false
+    }
+
+    /// `/* ... */` removed, so a class named in prose is not mistaken for a
+    /// class that is styled.
+    fn strip_comments(css: &str) -> String {
+        let mut out = String::with_capacity(css.len());
+        let mut rest = css;
+        while let Some(open) = rest.find("/*") {
+            out.push_str(&rest[..open]);
+            match rest[open + 2..].find("*/") {
+                Some(close) => rest = &rest[open + 2 + close + 2..],
+                None => return out,
+            }
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// Every class these components put in the markup must exist in the
+    /// stylesheet.
+    ///
+    /// `LoadingState` and `LoadingInline` used to fail this: `loading-container`,
+    /// `loading-spinner`, `loading-text`, `loading-inline`, `loading-spinner-sm`
+    /// and `loading-text-sm` were all emitted and none of them styled, so a
+    /// slow-loading invoice list or invoice detail page rendered as a blank
+    /// div rather than a spinner - the build stayed green because a missing
+    /// class is not a compile error, only a silent one.
+    #[test]
+    fn every_class_these_components_emit_is_defined_in_the_stylesheet() {
+        let mut missing = Vec::new();
+
+        let code: String = SOURCE
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut rest = code.as_str();
+        while let Some(at) = rest.find("class=\"") {
+            rest = &rest[at + 7..];
+            let Some(end) = rest.find('"') else { break };
+            let (value, tail) = rest.split_at(end);
+            rest = tail;
+            for class in value.split_whitespace() {
+                if !is_defined(class) {
+                    missing.push(class.to_string());
+                }
+            }
+        }
+
+        missing.sort();
+        missing.dedup();
+        assert!(
+            missing.is_empty(),
+            "these classes are emitted by the shared feedback components and defined \
+             nowhere in styles.css, so they style nothing: {missing:?}"
+        );
+    }
+
+    /// The check above only means something if it can fail.
+    #[test]
+    fn a_class_the_stylesheet_does_not_define_is_detected() {
+        assert!(
+            !is_defined("definitely-not-a-class-in-this-stylesheet"),
+            "the detector must not report an undefined class as present"
+        );
+        assert!(
+            is_defined("loading-container"),
+            "and must find one that is present"
+        );
+    }
+}
