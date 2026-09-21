@@ -106,21 +106,40 @@ pub struct PluginPageInfo {
 // field.
 // =========================================================================
 
-/// The only key scope this server currently enforces beyond "nothing extra
-/// past the owner's non-admin baseline": unrestricted access, equivalent to
-/// the key owner's full role - including installing a plugin, which runs
-/// arbitrary SQL migrations and arbitrary wasm on the server.
-///
-/// There used to be a longer list here, one entry per named policy
-/// (`auth::Policies` in payserver-commons), offered as individual
-/// checkboxes. It was removed: every admin gate in the server is a bare
-/// `role == Role::ServerAdmin` comparison, never a check against one of
-/// those named permissions individually (see the server's
-/// `validate_requested_permissions`, `server/src/api/users.rs`), so
-/// checking one specific box and checking none of them produced the exact
-/// same access. A checklist that implies fine-grained control it cannot
-/// deliver is worse than a plain toggle that says what it does.
+/// Unrestricted access: equivalent to the key owner's full role, including
+/// installing a plugin, which runs arbitrary SQL migrations and arbitrary
+/// wasm on the server. Kept apart from the store actions below - it also
+/// covers `ethpay.server.*`/`ethpay.user.*` gates, none of which this
+/// server enforces individually (every one is a bare
+/// `role == Role::ServerAdmin` comparison), so a checkbox for one of those
+/// specifically would promise control the server cannot back up.
 pub const API_KEY_UNRESTRICTED_PERMISSION: &str = "unrestricted";
+
+/// Store-scoped actions this server enforces individually, in SQL, at real
+/// call sites (invoice creation, store settings, store membership) - see
+/// `user_has_store_permission` and its callers in `server/src/api/`. Unlike
+/// the server/user policies folded into "unrestricted" above, checking one
+/// of these and leaving the rest unchecked genuinely grants only that one.
+///
+/// Hand-mirrored from `auth::Policies` (payserver-commons) plus two more
+/// (`canviewstoreusers`/`canmodifystoreusers`) that exist only as literal
+/// strings on the server side today, not yet promoted to that enum.
+///
+/// Each entry a key requests here is granted unscoped - every store the
+/// owner can reach - which is the server's default and the only shape this
+/// form produces. The server also accepts a `policy:storeId` suffix to
+/// narrow a grant to one store; there is no control for that yet, so a key
+/// narrower than "every store" has to be built directly against the API.
+pub const API_KEY_GRANTABLE_STORE_ACTIONS: &[(&str, &str)] = &[
+    ("ethpay.store.cancreateinvoice", "Create invoices"),
+    ("ethpay.store.canviewstoresettings", "View store settings"),
+    (
+        "ethpay.store.canmodifystoresettings",
+        "Modify store settings",
+    ),
+    ("ethpay.store.canviewstoreusers", "View store members"),
+    ("ethpay.store.canmodifystoreusers", "Manage store members"),
+];
 
 /// Whether a stored permission scope grants full, unrestricted access - the
 /// same test the server applies when deciding whether to downgrade a
@@ -138,13 +157,29 @@ pub fn api_key_is_unrestricted(permissions: &Option<Vec<String>>) -> bool {
 /// harmless when it is not.
 pub fn describe_api_key_permissions(permissions: &Option<Vec<String>>) -> String {
     if api_key_is_unrestricted(permissions) {
-        match permissions {
+        return match permissions {
             None => "Full access (inherits your role)".to_string(),
             Some(_) => "Full access (unrestricted)".to_string(),
-        }
-    } else {
-        "Restricted (no admin access)".to_string()
+        };
     }
+    let granted = permissions.as_deref().unwrap_or(&[]);
+    if granted.is_empty() {
+        return "No permissions granted".to_string();
+    }
+    granted
+        .iter()
+        .map(|entry| {
+            // A `policy:storeId` entry describes the same action as its
+            // unscoped form for this summary - the list view has no room to
+            // also name the store.
+            let policy = entry.split(':').next().unwrap_or(entry);
+            API_KEY_GRANTABLE_STORE_ACTIONS
+                .iter()
+                .find(|(p, _)| *p == policy)
+                .map_or(policy, |(_, label)| label)
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// `CreateApiKeyRequest` (api-types) plus the permission scope chosen at

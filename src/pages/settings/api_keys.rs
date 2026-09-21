@@ -1,10 +1,12 @@
 //! API Keys settings tab.
 
+use std::collections::HashSet;
+
 use crate::api::{
-    API_KEY_UNRESTRICTED_PERMISSION, ApiClient, ApiKeyInfoWithPermissions,
-    CreateApiKeyRequestWithPermissions, CreateApiKeyResponseWithPermissions,
-    RotateApiKeyResponseWithPermissions, UpdateApiKeyPermissionsRequest,
-    api_key_is_unrestricted, describe_api_key_permissions,
+    API_KEY_GRANTABLE_STORE_ACTIONS, API_KEY_UNRESTRICTED_PERMISSION, ApiClient,
+    ApiKeyInfoWithPermissions, CreateApiKeyRequestWithPermissions,
+    CreateApiKeyResponseWithPermissions, RotateApiKeyResponseWithPermissions,
+    UpdateApiKeyPermissionsRequest, api_key_is_unrestricted, describe_api_key_permissions,
 };
 use leptos::prelude::*;
 
@@ -29,6 +31,7 @@ pub fn ApiKeysTab() -> impl IntoView {
     let (show_create, set_show_create) = signal(false);
     let (new_key_name, set_new_key_name) = signal(String::new());
     let (new_key_unrestricted, set_new_key_unrestricted) = signal(false);
+    let (new_key_store_actions, set_new_key_store_actions) = signal(HashSet::<String>::new());
     let (created_key, set_created_key) =
         signal(Option::<CreateApiKeyResponseWithPermissions>::None);
     let (loading, set_loading) = signal(false);
@@ -57,7 +60,7 @@ pub fn ApiKeysTab() -> impl IntoView {
             permissions: if new_key_unrestricted.get() {
                 vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()]
             } else {
-                Vec::new()
+                new_key_store_actions.get().into_iter().collect()
             },
         };
         set_loading.set(true);
@@ -69,6 +72,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                     set_show_create.set(false);
                     set_new_key_name.set(String::new());
                     set_new_key_unrestricted.set(false);
+                    set_new_key_store_actions.set(HashSet::new());
                     set_version.update(|v| *v += 1);
                 }
                 Err(err) => {
@@ -79,13 +83,15 @@ pub fn ApiKeysTab() -> impl IntoView {
         });
     };
 
-    // Set a key's permission scope to exactly restricted or exactly
-    // unrestricted - the only two shapes the server accepts (see
-    // `API_KEY_UNRESTRICTED_PERMISSION`'s doc comment for why). This is also
-    // how a legacy key (`permissions: None`, inheriting its owner's role in
-    // full - the incident this feature exists to close) gets narrowed for
-    // the first time: "Restrict" sends `[]` regardless of the key's current
-    // scope.
+    // Set a key's permission scope to exactly nothing or exactly
+    // unrestricted - the two shapes offered on an existing key's row. The
+    // server accepts more than these two (see the creation form, and
+    // `API_KEY_GRANTABLE_STORE_ACTIONS`), but this control exists to undo a
+    // legacy key's implicit full access quickly, not to re-run the creation
+    // checklist against a key that already exists. "Restrict" sends `[]`
+    // regardless of the key's current scope - the first narrowing a legacy
+    // key (`permissions: None`, inheriting its owner's role in full - the
+    // incident this feature exists to close) ever gets.
     let make_set_permissions_handler = move |key_id: String, unrestricted: bool| {
         let client = api.get();
         move |_| {
@@ -190,9 +196,41 @@ pub fn ApiKeysTab() -> impl IntoView {
                             <label class="form-label">"Permissions"</label>
                             <p class="section-desc">
                                 "Unchecked by default: a new key can authenticate but cannot "
-                                "take any admin action, regardless of your own role."
+                                "do anything else until you grant it something below."
                             </p>
-                            <div class="api-key-permissions-list" style="border-color: var(--color-danger);">
+                            <div class="api-key-permissions-list">
+                                {API_KEY_GRANTABLE_STORE_ACTIONS.iter().map(|(policy, label)| {
+                                    let policy_for_checked = policy.to_string();
+                                    let policy_for_change = policy.to_string();
+                                    view! {
+                                        <label class="api-key-permission-item">
+                                            <input
+                                                type="checkbox"
+                                                prop:checked=move || new_key_store_actions.get().contains(&policy_for_checked)
+                                                prop:disabled=move || new_key_unrestricted.get()
+                                                on:change=move |ev| {
+                                                    let checked = event_target_checked(&ev);
+                                                    let policy = policy_for_change.clone();
+                                                    set_new_key_store_actions.update(|actions| {
+                                                        if checked {
+                                                            actions.insert(policy);
+                                                        } else {
+                                                            actions.remove(&policy);
+                                                        }
+                                                    });
+                                                }
+                                            />
+                                            {*label}
+                                        </label>
+                                    }
+                                }).collect_view()}
+                                <p class="section-desc">
+                                    "Granted on every store you can reach. Each action here is "
+                                    "checked individually by the server, so selecting one really "
+                                    "does grant only that one."
+                                </p>
+                            </div>
+                            <div class="api-key-permissions-list" style="border-color: var(--color-danger); margin-top: 8px;">
                                 <label class="api-key-permission-item">
                                     <input
                                         type="checkbox"
@@ -204,7 +242,8 @@ pub fn ApiKeysTab() -> impl IntoView {
                                 <p class="section-desc">
                                     "Equivalent to your own full role, including installing plugins "
                                     "- which runs arbitrary SQL and arbitrary code on the server. "
-                                    "Only check this if the key genuinely needs to act as you."
+                                    "Only check this if the key genuinely needs to act as you. "
+                                    "Overrides the actions above."
                                 </p>
                             </div>
                         </div>
