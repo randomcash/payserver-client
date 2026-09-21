@@ -161,21 +161,20 @@ fn render_wallet_actions(
 
     use crate::services::eip6963::discover_wallets;
 
+    // Not provided means whoever called this slot isn't checkout's payment
+    // flow (or forgot to set it up) — degrade to nothing rather than a
+    // wallet-connect UI with no idea what to transfer.
+    let transfer = use_context::<WalletActionsContext>();
+
     // `evm_chain_id()` is `None` both for non-EVM chains and for a malformed
     // `eip155:` reference that isn't a number — either way there's no id to
     // check the wallet against, so degrade to no button rather than reach
     // `connect_and_send` with nothing to compare and skip the network guard
     // it exists to enforce.
-    let evm_chain_id = chain_id.evm_chain_id()?;
-
-    // Not provided means whoever called this slot isn't checkout's payment
-    // flow (or forgot to set it up) — degrade to nothing rather than a
-    // wallet-connect UI with no idea what to transfer.
-    let transfer = use_context::<WalletActionsContext>()?;
+    let (expected_chain_hex, transfer) = wallet_actions_gate(chain_id, transfer)?;
 
     let payment_address = payment_address.to_string();
     let chain_id = chain_id.clone();
-    let expected_chain_hex = format!("0x{evm_chain_id:x}");
     let chain_label = crate::util::chain_name(&chain_id).to_string();
 
     let wallets = discover_wallets();
@@ -183,7 +182,7 @@ fn render_wallet_actions(
 
     Some(
         view! {
-            <Show when=move || !wallets.get().is_empty()>
+            <Show when=move || should_show_wallet_list(&wallets.get())>
                 <div class="checkout-wallet-actions">
                     <span class="checkout-wallet-label">"Or pay with a connected wallet"</span>
                     <div class="checkout-wallet-list">
@@ -218,7 +217,7 @@ fn render_wallet_actions(
                                             // picking two wallets) fires two concurrent sends for
                                             // one invoice.
                                             disabled=move || {
-                                                matches!(status.get(), WalletActionStatus::Connecting)
+                                                wallet_button_disabled(&status.get())
                                             }
                                             on:click=move |_| {
                                                 let provider = provider.clone();
@@ -364,6 +363,35 @@ fn network_matches(reported: Option<&str>, expected_chain_hex: &str) -> bool {
     reported.is_some_and(|r| r.eq_ignore_ascii_case(expected_chain_hex))
 }
 
+/// The two bail-outs that decide whether `render_wallet_actions` has enough
+/// to work with at all: a numeric chain id to check the wallet against, and
+/// invoice data to prefill the transfer from. Pulled out as a plain function,
+/// same reasoning as `network_matches` — a mounted view can't be unit-tested
+/// without a browser, but the decision behind it can.
+fn wallet_actions_gate(
+    chain_id: &ChainId,
+    transfer: Option<WalletActionsContext>,
+) -> Option<(String, WalletActionsContext)> {
+    let evm_chain_id = chain_id.evm_chain_id()?;
+    Some((format!("0x{evm_chain_id:x}"), transfer?))
+}
+
+/// Whether the wallet list (and everything under it) should render at all.
+///
+/// An empty list is the normal "no wallet installed" state, not an error —
+/// this stays `false` so copy-address/QR remain the only thing shown.
+fn should_show_wallet_list(wallets: &[crate::services::eip6963::DiscoveredWallet]) -> bool {
+    !wallets.is_empty()
+}
+
+/// Whether a wallet button should be disabled: only while a send from it is
+/// already in flight. A connect-and-send is already an approval round-trip
+/// through the wallet, so without this a double-click (or picking two
+/// wallets) fires two concurrent sends for one invoice.
+fn wallet_button_disabled(status: &WalletActionStatus) -> bool {
+    matches!(status, WalletActionStatus::Connecting)
+}
+
 /// Native-asset transfer value, hex-encoded for `eth_sendTransaction`.
 ///
 /// `amount_base_units` must already be base units (wei), never a display
@@ -481,6 +509,78 @@ mod wallet_action_tests {
     #[test]
     fn network_matches_rejects_a_non_string_reply() {
         assert!(!network_matches(None, "0x1"));
+    }
+
+    fn some_transfer() -> WalletActionsContext {
+        WalletActionsContext {
+            amount: "1000000".to_string(),
+            token_address: None,
+        }
+    }
+
+    /// A non-EVM chain (or a malformed `eip155:` reference) has no chain id
+    /// to check the wallet against — the slot must degrade to nothing rather
+    /// than skip the network guard it exists to enforce.
+    #[test]
+    fn wallet_actions_gate_bails_on_a_non_evm_chain() {
+        let tron = ChainId::parse("tron:728126428").unwrap();
+        assert!(wallet_actions_gate(&tron, Some(some_transfer())).is_none());
+    }
+
+    /// Called from anywhere other than checkout's payment flow, there's no
+    /// invoice data to prefill a transfer from — degrade to nothing rather
+    /// than a wallet-connect UI with nothing to send.
+    #[test]
+    fn wallet_actions_gate_bails_on_missing_context() {
+        assert!(wallet_actions_gate(&ChainId::evm(1), None).is_none());
+    }
+
+    #[test]
+    fn wallet_actions_gate_passes_through_an_evm_chain_with_context() {
+        let (expected_chain_hex, transfer) =
+            wallet_actions_gate(&ChainId::evm(137), Some(some_transfer())).expect("gate open");
+        assert_eq!(expected_chain_hex, "0x89");
+        assert_eq!(transfer.amount, "1000000");
+    }
+
+    fn wallet(uuid: &str) -> crate::services::eip6963::DiscoveredWallet {
+        crate::services::eip6963::DiscoveredWallet {
+            uuid: uuid.to_string(),
+            name: "Test Wallet".to_string(),
+            icon: String::new(),
+            provider: wasm_bindgen::JsValue::UNDEFINED,
+        }
+    }
+
+    /// No wallet found is a normal state, not an error — copy-address/QR
+    /// must stay the only thing shown.
+    #[test]
+    fn no_wallets_does_not_show_the_list() {
+        assert!(!should_show_wallet_list(&[]));
+    }
+
+    #[test]
+    fn a_discovered_wallet_shows_the_list() {
+        assert!(should_show_wallet_list(&[wallet("one")]));
+    }
+
+    /// The one state a button must be disabled in: a send from it is already
+    /// in flight.
+    #[test]
+    fn a_connecting_wallet_button_is_disabled() {
+        assert!(wallet_button_disabled(&WalletActionStatus::Connecting));
+    }
+
+    #[test]
+    fn wallet_buttons_stay_enabled_outside_a_pending_send() {
+        assert!(!wallet_button_disabled(&WalletActionStatus::Idle));
+        assert!(!wallet_button_disabled(&WalletActionStatus::Sent));
+        assert!(!wallet_button_disabled(&WalletActionStatus::WrongNetwork(
+            "Ethereum".to_string()
+        )));
+        assert!(!wallet_button_disabled(&WalletActionStatus::Error(
+            "boom".to_string()
+        )));
     }
 }
 
