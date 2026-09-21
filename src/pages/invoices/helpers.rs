@@ -67,13 +67,41 @@ pub(super) fn format_date(iso: &str) -> String {
     iso.to_string()
 }
 
+/// Trim a decimal string's fractional part to the significant digits, keeping
+/// at least `min_decimals` (padding with zeros if it has fewer).
+///
+/// Amounts arrive as a `NUMERIC(38,18)` string, so a due amount of "30"
+/// reaches here as `"30.000000000000000000"` — trimmed to `min_decimals: 2`,
+/// that reads "30.00" instead of gluing a currency symbol onto raw digits.
+///
+/// This is arithmetic on strings, not `f64`: a `NUMERIC(38,18)` value can
+/// carry more precision than a float represents exactly.
+fn trim_decimal(decimal: &str, min_decimals: usize) -> String {
+    let Some((int_part, frac_part)) = decimal.split_once('.') else {
+        return decimal.to_string();
+    };
+    let trimmed = frac_part.trim_end_matches('0');
+    if trimmed.len() >= min_decimals {
+        if trimmed.is_empty() {
+            int_part.to_string()
+        } else {
+            format!("{int_part}.{trimmed}")
+        }
+    } else {
+        format!(
+            "{int_part}.{trimmed}{}",
+            "0".repeat(min_decimals - trimmed.len())
+        )
+    }
+}
+
 /// Format an amount with its currency (e.g., "$100.00 USD", "0.5 ETH").
 pub(super) fn format_amount(amount: &str, currency: &str) -> String {
     match currency {
-        "USD" => format!("${} {}", amount, currency),
-        "EUR" => format!("\u{20ac}{} {}", amount, currency),
-        "GBP" => format!("\u{00a3}{} {}", amount, currency),
-        _ => format!("{} {}", amount, currency),
+        "USD" => format!("${} {}", trim_decimal(amount, 2), currency),
+        "EUR" => format!("\u{20ac}{} {}", trim_decimal(amount, 2), currency),
+        "GBP" => format!("\u{00a3}{} {}", trim_decimal(amount, 2), currency),
+        _ => format!("{} {}", trim_decimal(amount, 0), currency),
     }
 }
 
@@ -287,6 +315,14 @@ mod tests {
         assert_eq!(format_amount("25.00", "GBP"), "\u{00a3}25.00 GBP");
         assert_eq!(format_amount("1.5", "ETH"), "1.5 ETH");
         assert_eq!(format_amount("0.001", "BTC"), "0.001 BTC");
+    }
+
+    #[test]
+    fn test_format_amount_trims_a_raw_numeric_38_18_string() {
+        // The server sends amounts as NUMERIC(38,18): "30" arrives as
+        // "30.000000000000000000", not "30.00".
+        assert_eq!(format_amount("30.000000000000000000", "USD"), "$30.00 USD");
+        assert_eq!(format_amount("0.000000000000000000", "USD"), "$0.00 USD");
     }
 
     #[test]
