@@ -213,6 +213,13 @@ fn render_wallet_actions(
                                     view! {
                                         <button
                                             class="ps-btn ps-btn-secondary"
+                                            // A connect-and-send is already an approval round-trip
+                                            // through the wallet; without this a double-click (or
+                                            // picking two wallets) fires two concurrent sends for
+                                            // one invoice.
+                                            disabled=move || {
+                                                matches!(status.get(), WalletActionStatus::Connecting)
+                                            }
                                             on:click=move |_| {
                                                 let provider = provider.clone();
                                                 let payment_address = payment_address.clone();
@@ -288,23 +295,31 @@ async fn connect_and_send(
         Ok(v) => v,
         Err(e) => return WalletActionStatus::Error(e),
     };
-    if js_sys::Array::from(&accounts).length() == 0 {
+    // `eth_sendTransaction`'s `from` is required by every wallet that
+    // implements it — without it the send below reaches the wallet and is
+    // rejected there, so the connected account has to survive past the
+    // "is anyone connected" check rather than being discarded after it.
+    let Some(from_address) = js_sys::Array::from(&accounts)
+        .get(0)
+        .as_string()
+        .filter(|a| !a.is_empty())
+    else {
         return WalletActionStatus::Error("wallet returned no account".to_string());
-    }
+    };
 
     let reported =
         match provider_request(provider, "eth_chainId", &js_sys::Array::new().into()).await {
             Ok(v) => v,
             Err(e) => return WalletActionStatus::Error(e),
         };
-    let matches = reported
-        .as_string()
-        .is_some_and(|r| r.eq_ignore_ascii_case(expected_chain_hex));
-    if !matches {
+    if !network_matches(reported.as_string().as_deref(), expected_chain_hex) {
         return WalletActionStatus::WrongNetwork(chain_label.to_string());
     }
 
     let tx = js_sys::Object::new();
+    if js_sys::Reflect::set(&tx, &"from".into(), &from_address.into()).is_err() {
+        return WalletActionStatus::Error("failed to build transaction".to_string());
+    }
     match &transfer.token_address {
         Some(token) => {
             let calldata = match erc20_transfer_calldata(payment_address, &transfer.amount) {
@@ -337,6 +352,16 @@ async fn connect_and_send(
         Ok(_) => WalletActionStatus::Sent,
         Err(e) => WalletActionStatus::Error(e),
     }
+}
+
+/// Whether a wallet's `eth_chainId` reply matches the invoice's chain.
+///
+/// Pulled out of `connect_and_send` as a plain string comparison so it can be
+/// unit-tested without a mocked EIP-1193 provider — the JS-interop call
+/// around it (`reported.as_string()`) is the only part that actually needs
+/// wasm.
+fn network_matches(reported: Option<&str>, expected_chain_hex: &str) -> bool {
+    reported.is_some_and(|r| r.eq_ignore_ascii_case(expected_chain_hex))
 }
 
 /// Native-asset transfer value, hex-encoded for `eth_sendTransaction`.
@@ -429,6 +454,33 @@ mod wallet_action_tests {
     fn a_decimal_display_amount_is_refused_not_silently_miscoded() {
         assert!(native_transfer_value_hex("0.047").is_err());
         assert!(native_transfer_value_hex("").is_err());
+    }
+
+    #[test]
+    fn network_matches_accepts_an_exact_chain_id() {
+        assert!(network_matches(Some("0x1"), "0x1"));
+    }
+
+    /// Wallets are inconsistent about hex case in `eth_chainId` replies —
+    /// the comparison has to ignore it or a legitimately-matching wallet
+    /// gets told it's on the wrong network.
+    #[test]
+    fn network_matches_ignores_hex_case() {
+        assert!(network_matches(Some("0X1"), "0x1"));
+        assert!(network_matches(Some("0xA86A"), "0xa86a"));
+    }
+
+    #[test]
+    fn network_matches_rejects_a_different_chain() {
+        assert!(!network_matches(Some("0x89"), "0x1"));
+    }
+
+    /// A provider that answers `eth_chainId` with something other than a
+    /// plain string (`None` here stands in for `reported.as_string()`
+    /// returning `None`) must fail closed, not be treated as a match.
+    #[test]
+    fn network_matches_rejects_a_non_string_reply() {
+        assert!(!network_matches(None, "0x1"));
     }
 }
 
