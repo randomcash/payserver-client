@@ -141,44 +141,10 @@ mod tests {
     /// rather than a list of them that someone has to remember to update.
     const SOURCE: &str = include_str!("feedback.rs");
 
-    /// Whether `styles.css` has any rule that could match `class`. Same
-    /// matcher as the one in `plugin_page.rs` - see there for why it needs to
-    /// be a whole-token search rather than a substring one.
-    fn is_defined(class: &str) -> bool {
-        let styles = strip_comments(STYLES);
-        let needle = format!(".{class}");
-        let mut from = 0;
-        while let Some(at) = styles[from..].find(&needle) {
-            let start = from + at;
-            let after = styles[start + needle.len()..].chars().next();
-            let before = styles[..start].chars().next_back();
-            let boundary_before =
-                before.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
-            let boundary_after =
-                after.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
-            if boundary_before && boundary_after {
-                return true;
-            }
-            from = start + 1;
-        }
-        false
-    }
-
-    /// `/* ... */` removed, so a class named in prose is not mistaken for a
-    /// class that is styled.
-    fn strip_comments(css: &str) -> String {
-        let mut out = String::with_capacity(css.len());
-        let mut rest = css;
-        while let Some(open) = rest.find("/*") {
-            out.push_str(&rest[..open]);
-            match rest[open + 2..].find("*/") {
-                Some(close) => rest = &rest[open + 2 + close + 2..],
-                None => return out,
-            }
-        }
-        out.push_str(rest);
-        out
-    }
+    // `is_defined` and the literal-class scanner live in `crate::style_check`,
+    // shared with `pages/plugin_page.rs`'s copy of this same check, so the
+    // two cannot drift apart.
+    use crate::style_check::{is_defined, literal_classes};
 
     /// Every class these components put in the markup must exist in the
     /// stylesheet.
@@ -193,21 +159,9 @@ mod tests {
     fn every_class_these_components_emit_is_defined_in_the_stylesheet() {
         let mut missing = Vec::new();
 
-        let code: String = SOURCE
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let mut rest = code.as_str();
-        while let Some(at) = rest.find("class=\"") {
-            rest = &rest[at + 7..];
-            let Some(end) = rest.find('"') else { break };
-            let (value, tail) = rest.split_at(end);
-            rest = tail;
-            for class in value.split_whitespace() {
-                if !is_defined(class) {
-                    missing.push(class.to_string());
-                }
+        for class in literal_classes(SOURCE) {
+            if !is_defined(STYLES, &class) {
+                missing.push(class);
             }
         }
 
@@ -220,15 +174,46 @@ mod tests {
         );
     }
 
+    /// `literal_classes` only sees a class written as `class="..."`. A class
+    /// built as `class={some_helper()}` would be invisible to it - exactly
+    /// the gap `plugin_page.rs` closes by calling its own class-choosing
+    /// functions (`tone_class`, `notice_class`, `button_class`) and checking
+    /// their output directly. None of the components here choose a class that
+    /// way today, so this check exists to keep that fact loud: the day one
+    /// does, it must fail until the class is added to the check above,
+    /// the same way `plugin_page.rs`'s `from_functions` list is kept in step
+    /// with the enums it reads.
+    #[test]
+    fn no_class_is_computed_outside_the_literal_scan_above() {
+        // Built from parts, none of which spell `class="` on their own, so
+        // this line does not itself contain the pattern it is checking for -
+        // `SOURCE` is this whole file, tests included.
+        let dynamic_class_attribute = ["class", "=", "{"].concat();
+
+        let code: String = SOURCE
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !code.contains(&dynamic_class_attribute),
+            "a class attribute written as an expression rather than a literal string \
+             appeared in this file - the literal-string scan above cannot see it, so \
+             add its possible outputs to that scan the way plugin_page.rs's \
+             `from_functions` list does, or a class here can go unstyled with a green \
+             build"
+        );
+    }
+
     /// The check above only means something if it can fail.
     #[test]
     fn a_class_the_stylesheet_does_not_define_is_detected() {
         assert!(
-            !is_defined("definitely-not-a-class-in-this-stylesheet"),
+            !is_defined(STYLES, "definitely-not-a-class-in-this-stylesheet"),
             "the detector must not report an undefined class as present"
         );
         assert!(
-            is_defined("loading-container"),
+            is_defined(STYLES, "loading-container"),
             "and must find one that is present"
         );
     }

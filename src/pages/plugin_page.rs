@@ -402,54 +402,10 @@ mod tests {
     /// rather than a list of them that someone has to remember to update.
     const SOURCE: &str = include_str!("plugin_page.rs");
 
-    /// Whether `styles.css` has any rule that could match `class`.
-    ///
-    /// Looks for the selector as a whole token - `.ps-card` must not be
-    /// satisfied by `.ps-card-body` - and accepts it anywhere a selector may
-    /// legally end: a brace, a comma, whitespace, a combinator, a pseudo, or
-    /// another class in a compound selector.
-    fn is_defined(class: &str) -> bool {
-        // Comments stripped first. This stylesheet contains a comment that
-        // mentions `.page` by name - written while fixing the very bug this
-        // guard exists to catch - and a scan that counted it would report the
-        // class as defined because someone described it.
-        let styles = strip_comments(STYLES);
-        let needle = format!(".{class}");
-        let mut from = 0;
-        while let Some(at) = styles[from..].find(&needle) {
-            let start = from + at;
-            let after = styles[start + needle.len()..].chars().next();
-            let before = styles[..start].chars().next_back();
-            // Not preceded by an identifier character, or `.ps-page` would be
-            // found inside `.x.ps-page` only - which is fine - but also
-            // inside a longer name it is not part of.
-            let boundary_before =
-                before.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
-            let boundary_after =
-                after.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
-            if boundary_before && boundary_after {
-                return true;
-            }
-            from = start + 1;
-        }
-        false
-    }
-
-    /// `/* ... */` removed, so a class named in prose is not mistaken for a
-    /// class that is styled.
-    fn strip_comments(css: &str) -> String {
-        let mut out = String::with_capacity(css.len());
-        let mut rest = css;
-        while let Some(open) = rest.find("/*") {
-            out.push_str(&rest[..open]);
-            match rest[open + 2..].find("*/") {
-                Some(close) => rest = &rest[open + 2 + close + 2..],
-                None => return out,
-            }
-        }
-        out.push_str(rest);
-        out
-    }
+    // `is_defined` and `strip_comments` live in `crate::style_check`, shared
+    // with `components/feedback.rs`'s copy of this same check, so the two
+    // cannot drift apart.
+    use crate::style_check::is_defined;
 
     /// Every class this renderer puts in the markup must exist in the
     /// stylesheet.
@@ -465,24 +421,10 @@ mod tests {
     fn every_class_this_renderer_emits_is_defined_in_the_stylesheet() {
         let mut missing = Vec::new();
 
-        // The literal `class` attributes in the markup above, with this
-        // file's own comments dropped first - the doc comments here quote
-        // class names while explaining them.
-        let code: String = SOURCE
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let mut rest = code.as_str();
-        while let Some(at) = rest.find("class=\"") {
-            rest = &rest[at + 7..];
-            let Some(end) = rest.find('"') else { break };
-            let (value, tail) = rest.split_at(end);
-            rest = tail;
-            for class in value.split_whitespace() {
-                if !is_defined(class) {
-                    missing.push(class.to_string());
-                }
+        // The literal `class` attributes in the markup above.
+        for class in crate::style_check::literal_classes(SOURCE) {
+            if !is_defined(STYLES, &class) {
+                missing.push(class);
             }
         }
 
@@ -511,7 +453,7 @@ mod tests {
         );
         for value in from_functions {
             for class in value.split_whitespace() {
-                if !is_defined(class) {
+                if !is_defined(STYLES, class) {
                     missing.push(class.to_string());
                 }
             }
@@ -530,12 +472,15 @@ mod tests {
     #[test]
     fn a_class_the_stylesheet_does_not_define_is_detected() {
         assert!(
-            !is_defined("definitely-not-a-class-in-this-stylesheet"),
+            !is_defined(STYLES, "definitely-not-a-class-in-this-stylesheet"),
             "the detector must not report an undefined class as present"
         );
-        assert!(is_defined("ps-page"), "and must find one that is present");
         assert!(
-            !is_defined("page"),
+            is_defined(STYLES, "ps-page"),
+            "and must find one that is present"
+        );
+        assert!(
+            !is_defined(STYLES, "page"),
             "`.page` is exactly the class this renderer used to emit and the \
              stylesheet has never defined; if this starts passing, the guard above \
              has stopped guarding"
