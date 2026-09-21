@@ -20,6 +20,13 @@ mod qr_picker;
 use countdown::CountdownTimer;
 use qr_picker::{QrEncoding, QrPicker};
 
+/// How often the page re-reads the invoice when nothing has pushed to it.
+///
+/// Slow enough to be free - six requests a minute against a read budget of
+/// sixty - and fast enough that a customer who has paid is never left looking
+/// at a stale countdown for long.
+const POLL_INTERVAL_MS: u32 = 10_000;
+
 /// Format a human-readable amount from smallest units.
 ///
 /// e.g., "1000000" with 6 decimals -> "1.000000"
@@ -108,6 +115,40 @@ pub fn CheckoutPage() -> impl IntoView {
         let _ = ws_for_effect.connect(&ws_url, None);
         // Reset refresh so the resource re-fetches with fresh WS state
         set_refresh.update(|n| *n += 1);
+    });
+
+    // A poll behind the socket, because the socket is the fast path and not
+    // the source of truth.
+    //
+    // Without this the page refetched *only* on a WebSocket message, so a
+    // socket that never connected meant a customer who had paid watched the
+    // countdown run out on an invoice the server had already marked paid.
+    // That is what happened: the `ws` rate limit refused the sixth connection
+    // attempt in a minute, the refusal closed the socket, the close scheduled
+    // another attempt, and the loop sustained itself. The payment had settled
+    // six minutes earlier.
+    //
+    // Ten seconds costs six requests a minute against a read budget of sixty,
+    // and it bounds the worst case at "ten seconds late" instead of "never".
+    // The socket still does the work when it is up; this only decides what
+    // happens when it is not.
+    let poll_handle: std::rc::Rc<std::cell::RefCell<Option<gloo_timers::callback::Interval>>> =
+        std::rc::Rc::new(std::cell::RefCell::new(None));
+    let poll_for_effect = poll_handle.clone();
+    Effect::new(move |_| {
+        if invoice_id().is_empty() {
+            *poll_for_effect.borrow_mut() = None;
+            return;
+        }
+        let interval = gloo_timers::callback::Interval::new(POLL_INTERVAL_MS, move || {
+            set_refresh.update(|n| *n += 1);
+        });
+        *poll_for_effect.borrow_mut() = Some(interval);
+    });
+
+    let poll_cleanup = SendWrapper::new(poll_handle);
+    on_cleanup(move || {
+        *poll_cleanup.borrow_mut() = None;
     });
 
     // Clean up WebSocket on unmount
