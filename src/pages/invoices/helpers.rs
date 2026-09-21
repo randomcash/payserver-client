@@ -2,6 +2,8 @@
 
 use leptos::prelude::*;
 
+use ui_kit::{round_amount, trim_amount};
+
 use crate::api::{Invoice, Payment};
 
 pub(super) use crate::util::chain_name;
@@ -67,41 +69,23 @@ pub(super) fn format_date(iso: &str) -> String {
     iso.to_string()
 }
 
-/// Trim a decimal string's fractional part to the significant digits, keeping
-/// at least `min_decimals` (padding with zeros if it has fewer).
+/// Format an amount with its currency (e.g., "$100.00 USD", "0.5 ETH").
 ///
 /// Amounts arrive as a `NUMERIC(38,18)` string, so a due amount of "30"
-/// reaches here as `"30.000000000000000000"` — trimmed to `min_decimals: 2`,
-/// that reads "30.00" instead of gluing a currency symbol onto raw digits.
+/// reaches here as `"30.000000000000000000"`. A fiat currency rounds to its
+/// minor unit ([`round_amount`]) rather than trimming: trimming only strips
+/// zeros, so a value with genuine sub-cent precision (a fee, an FX split)
+/// would pass through unrounded. A crypto amount has no fixed minor unit, so
+/// it trims trailing zeros instead ([`trim_amount`]).
 ///
-/// This is arithmetic on strings, not `f64`: a `NUMERIC(38,18)` value can
-/// carry more precision than a float represents exactly.
-fn trim_decimal(decimal: &str, min_decimals: usize) -> String {
-    let Some((int_part, frac_part)) = decimal.split_once('.') else {
-        return decimal.to_string();
-    };
-    let trimmed = frac_part.trim_end_matches('0');
-    if trimmed.len() >= min_decimals {
-        if trimmed.is_empty() {
-            int_part.to_string()
-        } else {
-            format!("{int_part}.{trimmed}")
-        }
-    } else {
-        format!(
-            "{int_part}.{trimmed}{}",
-            "0".repeat(min_decimals - trimmed.len())
-        )
-    }
-}
-
-/// Format an amount with its currency (e.g., "$100.00 USD", "0.5 ETH").
+/// This is the literal form: never the subscript summary, since a merchant
+/// reading "amount due" may relay it to the customer as the figure to pay.
 pub(super) fn format_amount(amount: &str, currency: &str) -> String {
     match currency {
-        "USD" => format!("${} {}", trim_decimal(amount, 2), currency),
-        "EUR" => format!("\u{20ac}{} {}", trim_decimal(amount, 2), currency),
-        "GBP" => format!("\u{00a3}{} {}", trim_decimal(amount, 2), currency),
-        _ => format!("{} {}", trim_decimal(amount, 0), currency),
+        "USD" => format!("${} {}", round_amount(amount, 2), currency),
+        "EUR" => format!("\u{20ac}{} {}", round_amount(amount, 2), currency),
+        "GBP" => format!("\u{00a3}{} {}", round_amount(amount, 2), currency),
+        _ => format!("{} {}", trim_amount(amount, 0), currency),
     }
 }
 
@@ -323,6 +307,26 @@ mod tests {
         // "30.000000000000000000", not "30.00".
         assert_eq!(format_amount("30.000000000000000000", "USD"), "$30.00 USD");
         assert_eq!(format_amount("0.000000000000000000", "USD"), "$0.00 USD");
+    }
+
+    #[test]
+    fn test_format_amount_rounds_fiat_past_the_cent_boundary() {
+        // Sub-cent precision (a fee, an FX split) must round to the minor
+        // unit, not pass through unrounded: trimming alone would leave
+        // "$30.126 USD" untouched, since there are no trailing zeros to strip.
+        assert_eq!(format_amount("30.126000000000000000", "USD"), "$30.13 USD");
+    }
+
+    #[test]
+    fn test_format_amount_trims_a_crypto_amount_with_real_trailing_zeros() {
+        // A no-op case (like "1.5 ETH" above) would pass even if the default
+        // branch stopped trimming entirely - this one only passes if it does.
+        assert_eq!(format_amount("0.500000000", "BTC"), "0.5 BTC");
+    }
+
+    #[test]
+    fn test_format_amount_pads_a_whole_number_to_the_currency_scale() {
+        assert_eq!(format_amount("30", "USD"), "$30.00 USD");
     }
 
     #[test]

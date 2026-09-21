@@ -9,7 +9,7 @@ use leptos_router::hooks::use_params_map;
 
 use send_wrapper::SendWrapper;
 
-use ui_kit::CopyButton;
+use ui_kit::{CopyButton, format_units};
 
 use crate::api::{ApiClient, ApiError, CheckoutResponse, PaymentOption};
 use crate::services::websocket::{StatusUpdate, WebSocketService};
@@ -26,30 +26,6 @@ use qr_picker::{QrEncoding, QrPicker};
 /// sixty - and fast enough that a customer who has paid is never left looking
 /// at a stale countdown for long.
 const POLL_INTERVAL_MS: u32 = 10_000;
-
-/// Format a human-readable amount from smallest units.
-///
-/// e.g., "1000000" with 6 decimals -> "1.000000"
-fn format_crypto_amount(smallest_units: &str, decimals: u8) -> String {
-    if decimals == 0 {
-        return smallest_units.to_string();
-    }
-    let s = smallest_units.to_string();
-    let len = s.len();
-    let d = decimals as usize;
-    if len <= d {
-        let zeros = "0".repeat(d - len);
-        format!("0.{}{}", zeros, s.trim_end_matches('0'))
-    } else {
-        let (int_part, frac_part) = s.split_at(len - d);
-        let trimmed = frac_part.trim_end_matches('0');
-        if trimmed.is_empty() {
-            int_part.to_string()
-        } else {
-            format!("{}.{}", int_part, trimmed)
-        }
-    }
-}
 
 /// Public checkout page.
 #[component]
@@ -324,7 +300,7 @@ fn render_checkout(
                 let opt = options.get(idx).or(options.first());
                 opt.map(|option| {
                     let addr = option.payment_address.clone();
-                    let display_amount = format_crypto_amount(&option.amount, option.decimals);
+                    let display_amount = format_units(&option.amount, option.decimals);
                     let asset = option.asset_symbol.clone();
                     let chain = chain_name(&option.chain_id).to_string();
                     let addr_for_copy = addr.clone();
@@ -339,8 +315,13 @@ fn render_checkout(
                     // is the common case.
                     //
                     // `option.amount` is already base units - the same string
-                    // `format_crypto_amount` divides for display - which is what
-                    // the URI wants. Nothing converts through a float.
+                    // `format_units` divides for display - which is what the
+                    // URI wants. Nothing converts through a float.
+                    //
+                    // `display_amount` is the payable amount the customer
+                    // sends: always the plain literal, never the subscript
+                    // summary form, since a wallet has no idea what a
+                    // compressed run of leading zeros means.
                     //
                     // The EIP-681 card is omitted, not emptied, when a URI
                     // cannot be built with certainty (a non-EVM chain, an
