@@ -197,6 +197,66 @@ test.describe('table column alignment', () => {
 });
 
 /**
+ * A plugin table (`plugin_page.rs` renders every `PageElement::Table` as
+ * `.table-container > table.table`) has no fixed column widths, so a narrow
+ * viewport used to shrink columns to fit instead of scrolling - clipping a
+ * long decimal (`PAID TO DATE`, a NUMERIC(38,18) sum) mid-word and wrapping a
+ * status cell onto a second line. `.table` now gets a `min-width` under the
+ * same breakpoint the sibling tables already use, forcing `.table-container`
+ * (which sets `overflow-x: auto`) to scroll instead of the columns squeezing.
+ *
+ * Two things could still go wrong that a screenshot would catch and a class
+ * name would not: the min-width could land on a container with no scroll
+ * rule, in which case the *page* scrolls sideways instead of the table - the
+ * one outcome that is explicitly not allowed - or the rule could simply not
+ * apply and the old clipping would return.
+ */
+test.describe('plugin page table overflow', () => {
+  const TABLE = `
+    <div class="ps-page">
+      <div class="ps-card">
+        <div class="ps-card-body">
+          <div class="table-container">
+            <table class="table">
+              <thead><tr><th>Plan</th><th>Status</th><th>Paid To Date</th></tr></thead>
+              <tbody>
+                <tr><td>Pro Monthly</td><td>Active</td><td>0.500000000000000000 USDC</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  test('the table scrolls inside its own container on a narrow screen', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.setContent(`<style>${CSS}</style>${TABLE}`);
+
+    const overflowX = await page
+      .locator('.table-container')
+      .evaluate((el) => getComputedStyle(el).overflowX);
+    expect(overflowX, '.table-container must be the scroll boundary').toBe('auto');
+
+    const { containerScrolls, tableWidth } = await page.locator('.table-container').evaluate((el) => ({
+      containerScrolls: el.scrollWidth > el.clientWidth,
+      tableWidth: el.querySelector('table')!.getBoundingClientRect().width,
+    }));
+    expect(containerScrolls, 'the wide table must overflow its own container').toBe(true);
+    expect(tableWidth, 'table must not be squeezed narrower than its min-width').toBeGreaterThanOrEqual(500);
+  });
+
+  test('the page body does not scroll sideways when the table does', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.setContent(`<style>${CSS}</style>${TABLE}`);
+
+    const bodyOverflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(bodyOverflows, 'the table must scroll inside .table-container, not push the page wide').toBe(false);
+  });
+});
+
+/**
  * `.ps-recovery-confirm` carried a copy of the `.ps-checkbox-label` rule -
  * `display: flex` with the warning background and padding. Applied to the step
  * container instead of the checkbox, it laid the four children out as four
