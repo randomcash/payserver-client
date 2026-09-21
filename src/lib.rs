@@ -212,7 +212,7 @@ fn render_wallet_actions(
                                     let provider = wallet.provider.clone();
                                     view! {
                                         <button
-                                            class="ps-btn ps-btn-secondary checkout-wallet-option"
+                                            class="ps-btn ps-btn-secondary"
                                             on:click=move |_| {
                                                 let provider = provider.clone();
                                                 let payment_address = payment_address.clone();
