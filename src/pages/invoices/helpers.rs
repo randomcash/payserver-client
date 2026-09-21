@@ -68,12 +68,111 @@ pub(super) fn format_date(iso: &str) -> String {
 }
 
 /// Format an amount with its currency (e.g., "$100.00 USD", "0.5 ETH").
+///
+/// `amount` arrives as the raw `NUMERIC(38,18)` string the server stores it
+/// as, so "30" comes back as "30.000000000000000000". Fiat currencies get
+/// rounded to their usual two decimals; anything else just loses the
+/// trailing zeros the database carries and nobody reads.
 pub(super) fn format_amount(amount: &str, currency: &str) -> String {
     match currency {
-        "USD" => format!("${} {}", amount, currency),
-        "EUR" => format!("\u{20ac}{} {}", amount, currency),
-        "GBP" => format!("\u{00a3}{} {}", amount, currency),
-        _ => format!("{} {}", amount, currency),
+        "USD" => format!("${} {}", round_decimal(amount, 2), currency),
+        "EUR" => format!("\u{20ac}{} {}", round_decimal(amount, 2), currency),
+        "GBP" => format!("\u{00a3}{} {}", round_decimal(amount, 2), currency),
+        _ => format!("{} {}", trim_trailing_zeros(amount), currency),
+    }
+}
+
+/// Drop trailing zeros from a decimal string's fractional part.
+///
+/// "1.5000" -> "1.5", "30.000000000000000000" -> "30".
+fn trim_trailing_zeros(amount: &str) -> String {
+    match amount.split_once('.') {
+        Some((int_part, frac_part)) => {
+            let trimmed = frac_part.trim_end_matches('0');
+            if trimmed.is_empty() {
+                int_part.to_string()
+            } else {
+                format!("{int_part}.{trimmed}")
+            }
+        }
+        None => amount.to_string(),
+    }
+}
+
+/// Round a decimal string to a fixed number of places.
+///
+/// Half-up on the first dropped digit is exact here: everything past that
+/// digit can never carry the remainder across the halfway point, so it alone
+/// decides the direction. Falls back to the original string on anything that
+/// isn't the plain decimal the server always sends, rather than panic on it.
+fn round_decimal(amount: &str, places: usize) -> String {
+    let (int_part, frac_part) = amount.split_once('.').unwrap_or((amount, ""));
+    let Ok(mut int_val) = int_part.parse::<u128>() else {
+        return amount.to_string();
+    };
+    if !frac_part.bytes().all(|b| b.is_ascii_digit()) {
+        return amount.to_string();
+    }
+
+    let frac_digits: Vec<u8> = frac_part.bytes().map(|b| b - b'0').collect();
+    let mut kept: Vec<u8> = (0..places)
+        .map(|i| *frac_digits.get(i).unwrap_or(&0))
+        .collect();
+    let round_up = frac_digits.get(places).copied().unwrap_or(0) >= 5;
+
+    if round_up {
+        let mut i = places;
+        loop {
+            if i == 0 {
+                int_val += 1;
+                break;
+            }
+            i -= 1;
+            if kept[i] == 9 {
+                kept[i] = 0;
+            } else {
+                kept[i] += 1;
+                break;
+            }
+        }
+    }
+
+    if places == 0 {
+        int_val.to_string()
+    } else {
+        let frac_str: String = kept.iter().map(|d| (d + b'0') as char).collect();
+        format!("{int_val}.{frac_str}")
+    }
+}
+
+/// Scale a raw integer amount in smallest units (e.g. wei) into a human
+/// decimal string, given the asset's decimal places.
+///
+/// `Payment.amount` comes straight off `payments.amount`, a column documented
+/// as "in smallest unit" - unlike `Invoice.amount`, which the server already
+/// stores as a human fiat amount. This is the inverse of the scaling the
+/// server does when it first records the payment, done here only for the CSV
+/// export. Falls back to the raw string on anything that isn't a plain
+/// unsigned integer, the same fail-safe `round_decimal` uses.
+pub(super) fn scale_smallest_units(raw: &str, decimals: u8) -> String {
+    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+        return raw.to_string();
+    }
+    let decimals = decimals as usize;
+    if decimals == 0 {
+        return raw.to_string();
+    }
+
+    let padded = format!("{raw:0>width$}", width = decimals + 1);
+    let (int_part, frac_part) = padded.split_at(padded.len() - decimals);
+    let int_part = int_part.trim_start_matches('0');
+    let int_part = if int_part.is_empty() { "0" } else { int_part };
+    let frac_trimmed = frac_part.trim_end_matches('0');
+
+    if frac_trimmed.is_empty() {
+        int_part.to_string()
+    } else {
+        format!("{int_part}.{frac_trimmed}")
     }
 }
 
@@ -287,6 +386,39 @@ mod tests {
         assert_eq!(format_amount("25.00", "GBP"), "\u{00a3}25.00 GBP");
         assert_eq!(format_amount("1.5", "ETH"), "1.5 ETH");
         assert_eq!(format_amount("0.001", "BTC"), "0.001 BTC");
+    }
+
+    #[test]
+    fn test_format_amount_raw_numeric_precision() {
+        // What the server actually sends: NUMERIC(38,18) serialized straight
+        // to a string. The merchant's most-looked-at page must not show it.
+        assert_eq!(format_amount("30.000000000000000000", "USD"), "$30.00 USD");
+        assert_eq!(format_amount("0.000000000000000000", "USD"), "$0.00 USD");
+        assert_eq!(format_amount("1.500000000000000000", "ETH"), "1.5 ETH");
+    }
+
+    #[test]
+    fn test_round_decimal_rounds_half_up() {
+        assert_eq!(round_decimal("29.995000000000000000", 2), "30.00");
+        assert_eq!(round_decimal("29.994999999999999999", 2), "29.99");
+        assert_eq!(round_decimal("9.995", 2), "10.00");
+        assert_eq!(round_decimal("100", 2), "100.00");
+    }
+
+    #[test]
+    fn test_scale_smallest_units() {
+        // 0.05 ETH, the exact wei-vs-ETH gap the CSV export used to skip.
+        assert_eq!(scale_smallest_units("50000000000000000", 18), "0.05");
+        // USDC-style 6 decimals.
+        assert_eq!(scale_smallest_units("1500000", 6), "1.5");
+        // Less than one whole unit: needs the leading zero the padding exists for.
+        assert_eq!(scale_smallest_units("30", 18), "0.00000000000000003");
+        // Zero decimals: no fractional part to introduce.
+        assert_eq!(scale_smallest_units("42", 0), "42");
+        // Exact whole units still drop the trailing fractional zeros.
+        assert_eq!(scale_smallest_units("2000000000000000000", 18), "2");
+        // Non-numeric input falls back to the raw string rather than panicking.
+        assert_eq!(scale_smallest_units("not-a-number", 18), "not-a-number");
     }
 
     #[test]
