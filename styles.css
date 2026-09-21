@@ -866,6 +866,16 @@ a:hover {
     text-decoration: underline;
 }
 
+@media (max-width: 768px) {
+    /* Without this, a column with unbreakable content (a long decimal, a
+       status badge) shrinks until it wraps or clips instead of the table
+       scrolling inside `.table-container`, which already sets
+       `overflow-x: auto`. */
+    .table {
+        min-width: 500px;
+    }
+}
+
 /* ============================================
    Buttons
    ============================================ */
