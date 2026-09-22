@@ -610,7 +610,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn only_host_relative_paths_are_followed() {
         assert_eq!(safe_href("/checkout/9f3a"), Some("/checkout/9f3a"));
