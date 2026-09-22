@@ -96,6 +96,18 @@ pub fn checkout_plugin() -> CheckoutPluginConfig {
 pub(crate) struct WalletActionsContext {
     pub amount: String,
     pub token_address: Option<String>,
+    /// Set once a send succeeds, so a later render of this slot starts up
+    /// already locked instead of re-enabling the wallet buttons.
+    ///
+    /// `checkout.rs` rebuilds the whole payment-details subtree — including
+    /// a fresh `Idle` status signal inside `render_wallet_actions` — on
+    /// every resource refetch (the ten-second poll, and every websocket
+    /// update, which fires exactly when a just-broadcast payment is
+    /// detected). A status signal local to that subtree cannot survive
+    /// that rebuild, so this one is owned by `CheckoutPage`, above the
+    /// `Suspense` boundary, and threaded through context like the rest of
+    /// this struct.
+    pub sent_lock: leptos::prelude::RwSignal<bool>,
 }
 
 /// Outcome of a connect-and-send attempt, shown under the wallet list.
@@ -178,7 +190,8 @@ fn render_wallet_actions(
     let chain_label = crate::util::chain_name(&chain_id).to_string();
 
     let wallets = discover_wallets();
-    let (status, set_status) = signal(WalletActionStatus::Idle);
+    let sent_lock = transfer.sent_lock;
+    let (status, set_status) = signal(initial_wallet_status(sent_lock.get()));
 
     Some(
         view! {
@@ -233,6 +246,9 @@ fn render_wallet_actions(
                                                         &transfer,
                                                     )
                                                     .await;
+                                                    if matches!(outcome, WalletActionStatus::Sent) {
+                                                        sent_lock.set(true);
+                                                    }
                                                     set_status.set(outcome);
                                                 });
                                             }
@@ -406,6 +422,21 @@ fn should_show_wallet_list(wallets: &[crate::services::eip6963::DiscoveredWallet
     !wallets.is_empty()
 }
 
+/// The wallet-status signal's starting value: `Sent` if a previous render of
+/// this slot already sent, `Idle` otherwise. Pulled out as a plain function,
+/// same reasoning as `network_matches` — a signal created fresh inside a
+/// view can't be unit-tested, but the decision behind its initial value can.
+/// This is the piece that closes the double-send gap across a resource
+/// refetch: without it, a rebuilt slot always starts `Idle` regardless of
+/// what `sent_lock` says, re-enabling every wallet button.
+fn initial_wallet_status(previously_sent: bool) -> WalletActionStatus {
+    if previously_sent {
+        WalletActionStatus::Sent
+    } else {
+        WalletActionStatus::Idle
+    }
+}
+
 /// Whether a wallet button should be disabled: while a send is in flight,
 /// and permanently once any wallet in the list has sent. `status` is one
 /// signal shared by the whole list, and nothing ever moves it back to
@@ -457,6 +488,16 @@ fn erc20_transfer_calldata(recipient: &str, amount_base_units: &str) -> Result<S
 #[cfg(test)]
 mod wallet_action_tests {
     use super::*;
+
+    /// `checkout.rs` calls this slot through `checkout_plugin()`, not
+    /// `render_wallet_actions` directly — nothing else here would notice if
+    /// a future edit dropped the field back to `None` or swapped in a
+    /// no-op, silently reintroducing the unwired-slot bug this ticket
+    /// exists to fix.
+    #[test]
+    fn checkout_plugin_wires_up_wallet_actions() {
+        assert!(checkout_plugin().wallet_actions.is_some());
+    }
 
     const RECIPIENT: &str = "0x66da354a361225a8C4FF5232f413A80af943C14c";
 
@@ -543,6 +584,7 @@ mod wallet_action_tests {
         WalletActionsContext {
             amount: "1000000".to_string(),
             token_address: None,
+            sent_lock: leptos::prelude::RwSignal::new(false),
         }
     }
 
@@ -555,6 +597,7 @@ mod wallet_action_tests {
         let transfer = WalletActionsContext {
             amount: "1000000".to_string(),
             token_address: Some("0xTokenContract".to_string()),
+            sent_lock: leptos::prelude::RwSignal::new(false),
         };
         match build_transfer_tx_fields(RECIPIENT, &transfer).expect("fields") {
             TransferTxFields::Erc20 { to, data } => {
@@ -588,6 +631,7 @@ mod wallet_action_tests {
         let transfer = WalletActionsContext {
             amount: "0.047".to_string(),
             token_address: None,
+            sent_lock: leptos::prelude::RwSignal::new(false),
         };
         assert!(build_transfer_tx_fields(RECIPIENT, &transfer).is_err());
     }
@@ -662,6 +706,29 @@ mod wallet_action_tests {
         assert!(!wallet_button_disabled(&WalletActionStatus::Error(
             "boom".to_string()
         )));
+    }
+
+    /// This is the guard that closes the double-send gap: without it, a
+    /// slot rebuilt after a poll tick or websocket update — which happens
+    /// while a just-sent payment is still unconfirmed — would always start
+    /// its status signal at `Idle`, re-enabling every wallet button
+    /// regardless of `sent_lock`.
+    #[test]
+    fn initial_wallet_status_locks_immediately_if_a_previous_render_already_sent() {
+        assert!(matches!(
+            initial_wallet_status(true),
+            WalletActionStatus::Sent
+        ));
+        assert!(wallet_button_disabled(&initial_wallet_status(true)));
+    }
+
+    #[test]
+    fn initial_wallet_status_starts_idle_when_nothing_has_sent_yet() {
+        assert!(matches!(
+            initial_wallet_status(false),
+            WalletActionStatus::Idle
+        ));
+        assert!(!wallet_button_disabled(&initial_wallet_status(false)));
     }
 }
 
