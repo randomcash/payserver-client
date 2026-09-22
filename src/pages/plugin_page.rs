@@ -606,6 +606,11 @@ mod tests {
     // assertions each - classes, the element's own contract, and that its
     // text actually reaches the markup - against `render`'s real output, not
     // the `view!` literal by eye.
+    //
+    // Ablated as a sample rather than all fifteen: `a_badge_renders_...` and
+    // `a_table_renders_...` below, one assertion broken at a time (wrong
+    // class, wrong tag/structure, blanked text), each confirmed to fail on
+    // its own before the source was restored.
 
     #[test]
     fn a_badge_renders_its_tone_class_and_text() {
