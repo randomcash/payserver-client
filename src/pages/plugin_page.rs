@@ -560,4 +560,29 @@ mod tests {
         assert_eq!(safe_href("checkout/9f3a"), None, "a bare relative path");
         assert_eq!(safe_href(""), None);
     }
+
+    /// The module doc calls a silently blank panel beside a paywall "the
+    /// worst thing this renderer could produce". Checked against markup a
+    /// browser would actually receive, not the `view!` literal by eye.
+    ///
+    /// `render` is the same private helper `PluginPageView` calls above to
+    /// draw the page mounted at `/plugins/:id/:path` in `app/mod.rs` - this
+    /// exercises the renderer that ships, not a revived one.
+    ///
+    /// `PageElement::Unknown` is not just constructible in a test: the type
+    /// is `#[serde(tag = "type", ...)]` with `#[serde(other)]` on `Unknown`
+    /// (`payserver-plugin-api/src/page.rs`), so any `type` string a plugin
+    /// sends that predates this client's vocabulary deserializes into it on
+    /// the real network path, `ApiClient::get_plugin_page` in
+    /// `api/client/plugins.rs`. This test exercises what that path produces
+    /// once it reaches `render`, not a value only test code can build.
+    #[test]
+    fn an_unrecognised_element_renders_a_visible_placeholder() {
+        use leptos::prelude::RenderHtml;
+
+        let html = render(&PageElement::Unknown).to_html();
+        assert!(html.contains("plugin-notice plugin-notice-warning"));
+        assert!(html.contains(r#"role="status""#));
+        assert!(html.contains("This part of the page needs a newer version of the dashboard."));
+    }
 }
