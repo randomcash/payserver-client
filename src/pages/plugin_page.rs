@@ -564,6 +564,10 @@ mod tests {
     /// The module doc calls a silently blank panel beside a paywall "the
     /// worst thing this renderer could produce". Checked against markup a
     /// browser would actually receive, not the `view!` literal by eye.
+    ///
+    /// `render` is the same private helper `PluginPageView` calls above to
+    /// draw the page mounted at `/plugins/:id/:path` in `app/mod.rs` - this
+    /// exercises the renderer that ships, not a revived one.
     #[test]
     fn an_unrecognised_element_renders_a_visible_placeholder() {
         use leptos::prelude::RenderHtml;
