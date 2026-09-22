@@ -9,6 +9,14 @@ use crate::api::{
     UpdateWalletRequest, UpdateWebhookRequest, Wallet, WalletXpubResponse,
 };
 
+/// Path for a single wallet, the one piece of `update_wallet` and
+/// `delete_wallet` that isn't a straight pass-through to the transport - and
+/// so the one piece of those calls a test can actually pin down, since
+/// `gloo-net` itself only runs inside a wasm host and can't be exercised here.
+fn wallet_path(id: &str) -> String {
+    format!("/api/wallets/{}", id)
+}
+
 impl ApiClient {
     // =========================================================================
     // Stores
@@ -200,7 +208,7 @@ impl ApiClient {
         id: &str,
         req: &UpdateWalletRequest,
     ) -> Result<Wallet, ApiError> {
-        self.patch(&format!("/api/wallets/{}", id), req).await
+        self.patch(&wallet_path(id), req).await
     }
 
     /// Delete a wallet.
@@ -208,7 +216,7 @@ impl ApiClient {
     /// Refused while any store still derives from it, so this cannot silently
     /// strand a store's payment methods.
     pub async fn delete_wallet(&self, id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/wallets/{}", id)).await
+        self.delete(&wallet_path(id)).await
     }
 
     /// Read a wallet's FULL xpub.
@@ -218,5 +226,94 @@ impl ApiClient {
     /// by the merchant rather than something a page fetches to render.
     pub async fn export_wallet_xpub(&self, id: &str) -> Result<WalletXpubResponse, ApiError> {
         self.get(&format!("/api/wallets/{}/xpub", id)).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // `wallet_path` is what `update_wallet` and `delete_wallet` actually
+    // compute before handing off to the transport - the transport call
+    // itself can't run outside a wasm host, so this is the part a test can
+    // reach. A copy-pasted template from another domain (`/api/stores/{}`,
+    // `/api/wallets/{}/xpub`) would send an id-scoped request to the wrong
+    // collection, or to the wrong wallet endpoint.
+    #[test]
+    fn wallet_path_targets_the_given_wallet_in_the_wallets_collection() {
+        assert_eq!(wallet_path("abc-123"), "/api/wallets/abc-123");
+    }
+
+    #[test]
+    fn wallet_path_does_not_carry_a_trailing_segment() {
+        // export_wallet_xpub deliberately does - see its own doc comment -
+        // but update_wallet/delete_wallet must not drift onto that path.
+        assert!(!wallet_path("abc-123").ends_with("/xpub"));
+    }
+
+    // create_wallet and update_wallet otherwise forward their request
+    // struct to the transport untouched, so the request body a merchant's
+    // action produces is entirely down to how `CreateWalletRequest` and
+    // `UpdateWalletRequest` serialize. Both types are pinned from
+    // payserver-commons, not defined here, so these tests are the guard
+    // against a pin bump quietly changing the wire shape - for example by
+    // adding `skip_serializing_if` and dropping an explicit `false` or
+    // `null` this client relies on the server seeing.
+    #[test]
+    fn create_wallet_request_sends_an_explicit_namespace_and_a_null_name() {
+        let req = CreateWalletRequest {
+            xpub: "xpub6D4BDPcP2GT...".to_string(),
+            name: None,
+            namespace: "eip155".to_string(),
+        };
+
+        let body = serde_json::to_value(&req).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "xpub": "xpub6D4BDPcP2GT...",
+                "name": null,
+                "namespace": "eip155",
+            })
+        );
+    }
+
+    #[test]
+    fn update_wallet_request_sends_an_explicit_false_rather_than_omitting_it() {
+        // `is_primary: Some(false)` is documented as ignored server-side,
+        // but only because the server sees it - if this ever serialized to
+        // nothing, the field would stop existing on the wire and the
+        // server-side doc comment would describe behavior no request can
+        // trigger.
+        let req = UpdateWalletRequest {
+            name: None,
+            is_primary: Some(false),
+        };
+
+        let body = serde_json::to_value(&req).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "name": null,
+                "is_primary": false,
+            })
+        );
+    }
+
+    #[test]
+    fn update_wallet_request_promotes_with_an_explicit_true() {
+        let req = UpdateWalletRequest {
+            name: Some("Payouts".to_string()),
+            is_primary: Some(true),
+        };
+
+        let body = serde_json::to_value(&req).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "name": "Payouts",
+                "is_primary": true,
+            })
+        );
     }
 }
