@@ -318,6 +318,21 @@ mod tests {
     }
 
     #[test]
+    fn test_format_amount_rounds_eur_and_gbp_past_the_cent_boundary() {
+        // The USD test above shares round_amount(amount, 2) with EUR/GBP, but
+        // only proves rounding happens for USD - a currency-specific
+        // regression in either branch would pass unnoticed without this.
+        assert_eq!(
+            format_amount("50.126000000000000000", "EUR"),
+            "\u{20ac}50.13 EUR"
+        );
+        assert_eq!(
+            format_amount("25.124000000000000000", "GBP"),
+            "\u{00a3}25.12 GBP"
+        );
+    }
+
+    #[test]
     fn test_format_amount_trims_a_crypto_amount_with_real_trailing_zeros() {
         // A no-op case (like "1.5 ETH" above) would pass even if the default
         // branch stopped trimming entirely - this one only passes if it does.
