@@ -9,6 +9,14 @@
 //! Can run standalone or be loaded as a module in the dashboard aggregator.
 
 #![allow(clippy::items_after_test_module)]
+// The `plugin_page` unit tests pull in leptos's `ssr` feature (dev-dependency
+// only, see `Cargo.toml`) to render real markup instead of asserting on
+// `view!` string literals by eye. `ssr`'s HTML-string codegen path is far
+// more type-heavy per nesting level than the DOM-mutation path `csr` uses,
+// and this crate's deeply nested `app`/`layout` views blow the default limit
+// under it during test builds. Release/wasm builds never see this: `ssr` is
+// a dev-dependency, so `trunk build` never activates it.
+#![recursion_limit = "512"]
 
 pub mod api;
 pub mod app;

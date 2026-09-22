@@ -560,4 +560,17 @@ mod tests {
         assert_eq!(safe_href("checkout/9f3a"), None, "a bare relative path");
         assert_eq!(safe_href(""), None);
     }
+
+    /// The module doc calls a silently blank panel beside a paywall "the
+    /// worst thing this renderer could produce". Checked against markup a
+    /// browser would actually receive, not the `view!` literal by eye.
+    #[test]
+    fn an_unrecognised_element_renders_a_visible_placeholder() {
+        use leptos::prelude::RenderHtml;
+
+        let html = render(&PageElement::Unknown).to_html();
+        assert!(html.contains("plugin-notice plugin-notice-warning"));
+        assert!(html.contains(r#"role="status""#));
+        assert!(html.contains("This part of the page needs a newer version of the dashboard."));
+    }
 }
