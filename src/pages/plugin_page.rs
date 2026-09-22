@@ -393,6 +393,23 @@ pub fn PluginPageView() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use leptos::prelude::RenderHtml;
+
+    /// Tags stripped, so an assertion can check for real text content rather
+    /// than markup that merely mentions it in an attribute.
+    fn strip_tags(html: &str) -> String {
+        let mut out = String::with_capacity(html.len());
+        let mut in_tag = false;
+        for c in html.chars() {
+            match c {
+                '<' => in_tag = true,
+                '>' => in_tag = false,
+                _ if !in_tag => out.push(c),
+                _ => {}
+            }
+        }
+        out
+    }
 
     /// The stylesheet, read at compile time so the check below is against the
     /// file that actually ships.
@@ -578,11 +595,248 @@ mod tests {
     /// once it reaches `render`, not a value only test code can build.
     #[test]
     fn an_unrecognised_element_renders_a_visible_placeholder() {
-        use leptos::prelude::RenderHtml;
-
         let html = render(&PageElement::Unknown).to_html();
         assert!(html.contains("plugin-notice plugin-notice-warning"));
         assert!(html.contains(r#"role="status""#));
         assert!(html.contains("This part of the page needs a newer version of the dashboard."));
+    }
+
+    // The fifteen variants below were in the same position `Unknown` was
+    // before the test above: shipped, read, and never executed. Same three
+    // assertions each - classes, the element's own contract, and that its
+    // text actually reaches the markup - against `render`'s real output, not
+    // the `view!` literal by eye.
+    //
+    // Ablated as a sample rather than all fifteen: `a_badge_renders_...` and
+    // `a_table_renders_...` below, one assertion broken at a time (wrong
+    // class, wrong tag/structure, blanked text), each confirmed to fail on
+    // its own before the source was restored.
+
+    #[test]
+    fn a_badge_renders_its_tone_class_and_text() {
+        let html = render(&PageElement::Badge(Badge {
+            text: "Beta".to_string(),
+            tone: Tone::Info,
+        }))
+        .to_html();
+        assert!(html.contains("badge badge-info"));
+        assert!(html.contains("<span"), "a badge is inline, not a block");
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_button_with_a_link_renders_as_an_anchor_to_it() {
+        let html = render(&PageElement::Button(Button {
+            label: "Pay now".to_string(),
+            variant: ButtonVariant::Primary,
+            href: Some("/checkout/9f3a".to_string()),
+        }))
+        .to_html();
+        assert!(html.contains("btn btn-primary"));
+        assert!(html.contains("<a ") && html.contains(r#"href="/checkout/9f3a""#));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_card_renders_a_header_over_a_body() {
+        let html = render(&PageElement::Card(Card {
+            title: Some("Balances".to_string()),
+            badge: None,
+            children: vec![PageElement::Text(Text {
+                text: "Updated a moment ago".to_string(),
+                style: TextStyle::Muted,
+            })],
+        }))
+        .to_html();
+        assert!(
+            html.contains("ps-card")
+                && html.contains("ps-card-header")
+                && html.contains("ps-card-body")
+        );
+        assert!(html.contains("<h3>Balances</h3>"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn fields_render_as_a_definition_list() {
+        let html = render(&PageElement::Fields(Fields {
+            fields: vec![payserver_plugin_api::page::Field {
+                label: "Price".to_string(),
+                value: "0.50 USDC every 30 days".to_string(),
+            }],
+        }))
+        .to_html();
+        assert!(
+            html.contains("plugin-fields")
+                && html.contains("plugin-field-key")
+                && html.contains("plugin-field-value")
+        );
+        assert!(html.contains("<dl") && html.contains("<dt") && html.contains("<dd"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_form_renders_its_children_without_being_submittable() {
+        let html = render(&PageElement::Form(Form {
+            children: vec![PageElement::Input(Input {
+                label: Some("Amount".to_string()),
+                placeholder: "0.00".to_string(),
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-form"));
+        assert!(
+            !html.contains("<form"),
+            "there is no action system - a plugin form must never render as a \
+             submittable <form>, only as a layout container"
+        );
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_grid_renders_its_column_count_into_the_grid_style() {
+        let html = render(&PageElement::Grid(Grid {
+            columns: 3,
+            children: vec![PageElement::Text(Text {
+                text: "cell".to_string(),
+                style: TextStyle::Body,
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-grid"));
+        assert!(html.contains("grid-template-columns:repeat(3,"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn an_input_renders_disabled_with_its_label() {
+        let html = render(&PageElement::Input(Input {
+            label: Some("Amount".to_string()),
+            placeholder: "0.00".to_string(),
+        }))
+        .to_html();
+        assert!(html.contains("plugin-field") && html.contains("form-input"));
+        assert!(
+            html.contains("<input") && html.contains("disabled"),
+            "there is no action system yet - an input must not be editable"
+        );
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_notice_renders_its_tone_class_and_status_role() {
+        let html = render(&PageElement::Notice(Notice {
+            text: "Read-only preview".to_string(),
+            tone: Tone::Warning,
+        }))
+        .to_html();
+        assert!(html.contains("plugin-notice plugin-notice-warning"));
+        assert!(html.contains(r#"role="status""#));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_row_lays_its_children_out_horizontally() {
+        let html = render(&PageElement::Row(Row {
+            children: vec![PageElement::Text(Text {
+                text: "cell".to_string(),
+                style: TextStyle::Body,
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-stack plugin-stack-row"));
+        assert!(html.contains("<p") && html.contains("cell"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_section_renders_a_heading_over_its_children() {
+        let html = render(&PageElement::Section(Section {
+            title: Some("Advanced".to_string()),
+            children: vec![PageElement::Text(Text {
+                text: "cell".to_string(),
+                style: TextStyle::Body,
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-section") && html.contains("plugin-section-title"));
+        assert!(html.contains("<h2") && html.contains("Advanced"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_select_renders_disabled_with_its_options() {
+        let html = render(&PageElement::Select(Select {
+            label: Some("Network".to_string()),
+            options: vec!["Ethereum".to_string(), "Polygon".to_string()],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-field") && html.contains("form-input"));
+        assert!(
+            html.contains("<select") && html.contains("disabled") && html.contains("<option"),
+            "there is no action system yet - a select must not be editable"
+        );
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_stack_renders_its_direction_class() {
+        let html = render(&PageElement::Stack(Stack {
+            direction: Direction::Column,
+            children: vec![PageElement::Text(Text {
+                text: "cell".to_string(),
+                style: TextStyle::Body,
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-stack plugin-stack-column"));
+        assert!(html.contains("<p") && html.contains("cell"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_table_renders_header_and_row_structure() {
+        let html = render(&PageElement::Table(Table {
+            headers: vec!["Chain".to_string(), "Balance".to_string()],
+            rows: vec![vec!["eip155:1".to_string(), "1.2".to_string()]],
+        }))
+        .to_html();
+        assert!(html.contains("table-container") && html.contains(r#"class="table""#));
+        assert!(
+            html.contains("<thead")
+                && html.contains("<th")
+                && html.contains("<tbody")
+                && html.contains("<td")
+        );
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn tabs_render_every_tab_stacked_with_its_own_heading() {
+        let html = render(&PageElement::Tabs(Tabs {
+            tabs: vec![Tab {
+                label: "Overview".to_string(),
+                content: vec![PageElement::Text(Text {
+                    text: "cell".to_string(),
+                    style: TextStyle::Body,
+                })],
+            }],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-tabs") && html.contains("plugin-tab-label"));
+        assert!(html.contains("<h3") && html.contains("Overview"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn text_renders_its_style_class() {
+        let html = render(&PageElement::Text(Text {
+            text: "Your subscription starts once the first invoice is paid.".to_string(),
+            style: TextStyle::Strong,
+        }))
+        .to_html();
+        assert!(html.contains("plugin-text plugin-text-strong"));
+        assert!(html.contains("<p"));
+        assert!(!strip_tags(&html).trim().is_empty());
     }
 }
