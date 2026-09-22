@@ -455,6 +455,15 @@ fn reconnect_one(
 mod tests {
     use super::*;
 
+    // `connect`/`connect_inner`/`reconnect_one` build and send real
+    // `web_sys::WebSocket` calls; none of the tests below call them. Unlike
+    // `ApiClient::post`/`patch`/`delete` (see `api::client::stores` tests),
+    // this module has no seam to intercept the transport under `cargo test` -
+    // fixing that would need either an injectable `WebSocket` constructor or
+    // a `wasm-bindgen-test` harness (already a dev-dependency, unused here).
+    // `test_reconnect_delay_calculation` below re-derives the backoff formula
+    // rather than calling the function that uses it, for the same reason.
+
     #[test]
     fn test_status_update_serde_invoice_status() {
         let update = StatusUpdate::InvoiceStatus {
