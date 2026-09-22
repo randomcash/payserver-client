@@ -10,11 +10,10 @@ use send_wrapper::SendWrapper;
 use crate::api::{ApiClient, ApiError, ChainHealthInfo, DashboardAnalytics};
 use crate::app::{StoreContext, StoresStatus};
 use crate::components::EmptyState;
-use crate::pages::payments::format::{
-    format_crypto_amount, payment_status, payment_status_class, truncate_hash,
-};
+use crate::pages::payments::format::{payment_status, payment_status_class, truncate_hash};
 use crate::services::StatusUpdate;
 use crate::util::{chain_name, relative_time_at};
+use ui_kit::{CompactAmount, units_to_decimal};
 
 /// Dashboard page component.
 #[component]
@@ -722,11 +721,8 @@ fn RecentPayments() -> impl IntoView {
                                 let tx = truncate_hash(&payment.tx_hash, 8, 6);
                                 let when = relative_time_at(payment.detected_at, now_ms)
                                     .unwrap_or_else(|| payment.detected_at.to_rfc3339());
-                                let amount = format!(
-                                    "{} {}",
-                                    format_crypto_amount(&payment.amount, payment.decimals),
-                                    payment.asset_symbol
-                                );
+                                let amount_decimal = units_to_decimal(&payment.amount, payment.decimals);
+                                let asset_symbol = payment.asset_symbol.clone();
                                 let network = chain_name(&payment.chain_id).to_string();
                                 let status = payment_status(&payment);
                                 let status_class = payment_status_class(&payment);
@@ -739,7 +735,9 @@ fn RecentPayments() -> impl IntoView {
                                             <span class="payment-time">{when}</span>
                                         </div>
                                         <div class="payment-amount">
-                                            <span class="payment-crypto">{amount}</span>
+                                            <span class="payment-crypto">
+                                                <CompactAmount value=amount_decimal symbol=asset_symbol />
+                                            </span>
                                             <span class="payment-chain">{network}</span>
                                         </div>
                                         <span class=status_class>{status}</span>
