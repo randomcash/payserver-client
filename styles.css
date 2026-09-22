@@ -789,6 +789,27 @@ a:hover {
     color: var(--text-primary);
     margin-top: var(--space-1);
     letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+/* A `Figure`'s tone, carried by the number itself rather than a pill beside
+   it. The warning colour matches `.badge-warning`'s text, not
+   `--color-warning` directly - the raw accent is a background tint, not a
+   colour meant to sit on white. */
+.ps-stat-value-success {
+    color: var(--color-success);
+}
+
+.ps-stat-value-warning {
+    color: #9e6c00;
+}
+
+.ps-stat-value-danger {
+    color: var(--color-error);
+}
+
+.ps-stat-value-info {
+    color: var(--color-info);
 }
 
 .stat-change {
