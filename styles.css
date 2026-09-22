@@ -555,6 +555,13 @@ a:hover {
     .main-header-actions .ps-btn span {
         display: none;
     }
+
+    /* No icon to fall back on, and the invoices page has its own create
+       control, so this stops competing for space rather than degrading
+       into an unlabelled box. */
+    .header-create-invoice {
+        display: none;
+    }
 }
 
 /* User menu dropdown */
