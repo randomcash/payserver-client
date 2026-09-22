@@ -258,7 +258,7 @@ pub fn AdminTab() -> impl IntoView {
                         </div>
                     }.into_any(),
                     SafeModeBanner::CheckFailed => view! {
-                        <div class="alert alert-warning">
+                        <div class="admin-warning">
                             <strong>"⚠ Could not confirm plugin status"</strong>
                             <p>
                                 "The safe-mode check itself failed, so whether every plugin is "
