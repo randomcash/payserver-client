@@ -1,4 +1,18 @@
 //! HTTP client for the payserver API.
+//!
+//! Every method in this module's six files reaches the network only through
+//! `get`/`post`/`put`/`patch`/`delete` below, which call into `gloo-net` and
+//! panic the instant a request is built outside an actual wasm host - so
+//! `cargo test` cannot observe the method, path, or body any of them send.
+//! That is true of all 52 `pub async fn`s here (15 `admin`, 1 `health`, 8
+//! `invoices`, 3 `payments`, 2 `plugins`, 23 `stores`), not just the wallet
+//! writes below: it is this module's structural default, not drift in a few
+//! recent paths. `post`/`patch`/`delete` now carry a `#[cfg(test)]` seam
+//! (`TestTransport`) so `create_wallet`/`update_wallet`/`delete_wallet` run
+//! for real under `cargo test` (see `stores` tests); `get` and every other
+//! function here still cannot be exercised past its own pure helpers without
+//! the same seam extended to `get`, or a `wasm-bindgen-test` harness (already
+//! a dev-dependency, unused in this crate's test runs).
 
 use gloo_net::http::{Request, RequestBuilder};
 use serde::{Serialize, de::DeserializeOwned};
