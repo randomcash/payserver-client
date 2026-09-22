@@ -9,6 +9,12 @@
 //! Can run standalone or be loaded as a module in the dashboard aggregator.
 
 #![allow(clippy::items_after_test_module)]
+// Raised for the `ssr` dev-dependency only. `ssr`'s HTML-string codegen is far
+// more type-heavy per nesting level than the DOM-mutation path `csr` uses, and
+// this crate's deeply nested app/layout views overflow the default depth limit
+// during test builds without it. Release and wasm builds never activate `ssr`
+// - it is a dev-dependency - so this costs them nothing.
+#![recursion_limit = "512"]
 
 pub mod api;
 pub mod app;

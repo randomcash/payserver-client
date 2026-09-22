@@ -99,6 +99,13 @@ uuid = { version = "1.0", features = ["v4", "js"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
+# `ssr` only: rendering an `AnyView` to a string panics at RUNTIME without it -
+# the check lives in `tachys::view::any_view` and is not gated at compile time,
+# so a render test without this compiles and then dies. Used solely by
+# host-target unit tests to assert on real markup rather than eyeballing the
+# string literals inside `view!`. The wasm binary never sees it: `cargo build`
+# and trunk do not pull in dev-dependencies.
+leptos = { version = "0.7", default-features = false, features = ["ssr"] }
 
 [features]
 default = ["standalone"]

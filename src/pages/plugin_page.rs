@@ -544,6 +544,57 @@ mod tests {
 
     /// A plugin is not a trusted source of somewhere to send a merchant who
     /// is about to pay. Only a path on this origin is followed.
+    // `RenderHtml::to_html` panics unless leptos's `ssr` feature is active. It
+    // is a RUNTIME check inside `tachys::view::any_view`, not a compile gate,
+    // so a render test without it compiles and then dies at the assert. `ssr`
+    // is a dev-dependency only - see `Cargo.toml` - so the wasm bundle this
+    // crate ships never contains it.
+    fn to_html(element: &PageElement) -> String {
+        use leptos::prelude::RenderHtml;
+        render(element).to_html()
+    }
+
+    /// An element this dashboard has never heard of must render something a
+    /// merchant can SEE.
+    ///
+    /// This is the one failure the descriptor's design singles out: a plugin
+    /// built against a newer element set, drawn by an older client, must not
+    /// produce a blank space where a panel was expected. A silently missing
+    /// panel beside a paywall is worse than an error - the merchant has no
+    /// reason to suspect anything is missing at all.
+    ///
+    /// Asserted against rendered markup rather than the `view!` literal,
+    /// because "the source looks right" is what this test exists to stop being
+    /// the standard of proof.
+    #[test]
+    fn an_unknown_element_renders_a_visible_placeholder() {
+        let html = to_html(&PageElement::Unknown);
+
+        assert!(
+            html.contains("plugin-notice") && html.contains("plugin-notice-warning"),
+            "the placeholder must carry the notice classes, or it draws unstyled: {html}"
+        );
+        assert!(
+            html.contains(r#"role="status""#),
+            "the placeholder must be announced to a screen reader, not only drawn: {html}"
+        );
+
+        // The point of the test: present but empty is the failure, not a pass.
+        // Strip every tag and require real words left over.
+        let text = html
+            .split('<')
+            .filter_map(|chunk| chunk.split_once('>'))
+            .map(|(_, text)| text)
+            .collect::<String>();
+        let text = text.trim();
+        assert!(
+            text.len() > 20,
+            "the placeholder rendered no readable text - this is exactly the blank \
+             panel the descriptor design forbids: {html}"
+        );
+    }
+
+
     #[test]
     fn only_host_relative_paths_are_followed() {
         assert_eq!(safe_href("/checkout/9f3a"), Some("/checkout/9f3a"));
