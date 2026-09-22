@@ -568,6 +568,14 @@ mod tests {
     /// `render` is the same private helper `PluginPageView` calls above to
     /// draw the page mounted at `/plugins/:id/:path` in `app/mod.rs` - this
     /// exercises the renderer that ships, not a revived one.
+    ///
+    /// `PageElement::Unknown` is not just constructible in a test: the type
+    /// is `#[serde(tag = "type", ...)]` with `#[serde(other)]` on `Unknown`
+    /// (`payserver-plugin-api/src/page.rs`), so any `type` string a plugin
+    /// sends that predates this client's vocabulary deserializes into it on
+    /// the real network path, `ApiClient::get_plugin_page` in
+    /// `api/client/plugins.rs`. This test exercises what that path produces
+    /// once it reaches `render`, not a value only test code can build.
     #[test]
     fn an_unrecognised_element_renders_a_visible_placeholder() {
         use leptos::prelude::RenderHtml;
