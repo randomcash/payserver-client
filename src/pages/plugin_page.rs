@@ -392,6 +392,22 @@ pub fn PluginPageView() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
+    //! # Rendering in these tests, and the trap in it
+    //!
+    //! These tests render views to HTML and assert on the markup, rather than
+    //! eyeballing the string literals inside `view!`. That needs leptos's
+    //! `ssr` feature, which this crate carries as a **dev-dependency only**.
+    //!
+    //! The trap: `RenderHtml::to_html` panics **at runtime** without `ssr`. The
+    //! check lives inside `tachys::view::any_view` and is not a compile gate,
+    //! so a render test written without the feature compiles perfectly and then
+    //! dies at the assertion with a message about neither rendering nor the
+    //! feature. Expect to lose an afternoon to it if this is not written down.
+    //!
+    //! The wasm bundle never sees `ssr`: neither `cargo build` nor trunk pulls
+    //! dev-dependencies. See the `recursion_limit` note at the crate root for
+    //! why that feature also forces a raised depth limit.
+
     use super::*;
 
     /// The stylesheet, read at compile time so the check below is against the

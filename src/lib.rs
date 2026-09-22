@@ -9,12 +9,23 @@
 //! Can run standalone or be loaded as a module in the dashboard aggregator.
 
 #![allow(clippy::items_after_test_module)]
-// Raised for the `ssr` dev-dependency only. `ssr`'s HTML-string codegen is far
-// more type-heavy per nesting level than the DOM-mutation path `csr` uses, and
-// this crate's deeply nested app/layout views overflow the default depth limit
-// during test builds without it. Release and wasm builds never activate `ssr`
-// - it is a dev-dependency - so this costs them nothing.
-#![recursion_limit = "512"]
+// Raised for the `ssr` dev-dependency only, and it is a CRATE-level attribute -
+// it applies to every build, not just test builds. That matters because a
+// raised limit would also let a genuine runaway recursion compile instead of
+// erroring, so the size of the increase is evidence about the cause.
+//
+// Measured: 128 (the default) overflows, 192 compiles. The need is ~1.5x the
+// default - bounded and modest, which is what deeply nested views look like.
+// Runaway recursion would not terminate at any finite bump. 256 is rustc's own
+// suggestion in the overflow message and leaves headroom; an earlier branch
+// used 512, which is more than this crate needs.
+//
+// The cause is `ssr`'s HTML-string codegen, which is far more type-heavy per
+// nesting level than the DOM-mutation path `csr` uses, applied to this crate's
+// nested app/layout views. Release and wasm builds never activate `ssr` - it is
+// a dev-dependency, and neither `cargo build` nor trunk pulls those - so they
+// compile exactly as before.
+#![recursion_limit = "256"]
 
 pub mod api;
 pub mod app;
