@@ -388,7 +388,15 @@ fn EmailSection(
                 });
             }
             None => {
+                // Unreachable today - both entry points set `action` before
+                // transitioning to `Reauthenticating` - but a re-auth success
+                // with no pending action is a bug, not a no-op: surface it
+                // rather than silently dropping a completed passkey/wallet
+                // challenge.
                 set_busy.set(false);
+                set_error.set(Some(
+                    "Something went wrong - please try again.".to_string(),
+                ));
                 set_step.set(EmailStep::Idle);
             }
         }
