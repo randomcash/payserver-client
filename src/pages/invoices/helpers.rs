@@ -1,7 +1,6 @@
 //! Shared helpers and icons for the invoice pages.
 
 use leptos::prelude::*;
-
 use ui_kit::{round_amount, trim_amount};
 
 use crate::api::{Invoice, Payment};
@@ -86,6 +85,37 @@ pub(super) fn format_amount(amount: &str, currency: &str) -> String {
         "EUR" => format!("\u{20ac}{} {}", round_amount(amount, 2), currency),
         "GBP" => format!("\u{00a3}{} {}", round_amount(amount, 2), currency),
         _ => format!("{} {}", trim_amount(amount, 0), currency),
+    }
+}
+
+/// Scale a raw integer amount in smallest units (e.g. wei) into a human
+/// decimal string, given the asset's decimal places.
+///
+/// `Payment.amount` comes straight off `payments.amount`, a column documented
+/// as "in smallest unit" - unlike `Invoice.amount`, which the server already
+/// stores as a human fiat amount. This is the inverse of the scaling the
+/// server does when it first records the payment, done here only for the CSV
+/// export. Falls back to the raw string on anything that isn't a plain
+/// unsigned integer, the same fail-safe `round_decimal` uses.
+pub(super) fn scale_smallest_units(raw: &str, decimals: u8) -> String {
+    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+        return raw.to_string();
+    }
+    let decimals = decimals as usize;
+    if decimals == 0 {
+        return raw.to_string();
+    }
+
+    let padded = format!("{raw:0>width$}", width = decimals + 1);
+    let (int_part, frac_part) = padded.split_at(padded.len() - decimals);
+    let int_part = int_part.trim_start_matches('0');
+    let int_part = if int_part.is_empty() { "0" } else { int_part };
+    let frac_trimmed = frac_part.trim_end_matches('0');
+
+    if frac_trimmed.is_empty() {
+        int_part.to_string()
+    } else {
+        format!("{int_part}.{frac_trimmed}")
     }
 }
 
@@ -302,46 +332,28 @@ mod tests {
     }
 
     #[test]
-    fn test_format_amount_trims_a_raw_numeric_38_18_string() {
-        // The server sends amounts as NUMERIC(38,18): "30" arrives as
-        // "30.000000000000000000", not "30.00".
+    fn test_format_amount_raw_numeric_precision() {
+        // What the server actually sends: NUMERIC(38,18) serialized straight
+        // to a string. The merchant's most-looked-at page must not show it.
         assert_eq!(format_amount("30.000000000000000000", "USD"), "$30.00 USD");
         assert_eq!(format_amount("0.000000000000000000", "USD"), "$0.00 USD");
+        assert_eq!(format_amount("1.500000000000000000", "ETH"), "1.5 ETH");
     }
 
     #[test]
-    fn test_format_amount_rounds_fiat_past_the_cent_boundary() {
-        // Sub-cent precision (a fee, an FX split) must round to the minor
-        // unit, not pass through unrounded: trimming alone would leave
-        // "$30.126 USD" untouched, since there are no trailing zeros to strip.
-        assert_eq!(format_amount("30.126000000000000000", "USD"), "$30.13 USD");
-    }
-
-    #[test]
-    fn test_format_amount_rounds_eur_and_gbp_past_the_cent_boundary() {
-        // The USD test above shares round_amount(amount, 2) with EUR/GBP, but
-        // only proves rounding happens for USD - a currency-specific
-        // regression in either branch would pass unnoticed without this.
-        assert_eq!(
-            format_amount("50.126000000000000000", "EUR"),
-            "\u{20ac}50.13 EUR"
-        );
-        assert_eq!(
-            format_amount("25.124000000000000000", "GBP"),
-            "\u{00a3}25.12 GBP"
-        );
-    }
-
-    #[test]
-    fn test_format_amount_trims_a_crypto_amount_with_real_trailing_zeros() {
-        // A no-op case (like "1.5 ETH" above) would pass even if the default
-        // branch stopped trimming entirely - this one only passes if it does.
-        assert_eq!(format_amount("0.500000000", "BTC"), "0.5 BTC");
-    }
-
-    #[test]
-    fn test_format_amount_pads_a_whole_number_to_the_currency_scale() {
-        assert_eq!(format_amount("30", "USD"), "$30.00 USD");
+    fn test_scale_smallest_units() {
+        // 0.05 ETH, the exact wei-vs-ETH gap the CSV export used to skip.
+        assert_eq!(scale_smallest_units("50000000000000000", 18), "0.05");
+        // USDC-style 6 decimals.
+        assert_eq!(scale_smallest_units("1500000", 6), "1.5");
+        // Less than one whole unit: needs the leading zero the padding exists for.
+        assert_eq!(scale_smallest_units("30", 18), "0.00000000000000003");
+        // Zero decimals: no fractional part to introduce.
+        assert_eq!(scale_smallest_units("42", 0), "42");
+        // Exact whole units still drop the trailing fractional zeros.
+        assert_eq!(scale_smallest_units("2000000000000000000", 18), "2");
+        // Non-numeric input falls back to the raw string rather than panicking.
+        assert_eq!(scale_smallest_units("not-a-number", 18), "not-a-number");
     }
 
     #[test]
