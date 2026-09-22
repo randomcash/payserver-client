@@ -184,13 +184,28 @@ fn DashboardHeader(analytics: LocalResource<Option<DashboardAnalytics>>) -> impl
                     title="Export the payment volume behind the charts below as CSV"
                     on:click=move |_| {
                         wasm_bindgen_futures::spawn_local(async move {
-                            if let Some(data) = analytics.await {
-                                let csv = dashboard_volume_csv(&data);
-                                let filename = format!(
-                                    "dashboard-volume_{}_{}.csv",
-                                    data.start_date, data.end_date,
-                                );
-                                crate::pages::trigger_csv_download(&csv, &filename);
+                            match analytics.await {
+                                Some(data) => {
+                                    let csv = dashboard_volume_csv(&data);
+                                    let filename = format!(
+                                        "dashboard-volume_{}_{}.csv",
+                                        data.start_date, data.end_date,
+                                    );
+                                    crate::pages::trigger_csv_download(&csv, &filename);
+                                }
+                                // The button is only enabled once this same
+                                // resource has already resolved to `Some`, so
+                                // getting `None` here means a re-fetch (e.g. a
+                                // WS-triggered refresh) landed between render
+                                // and click and failed. Same as the payments
+                                // and invoices export buttons: log it rather
+                                // than fail silently, without inventing new
+                                // toast plumbing for an edge this narrow.
+                                None => {
+                                    web_sys::console::error_1(
+                                        &"dashboard export: analytics unavailable".into(),
+                                    );
+                                }
                             }
                         });
                     }
@@ -1119,7 +1134,9 @@ fn IconMinus() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChainState, chain_detail, chain_label, dashboard_volume_csv, monitor_lag};
+    use super::{
+        ChainState, chain_detail, chain_label, csv_escape, dashboard_volume_csv, monitor_lag,
+    };
     use crate::api::{AssetVolume, ChainHealthInfo, DailyVolume, DashboardAnalytics};
     use chrono::NaiveDate;
     use types::ChainId;
@@ -1167,6 +1184,28 @@ mod tests {
         assert_eq!(lines.next().unwrap(), "2026-01-01,ETH,1,2");
         assert_eq!(lines.next().unwrap(), "2026-01-02,ETH,0.5,1");
         assert!(lines.next().is_none());
+    }
+
+    #[test]
+    fn csv_escape_quotes_only_a_field_that_needs_it() {
+        assert_eq!(csv_escape("ETH"), "ETH");
+        assert_eq!(csv_escape("a,b"), "\"a,b\"");
+        assert_eq!(csv_escape("a\"b"), "\"a\"\"b\"");
+        assert_eq!(csv_escape("a\nb"), "\"a\nb\"");
+        assert_eq!(csv_escape("a\rb"), "\"a\rb\"");
+    }
+
+    #[test]
+    fn volume_csv_escapes_an_asset_symbol_that_needs_it() {
+        let mut data = sample_analytics();
+        data.assets[0].asset_symbol = "WEIRD,\"TOKEN\"".to_string();
+        let csv = dashboard_volume_csv(&data);
+        let mut lines = csv.lines();
+        lines.next(); // header
+        assert_eq!(
+            lines.next().unwrap(),
+            "\"WEIRD,\"\"TOKEN\"\"\",1.5,3,100.0"
+        );
     }
 
     #[test]
