@@ -421,9 +421,9 @@ mod tests {
         }));
         let client = ApiClient::with_test_transport("", transport);
 
-        let result = block_on(client.export_wallet_xpub("wallet-1"));
+        let result = block_on(client.export_wallet_xpub("wallet-1")).unwrap();
 
-        assert!(result.is_ok());
+        assert_eq!(result.xpub, "xpub6D4BDPcP2GT...");
         assert_eq!(
             recorded.lock().unwrap().clone().unwrap(),
             RequestSpec {
