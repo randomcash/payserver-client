@@ -16,7 +16,10 @@
 // and this crate's deeply nested `app`/`layout` views blow the default limit
 // under it during test builds. Release/wasm builds never see this: `ssr` is
 // a dev-dependency, so `trunk build` never activates it.
-#![recursion_limit = "512"]
+// Measured: 128 (the default) overflows, 192 compiles. Set to 256 (rustc's
+// own suggested bump from the overflow message) for headroom over that floor
+// without inheriting a much larger number than the crate needs.
+#![recursion_limit = "256"]
 
 pub mod api;
 pub mod app;
