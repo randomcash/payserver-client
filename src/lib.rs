@@ -323,11 +323,16 @@ async fn connect_and_send(
     // implements it — without it the send below reaches the wallet and is
     // rejected there, so the connected account has to survive past the
     // "is anyone connected" check rather than being discarded after it.
-    let Some(from_address) = js_sys::Array::from(&accounts)
-        .get(0)
-        .as_string()
-        .filter(|a| !a.is_empty())
-    else {
+    let first_element = js_sys::Array::from(&accounts).get(0);
+    let first_account = if first_element.is_undefined() {
+        FirstAccountElement::Missing
+    } else {
+        match first_element.as_string() {
+            Some(s) => FirstAccountElement::String(s),
+            None => FirstAccountElement::NotAString,
+        }
+    };
+    let Some(from_address) = choose_from_address(&first_account) else {
         return WalletActionStatus::Error("wallet returned no account".to_string());
     };
 
@@ -378,6 +383,39 @@ async fn connect_and_send(
 /// wasm.
 fn network_matches(reported: Option<&str>, expected_chain_hex: &str) -> bool {
     reported.is_some_and(|r| r.eq_ignore_ascii_case(expected_chain_hex))
+}
+
+/// What `eth_requestAccounts` put at index zero of its reply, before any
+/// interpretation of it as an address.
+///
+/// A plain enum rather than `Option<&str>` so "present but not a string" has
+/// its own case: `JsValue::as_string()` already collapses that case and
+/// "array empty" to the same `None`, and doing the same collapse here would
+/// make the two indistinguishable to a unit test, same as the value it
+/// replaces did. Built at the call site, the only part that needs a live
+/// provider reply and a JS engine to run at all.
+enum FirstAccountElement {
+    /// The wallet returned no accounts.
+    Missing,
+    /// Present, but not the string type every wallet reports an address as.
+    NotAString,
+    String(String),
+}
+
+/// The account `eth_sendTransaction`'s `from` is filled in with: element zero
+/// of `eth_requestAccounts`'s reply, required to be a non-empty string.
+///
+/// Pulled out of `connect_and_send` so the decision can be unit-tested
+/// without a mocked EIP-1193 provider, same reasoning as `network_matches`.
+/// A wallet that answers with a missing account, a non-string element zero,
+/// or an empty string must not produce a `from` at all: forwarding it here
+/// would build a transaction the wallet rejects on its own, surfacing to the
+/// customer as the wallet misbehaving rather than as this bug.
+fn choose_from_address(first_account: &FirstAccountElement) -> Option<&str> {
+    match first_account {
+        FirstAccountElement::String(s) if !s.is_empty() => Some(s.as_str()),
+        _ => None,
+    }
 }
 
 /// The `to`/`data`/`value` fields `connect_and_send` puts on the
@@ -589,6 +627,38 @@ mod wallet_action_tests {
     #[test]
     fn network_matches_rejects_a_non_string_reply() {
         assert!(!network_matches(None, "0x1"));
+    }
+
+    /// No accounts connected — the normal reply from a wallet the user has
+    /// just declined to connect.
+    #[test]
+    fn choose_from_address_rejects_an_empty_accounts_array() {
+        assert!(choose_from_address(&FirstAccountElement::Missing).is_none());
+    }
+
+    /// Element zero present but not a string — a distinct case from a
+    /// missing account, must fail closed rather than forward whatever this
+    /// is into a transaction's `from` field.
+    #[test]
+    fn choose_from_address_rejects_a_non_string_first_element() {
+        assert!(choose_from_address(&FirstAccountElement::NotAString).is_none());
+    }
+
+    /// Looks redundant next to the string-type check and is the piece most
+    /// likely to be dropped by a later refactor — an empty string is a
+    /// string, so without this filter it would pass through as a `from`
+    /// address.
+    #[test]
+    fn choose_from_address_rejects_an_empty_string_first_element() {
+        assert!(choose_from_address(&FirstAccountElement::String(String::new())).is_none());
+    }
+
+    #[test]
+    fn choose_from_address_carries_through_the_exact_address() {
+        assert_eq!(
+            choose_from_address(&FirstAccountElement::String(RECIPIENT.to_string())),
+            Some(RECIPIENT)
+        );
     }
 
     fn some_transfer() -> WalletActionsContext {
