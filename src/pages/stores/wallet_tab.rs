@@ -45,6 +45,56 @@ fn stores_sharing_wallet<'a>(
         .collect()
 }
 
+/// The outstanding pending/processing invoice count for `store_id`, or `None`
+/// if either count could not be fetched.
+///
+/// `None` is a distinct state from `Some(0)`: this backs the warning that a
+/// rotation does not stop old-address collection, and a fetch that failed
+/// must never be shown as "0 outstanding" - that reads as safe to someone
+/// rotating because a key just leaked, when it actually means the check
+/// never ran.
+async fn fetch_outstanding_invoice_count(api: &ApiClient, store_id: &str) -> Option<i64> {
+    let mut total = 0i64;
+    for status in ["pending", "processing"] {
+        let page = api
+            .list_invoices(Some(store_id), Some(status), None, None, Some(1), Some(0))
+            .await
+            .ok()?;
+        total += page.total;
+    }
+    Some(total)
+}
+
+/// Other stores still resolving to `store_id`'s current wallet, or `None` if
+/// the check could not complete.
+///
+/// Any failed lookup along the way - the store's own wallet, the store list,
+/// or any one candidate store's wallet - aborts with `None` rather than
+/// returning a list missing that entry: a rotation made in response to a
+/// compromise treats "no other stores" and "couldn't check" as the same
+/// green light otherwise, and a silently short list is worse than an
+/// explicit "could not verify."
+async fn fetch_stores_sharing_wallet(api: &ApiClient, store_id: &str) -> Option<Vec<String>> {
+    let current = api.get_store_wallet(store_id).await.ok()?;
+    let stores = api.list_stores().await.ok()?;
+    let mut resolved = Vec::with_capacity(stores.len());
+    for store in &stores {
+        let other_id = store.id.to_string();
+        if other_id == store_id {
+            continue;
+        }
+        let other = api.get_store_wallet(&other_id).await.ok()?;
+        resolved.push((other_id, store.name.clone(), other.wallet.xpub_masked));
+    }
+    Some(stores_sharing_wallet(
+        &current.wallet.xpub_masked,
+        store_id,
+        resolved
+            .iter()
+            .map(|(id, name, masked)| (id.as_str(), name.as_str(), masked.as_str())),
+    ))
+}
+
 /// Wallet rotation tab.
 #[component]
 pub fn WalletTab(store_id: String) -> impl IntoView {
@@ -63,8 +113,8 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
     let (reason, set_reason) = signal(String::new());
     let (confirming, set_confirming) = signal(false);
     let (loading_warnings, set_loading_warnings) = signal(false);
-    let (outstanding, set_outstanding) = signal(0i64);
-    let (other_stores, set_other_stores) = signal(Vec::<String>::new());
+    let (outstanding, set_outstanding) = signal(None::<i64>);
+    let (other_stores, set_other_stores) = signal(None::<Vec<String>>);
     let (rotating, set_rotating) = signal(false);
     let (rotate_error, set_rotate_error) = signal(None::<String>);
     let (last_rotation, set_last_rotation) = signal(None::<RotateWalletResponse>);
@@ -85,44 +135,14 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
             // In-flight invoices (pending, processing) keep collecting on the
             // old key after rotation - that is correct behaviour, and it is
             // the one most likely to surprise someone rotating because a key
-            // just leaked. `limit=1` because only `total` is needed here.
-            let mut outstanding_count = 0i64;
-            for status in ["pending", "processing"] {
-                if let Ok(page) = api
-                    .list_invoices(Some(&sid), Some(status), None, None, Some(1), Some(0))
-                    .await
-                {
-                    outstanding_count += page.total;
-                }
-            }
+            // just leaked.
+            let outstanding_count = fetch_outstanding_invoice_count(&api, &sid).await;
             let _ = set_outstanding.try_set(outstanding_count);
 
             // Rotation is per store, not per account: a wallet can back
             // several stores, and only this one is about to move. Find the
             // others still pointing at the key this store is leaving.
-            let mut sharing = Vec::new();
-            if let Ok(current) = api.get_store_wallet(&sid).await {
-                let old_masked = current.wallet.xpub_masked;
-                if let Ok(stores) = api.list_stores().await {
-                    let mut resolved = Vec::with_capacity(stores.len());
-                    for store in &stores {
-                        let other_id = store.id.to_string();
-                        if other_id == sid {
-                            continue;
-                        }
-                        if let Ok(other) = api.get_store_wallet(&other_id).await {
-                            resolved.push((other_id, store.name.clone(), other.wallet.xpub_masked));
-                        }
-                    }
-                    sharing = stores_sharing_wallet(
-                        &old_masked,
-                        &sid,
-                        resolved
-                            .iter()
-                            .map(|(id, name, masked)| (id.as_str(), name.as_str(), masked.as_str())),
-                    );
-                }
-            }
+            let sharing = fetch_stores_sharing_wallet(&api, &sid).await;
             let _ = set_other_stores.try_set(sharing);
             let _ = set_loading_warnings.try_set(false);
         });
@@ -158,9 +178,18 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
                              software that holds it."
                                 .to_string()
                         }
+                        // A non-empty body means the server said something
+                        // more specific than "malformed key" (unsupported
+                        // namespace, for one) - showing that beats a guessed
+                        // diagnosis that may be wrong.
+                        ApiError::Http {
+                            status: 400,
+                            message,
+                        } if !message.trim().is_empty() => message.clone(),
                         ApiError::Http { status: 400, .. } => {
-                            "That doesn't look like a valid extended public key. Check for a \
-                             typo or a truncated paste - a full xpub is over 100 characters."
+                            "That doesn't look like a valid extended public key, or every \
+                             payment method already uses it. Check for a typo or a truncated \
+                             paste - a full xpub is over 100 characters."
                                 .to_string()
                         }
                         other => other.to_string(),
@@ -200,12 +229,23 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
                             </div>
                         }.into_any()
                     }
-                    Err(_) => view! {
+                    Err(ApiError::Http { status: 404, .. }) => view! {
                         <div class="ps-card">
                             <div class="ps-card-body">
                                 <p class="form-help">
                                     "No wallet currently resolves for this store on eip155 - no \
                                      override, and no account primary."
+                                </p>
+                            </div>
+                        </div>
+                    }.into_any(),
+                    Err(_) => view! {
+                        <div class="ps-card">
+                            <div class="ps-card-body">
+                                <p class="form-help" style="color: var(--color-error)">
+                                    "Could not load the current wallet. This is a fetch failure, \
+                                     not confirmation that no wallet is configured - reload before \
+                                     relying on this page."
                                 </p>
                             </div>
                         </div>
@@ -277,22 +317,41 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
                                     {move || if loading_warnings.get() {
                                         " Checking how many...".to_string()
                                     } else {
-                                        format!(" Currently outstanding: {}.", outstanding.get())
+                                        match outstanding.get() {
+                                            Some(n) => format!(" Currently outstanding: {}.", n),
+                                            None => " Could not check how many - the fetch \
+                                                      failed. Check the invoices list for this \
+                                                      store manually before proceeding."
+                                                .to_string(),
+                                        }
                                     }}
                                 </p>
                             </div>
 
-                            {move || (!loading_warnings.get() && !other_stores.get().is_empty()).then(|| view! {
-                                <div class="addresses-info">
-                                    <IconInfo />
-                                    <p>
-                                        "Rotation is per store, not per account. A wallet can back \
-                                         several stores, so this moves only this store's payment \
-                                         methods. Still on the current key: "
-                                        {other_stores.get().join(", ")}
-                                        "."
-                                    </p>
-                                </div>
+                            {move || (!loading_warnings.get()).then(|| match other_stores.get() {
+                                Some(names) if !names.is_empty() => view! {
+                                    <div class="addresses-info">
+                                        <IconInfo />
+                                        <p>
+                                            "Rotation is per store, not per account. A wallet can \
+                                             back several stores, so this moves only this store's \
+                                             payment methods. Still on the current key: "
+                                            {names.join(", ")}
+                                            "."
+                                        </p>
+                                    </div>
+                                }.into_any(),
+                                Some(_) => ().into_any(),
+                                None => view! {
+                                    <div class="addresses-info">
+                                        <IconInfo />
+                                        <p style="color: var(--color-error)">
+                                            "Could not check whether other stores share this \
+                                             wallet - the fetch failed. Check manually before \
+                                             treating a compromise response as complete."
+                                        </p>
+                                    </div>
+                                }.into_any(),
                             })}
 
                             <div class="addresses-info">
@@ -388,6 +447,162 @@ fn IconInfo() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::client::TestTransport;
+    use std::sync::{Arc, Mutex};
+
+    /// Polls `fut` to completion against a `TestTransport` that answers
+    /// synchronously, mirroring `api::client::stores`'s own `block_on` - see
+    /// that module for why a full executor would be dead weight here.
+    fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+        let mut fut = std::pin::pin!(fut);
+        let waker = std::task::Waker::noop();
+        let mut cx = std::task::Context::from_waker(waker);
+        loop {
+            if let std::task::Poll::Ready(value) = fut.as_mut().poll(&mut cx) {
+                return value;
+            }
+        }
+    }
+
+    fn sample_wallet_json(store_id: &str, xpub_masked: &str) -> serde_json::Value {
+        serde_json::json!({
+            "store_id": store_id,
+            "id": "11111111-1111-1111-1111-111111111111",
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "namespace": "eip155",
+            "xpub_masked": xpub_masked,
+            "derivation_index": 0,
+            "name": null,
+            "is_primary": false,
+            "is_override": true,
+            "created_at": "2026-01-01T00:00:00Z",
+        })
+    }
+
+    fn sample_store_json(id: &str, name: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "name": name,
+            "website": null,
+            "owner_id": "00000000-0000-0000-0000-000000000001",
+            "archived": false,
+            "created_at": "2026-01-01T00:00:00Z",
+        })
+    }
+
+    // =========================================================================
+    // fetch_stores_sharing_wallet - drives the async function the component
+    // actually calls, not just stores_sharing_wallet in isolation, so it
+    // catches a wiring bug the pure helper's own tests cannot: whether a
+    // failed fetch anywhere in the chain is reported as "unknown" rather than
+    // silently read as "no other stores."
+    // =========================================================================
+
+    #[test]
+    fn reports_the_other_store_sharing_the_current_wallet() {
+        let store_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let other_id = "33333333-3333-3333-3333-333333333333".to_string();
+        let sid = store_id.clone();
+        let oid = other_id.clone();
+        let transport: TestTransport = Arc::new(move |spec| {
+            assert_eq!(spec.method, "GET");
+            match spec.path.as_str() {
+                p if p == format!("/api/stores/{}/wallet", sid) => {
+                    Ok(sample_wallet_json(&sid, "xpub6D4B...eacc"))
+                }
+                "/api/stores" => Ok(serde_json::json!([
+                    sample_store_json(&sid, "This Store"),
+                    sample_store_json(&oid, "Coffee Shop"),
+                ])),
+                p if p == format!("/api/stores/{}/wallet", oid) => {
+                    Ok(sample_wallet_json(&oid, "xpub6D4B...eacc"))
+                }
+                other => panic!("unexpected path {other}"),
+            }
+        });
+        let api = ApiClient::with_test_transport("", transport);
+
+        let sharing = block_on(fetch_stores_sharing_wallet(&api, &store_id));
+
+        assert_eq!(sharing, Some(vec!["Coffee Shop".to_string()]));
+    }
+
+    #[test]
+    fn reports_none_shared_when_no_other_store_matches() {
+        let store_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let other_id = "33333333-3333-3333-3333-333333333333".to_string();
+        let sid = store_id.clone();
+        let oid = other_id.clone();
+        let transport: TestTransport = Arc::new(move |spec| match spec.path.as_str() {
+            p if p == format!("/api/stores/{}/wallet", sid) => {
+                Ok(sample_wallet_json(&sid, "xpub6D4B...eacc"))
+            }
+            "/api/stores" => Ok(serde_json::json!([
+                sample_store_json(&sid, "This Store"),
+                sample_store_json(&oid, "Flower Shop"),
+            ])),
+            p if p == format!("/api/stores/{}/wallet", oid) => {
+                Ok(sample_wallet_json(&oid, "xpub6ZZZ...9999"))
+            }
+            other => panic!("unexpected path {other}"),
+        });
+        let api = ApiClient::with_test_transport("", transport);
+
+        let sharing = block_on(fetch_stores_sharing_wallet(&api, &store_id));
+
+        assert_eq!(sharing, Some(Vec::new()));
+    }
+
+    #[test]
+    fn reports_unknown_rather_than_empty_when_the_current_wallet_fetch_fails() {
+        let store_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let transport: TestTransport = Arc::new(|_| {
+            Err(ApiError::Http {
+                status: 500,
+                message: String::new(),
+            })
+        });
+        let api = ApiClient::with_test_transport("", transport);
+
+        let sharing = block_on(fetch_stores_sharing_wallet(&api, &store_id));
+
+        // This is the case the review flagged: a failed fetch must not read
+        // as "Some(vec![])" (checked, nothing found) - that is indistinguishable
+        // from a real "no other stores" answer.
+        assert_eq!(sharing, None);
+    }
+
+    #[test]
+    fn reports_unknown_rather_than_a_short_list_when_one_candidate_store_fails() {
+        let store_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let other_id = "33333333-3333-3333-3333-333333333333".to_string();
+        let sid = store_id.clone();
+        let oid = other_id.clone();
+        let calls = Arc::new(Mutex::new(0u32));
+        let calls_clone = calls.clone();
+        let transport: TestTransport = Arc::new(move |spec| match spec.path.as_str() {
+            p if p == format!("/api/stores/{}/wallet", sid) => {
+                Ok(sample_wallet_json(&sid, "xpub6D4B...eacc"))
+            }
+            "/api/stores" => Ok(serde_json::json!([
+                sample_store_json(&sid, "This Store"),
+                sample_store_json(&oid, "Coffee Shop"),
+            ])),
+            p if p == format!("/api/stores/{}/wallet", oid) => {
+                *calls_clone.lock().unwrap() += 1;
+                Err(ApiError::Network("timeout".to_string()))
+            }
+            other => panic!("unexpected path {other}"),
+        });
+        let api = ApiClient::with_test_transport("", transport);
+
+        let sharing = block_on(fetch_stores_sharing_wallet(&api, &store_id));
+
+        assert_eq!(sharing, None);
+        // Confirms the failing lookup actually ran, rather than the whole
+        // function short-circuiting before it got there for an unrelated reason.
+        assert_eq!(*calls.lock().unwrap(), 1);
+    }
 
     // =========================================================================
     // looks_like_a_private_key
@@ -395,13 +610,17 @@ mod tests {
 
     #[test]
     fn detects_mainnet_and_testnet_private_key_prefixes() {
-        assert!(looks_like_a_private_key("xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq4o..."));
+        assert!(looks_like_a_private_key(
+            "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq4o..."
+        ));
         assert!(looks_like_a_private_key("tprv8ZgxMBicQKsPd..."));
     }
 
     #[test]
     fn accepts_leading_and_trailing_whitespace() {
-        assert!(looks_like_a_private_key("  xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq4o...  "));
+        assert!(looks_like_a_private_key(
+            "  xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq4o...  "
+        ));
     }
 
     #[test]
@@ -428,12 +647,11 @@ mod tests {
             ("store-3", "Book Store", "xpub6D4B...eacc"),
             ("store-4", "Flower Shop", "xpub6ZZZ...9999"),
         ];
-        let sharing = stores_sharing_wallet(
-            "xpub6D4B...eacc",
-            "store-1",
-            resolved.into_iter(),
+        let sharing = stores_sharing_wallet("xpub6D4B...eacc", "store-1", resolved.into_iter());
+        assert_eq!(
+            sharing,
+            vec!["Coffee Shop".to_string(), "Book Store".to_string()]
         );
-        assert_eq!(sharing, vec!["Coffee Shop".to_string(), "Book Store".to_string()]);
     }
 
     #[test]

@@ -5,9 +5,9 @@ use super::{ApiClient, ApiError};
 use crate::api::{
     CreatePaymentMethodRequest, CreateStoreRequest, CreateWalletRequest, RotateWalletRequest,
     RotateWalletResponse, SetTokenPolicyRequest, Store, StorePaymentMethod, StoreSettings,
-    StoreWalletResponse, StoreWebhook, TokenPolicy, UpdatePaymentMethodRequest,
-    UpdateStoreRequest, UpdateStoreSettingsRequest, UpdateWalletRequest, UpdateWebhookRequest,
-    Wallet, WalletXpubResponse,
+    StoreWalletResponse, StoreWebhook, TokenPolicy, UpdatePaymentMethodRequest, UpdateStoreRequest,
+    UpdateStoreSettingsRequest, UpdateWalletRequest, UpdateWebhookRequest, Wallet,
+    WalletXpubResponse,
 };
 
 /// Path for a single wallet, shared by `update_wallet` and `delete_wallet` so
