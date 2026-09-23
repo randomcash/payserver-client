@@ -3,10 +3,11 @@
 
 use super::{ApiClient, ApiError};
 use crate::api::{
-    CreatePaymentMethodRequest, CreateStoreRequest, CreateWalletRequest, SetTokenPolicyRequest,
-    Store, StorePaymentMethod, StoreSettings, StoreWebhook, TokenPolicy,
-    UpdatePaymentMethodRequest, UpdateStoreRequest, UpdateStoreSettingsRequest,
-    UpdateWalletRequest, UpdateWebhookRequest, Wallet, WalletXpubResponse,
+    CreatePaymentMethodRequest, CreateStoreRequest, CreateWalletRequest, RotateWalletRequest,
+    RotateWalletResponse, SetTokenPolicyRequest, Store, StorePaymentMethod, StoreSettings,
+    StoreWalletResponse, StoreWebhook, TokenPolicy, UpdatePaymentMethodRequest,
+    UpdateStoreRequest, UpdateStoreSettingsRequest, UpdateWalletRequest, UpdateWebhookRequest,
+    Wallet, WalletXpubResponse,
 };
 
 /// Path for a single wallet, shared by `update_wallet` and `delete_wallet` so
@@ -100,6 +101,31 @@ impl ApiClient {
             store_id, method_id
         ))
         .await
+    }
+
+    /// Get the wallet a store currently resolves to, on its default (eip155)
+    /// chain family, and whether that is a store-level override or the
+    /// account primary.
+    ///
+    /// 404 means nothing resolves yet - no override, no account primary in
+    /// this namespace - which is a real state, not an error to retry.
+    pub async fn get_store_wallet(&self, store_id: &str) -> Result<StoreWalletResponse, ApiError> {
+        self.get(&format!("/api/stores/{}/wallet", store_id)).await
+    }
+
+    /// Rotate the xpub this store's payment methods derive from.
+    ///
+    /// Scoped to the store, not the account: a wallet can back several
+    /// stores, and this moves only the payment methods on `store_id`. Old,
+    /// already-derived addresses stay watched until their invoices resolve -
+    /// this does not touch anything in flight.
+    pub async fn rotate_store_wallet(
+        &self,
+        store_id: &str,
+        req: &RotateWalletRequest,
+    ) -> Result<RotateWalletResponse, ApiError> {
+        self.post(&format!("/api/stores/{}/wallet/rotate", store_id), req)
+            .await
     }
 
     // =========================================================================
@@ -399,6 +425,38 @@ mod tests {
                 method: "DELETE",
                 path: "/api/wallets/wallet-1".to_string(),
                 body: None,
+            }
+        );
+    }
+
+    #[test]
+    fn rotate_store_wallet_posts_the_request_body_to_the_store_rotate_endpoint() {
+        let (transport, recorded) = recording_transport(serde_json::json!({
+            "store_id": "22222222-2222-2222-2222-222222222222",
+            "new_xpub_masked": "xpub6D4B...eacc",
+            "methods_rotated": 1,
+            "rotations": [],
+        }));
+        let client = ApiClient::with_test_transport("", transport);
+        let req = RotateWalletRequest {
+            xpub: "xpub6D4BDPcP2GT...".to_string(),
+            reason: Some("key compromise".to_string()),
+            namespace: "eip155".to_string(),
+        };
+
+        let result = block_on(client.rotate_store_wallet("store-1", &req));
+
+        assert!(result.is_ok());
+        assert_eq!(
+            recorded.lock().unwrap().clone().unwrap(),
+            RequestSpec {
+                method: "POST",
+                path: "/api/stores/store-1/wallet/rotate".to_string(),
+                body: Some(serde_json::json!({
+                    "xpub": "xpub6D4BDPcP2GT...",
+                    "reason": "key compromise",
+                    "namespace": "eip155",
+                })),
             }
         );
     }

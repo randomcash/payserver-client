@@ -9,6 +9,7 @@ use crate::api::ApiClient;
 use super::general_tab::GeneralTab;
 use super::payment_methods_tab::PaymentMethodsTab;
 use super::settings_tab::SettingsTab;
+use super::wallet_tab::WalletTab;
 use super::webhooks_tab::WebhooksTab;
 use super::{IconArchive, IconArrowLeft, format_date};
 
@@ -32,6 +33,7 @@ pub fn StoreDetailPage() -> impl IntoView {
     let tabs = vec![
         ("general", "General"),
         ("payment_methods", "Payment Methods"),
+        ("wallet", "Wallet"),
         ("webhooks", "Webhooks"),
         ("settings", "Settings"),
     ];
@@ -105,6 +107,7 @@ pub fn StoreDetailPage() -> impl IntoView {
                                 {move || match active_tab.get().as_str() {
                                     "general" => view! { <GeneralTab store=store_for_tabs.clone() /> }.into_any(),
                                     "payment_methods" => view! { <PaymentMethodsTab store_id=store_for_tabs.id.to_string() /> }.into_any(),
+                                    "wallet" => view! { <WalletTab store_id=store_for_tabs.id.to_string() /> }.into_any(),
                                     "webhooks" => view! { <WebhooksTab store_id=store_for_tabs.id.to_string() /> }.into_any(),
                                     "settings" => view! { <SettingsTab store_id=store_for_tabs.id.to_string() /> }.into_any(),
                                     _ => view! { <GeneralTab store=store_for_tabs.clone() /> }.into_any(),
