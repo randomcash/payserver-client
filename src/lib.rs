@@ -320,11 +320,8 @@ async fn connect_and_send(
     // implements it — without it the send below reaches the wallet and is
     // rejected there, so the connected account has to survive past the
     // "is anyone connected" check rather than being discarded after it.
-    let Some(from_address) = js_sys::Array::from(&accounts)
-        .get(0)
-        .as_string()
-        .filter(|a| !a.is_empty())
-    else {
+    let first_account = js_sys::Array::from(&accounts).get(0).as_string();
+    let Some(from_address) = choose_from_address(first_account.as_deref()) else {
         return WalletActionStatus::Error("wallet returned no account".to_string());
     };
 
@@ -375,6 +372,23 @@ async fn connect_and_send(
 /// wasm.
 fn network_matches(reported: Option<&str>, expected_chain_hex: &str) -> bool {
     reported.is_some_and(|r| r.eq_ignore_ascii_case(expected_chain_hex))
+}
+
+/// The account `eth_sendTransaction`'s `from` is filled in with: element zero
+/// of `eth_requestAccounts`'s reply, required to be a non-empty string.
+///
+/// Pulled out of `connect_and_send` so the decision can be unit-tested
+/// without a mocked EIP-1193 provider, same reasoning as `network_matches` —
+/// `first_account` is already `Option<&str>` by the time it reaches here.
+/// `None` covers both an empty accounts array and an element zero that isn't
+/// a string, since `js_sys::Array::get(0).as_string()` collapses both to
+/// `None` at the call site, which is the only part that needs a live
+/// provider reply. A wallet that answers with either, or with an empty
+/// string, must not produce a `from` at all: forwarding it here would build
+/// a transaction the wallet rejects on its own, surfacing to the customer as
+/// the wallet misbehaving rather than as this bug.
+fn choose_from_address(first_account: Option<&str>) -> Option<&str> {
+    first_account.filter(|a| !a.is_empty())
 }
 
 /// The `to`/`data`/`value` fields `connect_and_send` puts on the
@@ -586,6 +600,36 @@ mod wallet_action_tests {
     #[test]
     fn network_matches_rejects_a_non_string_reply() {
         assert!(!network_matches(None, "0x1"));
+    }
+
+    /// No accounts connected — the normal reply from a wallet the user has
+    /// just declined to connect. At the call site this and a non-string
+    /// element zero both arrive here as `None`, via `as_string()`.
+    #[test]
+    fn choose_from_address_rejects_an_empty_accounts_array() {
+        assert!(choose_from_address(None).is_none());
+    }
+
+    /// Element zero present but not a string — `as_string()` at the call
+    /// site already collapses this to `None`, same as an empty array; must
+    /// fail closed rather than forward whatever this is into a
+    /// transaction's `from` field.
+    #[test]
+    fn choose_from_address_rejects_a_non_string_first_element() {
+        assert!(choose_from_address(None).is_none());
+    }
+
+    /// Looks redundant next to `as_string()` and is the piece most likely to
+    /// be dropped by a later refactor — an empty string is a string, so
+    /// without this filter it would pass through as a `from` address.
+    #[test]
+    fn choose_from_address_rejects_an_empty_string_first_element() {
+        assert!(choose_from_address(Some("")).is_none());
+    }
+
+    #[test]
+    fn choose_from_address_carries_through_the_exact_address() {
+        assert_eq!(choose_from_address(Some(RECIPIENT)), Some(RECIPIENT));
     }
 
     fn some_transfer() -> WalletActionsContext {
