@@ -44,6 +44,16 @@ pub fn CheckoutPage() -> impl IntoView {
     // Refresh counter for manual retry / WS-triggered refresh
     let (refresh, set_refresh) = signal(0u32);
 
+    // Locks the wallet-connect buttons permanently once a send succeeds.
+    // `render_checkout` — including the wallet slot's own status signal —
+    // is rebuilt from scratch on every resource refetch (the poll below,
+    // and every websocket update, which fires right when a just-broadcast
+    // payment is detected), so state local to that subtree can't be what
+    // stops a second click from sending the same payment twice. This lives
+    // above the `Suspense` boundary so it survives those rebuilds; reset
+    // when the invoice itself changes, in the effect below.
+    let sent_lock = RwSignal::new(false);
+
     let checkout_resource = LocalResource::new(move || {
         let api = api.clone();
         let id = invoice_id();
@@ -66,6 +76,9 @@ pub fn CheckoutPage() -> impl IntoView {
     let ws_for_effect = ws.clone();
     Effect::new(move |_| {
         let id = invoice_id();
+        // A different invoice has nothing to do with whether the previous
+        // one was paid — don't carry the lock across.
+        sent_lock.set(false);
         if id.is_empty() {
             ws_for_effect.disconnect();
             return;
@@ -165,7 +178,7 @@ pub fn CheckoutPage() -> impl IntoView {
                         }.into_any(),
                         Ok(data) => {
                             let data = data.clone();
-                            render_checkout(data, selected_idx, set_selected_idx)
+                            render_checkout(data, selected_idx, set_selected_idx, sent_lock)
                         }
                     })}
                 </Suspense>
@@ -189,6 +202,7 @@ fn render_checkout(
     data: CheckoutResponse,
     selected_idx: ReadSignal<usize>,
     set_selected_idx: WriteSignal<usize>,
+    sent_lock: RwSignal<bool>,
 ) -> AnyView {
     let status = data.status.clone();
 
@@ -345,6 +359,19 @@ fn render_checkout(
                         label: "Copy to an exchange withdrawal",
                         data: addr.clone(),
                     });
+
+                    // The `wallet_actions` slot signature is fixed at
+                    // (address, chain_id) — the amount travels through
+                    // context instead, read back inside the slot
+                    // implementation. See `WalletActionsContext`.
+                    provide_context(crate::WalletActionsContext {
+                        amount: option.amount.clone(),
+                        token_address: option.token_address.clone(),
+                        sent_lock,
+                    });
+                    let wallet_actions = (crate::checkout_plugin().wallet_actions)
+                        .and_then(|render| render(&addr, &option.chain_id));
+
                     view! {
                         <div class="checkout-payment-details">
                             <div class="checkout-qr">
@@ -375,6 +402,8 @@ fn render_checkout(
                                     <CopyButton text=addr_for_copy.clone() />
                                 </div>
                             </div>
+
+                            {wallet_actions}
                         </div>
                     }
                 })
