@@ -25,17 +25,18 @@ pub fn AdminTab() -> impl IntoView {
     // when nothing is stored. Sending back whatever was loaded would
     // therefore write a list nobody chose, and on a testnet deployment that
     // list has no Sepolia in it, so the instance would stop accepting the
-    // only chain it watches. Saving the billing store must not do that.
+    // only chain it watches. Saving the operator store must not do that.
     let (chains_edited, set_chains_edited) = signal(false);
     let (settings_status, set_settings_status) = signal(String::new());
 
-    // The store this instance bills its own subscriptions through. Empty
-    // string means none - an instance that sells nothing to itself.
-    let (billing_store, set_billing_store) = signal(String::new());
+    // The operator's own store: where this instance issues its own invoices.
+    // Empty string means none - an instance that issues no invoices to
+    // itself.
+    let (operator_store, set_operator_store) = signal(String::new());
     // Whether the saved value is the one the server is actually running with.
     // It is read at boot, so a change sits pending until a restart, and an
     // admin looking at this page needs to be able to tell the difference.
-    let (billing_store_active, set_billing_store_active) = signal(true);
+    let (operator_store_active, set_operator_store_active) = signal(true);
     let (stores, set_stores) = signal(Vec::<Store>::new());
 
     // User list state
@@ -70,13 +71,17 @@ pub fn AdminTab() -> impl IntoView {
                 set_invoice_expiry.set(settings.invoice_expiry_minutes.to_string());
                 set_rate_limit.set(settings.rate_limit_rpm.to_string());
                 set_enabled_chain_ids.set(settings.enabled_chain_ids);
-                set_billing_store.set(
+                // `.billing_store_id`/`.billing_store_id_active`: the shared
+                // `ServerSettingsResponse` from payserver-commons, pinned by
+                // rev and not yet renamed there - see that repository's own
+                // commit.
+                set_operator_store.set(
                     settings
                         .billing_store_id
                         .map(|id| id.0.to_string())
                         .unwrap_or_default(),
                 );
-                set_billing_store_active.set(settings.billing_store_id_active);
+                set_operator_store_active.set(settings.billing_store_id_active);
             }
             // Offered as a list rather than a UUID field. An operator should
             // not have to copy an identifier out of a URL to configure where
@@ -106,37 +111,40 @@ pub fn AdminTab() -> impl IntoView {
         let chains = chains_edited
             .get_untracked()
             .then(|| enabled_chain_ids.get_untracked());
-        let billing = billing_store.get_untracked();
+        let operator_store_value = operator_store.get_untracked();
         leptos::task::spawn_local(async move {
             // Always `Some(..)`: this form knows about the field, so it is
             // always talking about it. The inner option is the value - `None`
             // clears the setting. An absent field would mean "leave it
             // alone", which is what an older client sends and is not what a
             // save from this page means.
-            let billing_store_id = Some(if billing.is_empty() {
+            let operator_store_id = Some(if operator_store_value.is_empty() {
                 None
             } else {
-                billing.parse().ok().map(types::StoreId)
+                operator_store_value.parse().ok().map(types::StoreId)
             });
 
+            // `billing_store_id`: the shared `UpdateServerSettingsRequest`
+            // from payserver-commons, pinned by rev and not yet renamed
+            // there - see that repository's own commit.
             let request = UpdateServerSettingsRequest {
                 default_confirmations: confirmations,
                 invoice_expiry_minutes: expiry,
                 rate_limit_rpm: rpm,
                 enabled_chain_ids: chains,
-                billing_store_id,
+                billing_store_id: operator_store_id,
             };
             match api.update_server_settings(&request).await {
                 Ok(()) => {
                     set_chains_edited.set(false);
                     // Saved is not applied. Saying only "saved" would leave an
-                    // admin believing the server is billing on the store they
-                    // just picked, which it is not until it restarts.
+                    // admin believing the server is using the store they just
+                    // picked, which it is not until it restarts.
                     set_settings_status.set(
-                        "Settings saved. The billing store takes effect when the server restarts."
+                        "Settings saved. The operator store takes effect when the server restarts."
                             .to_string(),
                     );
-                    set_billing_store_active.set(false);
+                    set_operator_store_active.set(false);
                 }
                 Err(e) => set_settings_status.set(format!("Error: {}", e)),
             }
@@ -276,7 +284,7 @@ pub fn AdminTab() -> impl IntoView {
                 </div>
             </div>
 
-            // Billing
+            // Operator store
             //
             // Its own card rather than a field among the payment defaults:
             // this is the only setting on the page that decides where money
@@ -284,17 +292,17 @@ pub fn AdminTab() -> impl IntoView {
             // until a restart.
             <div class="ps-card">
                 <div class="ps-card-header">
-                    <h3>"Billing"</h3>
+                    <h3>"Operator Store"</h3>
                 </div>
                 <div class="ps-card-body">
                     <div class="form-group">
-                        <label class="form-label">"Subscription store"</label>
+                        <label class="form-label">"Own store"</label>
                         <select
                             class="form-input"
-                            prop:value=move || billing_store.get()
-                            on:change=move |ev| set_billing_store.set(event_target_value(&ev))
+                            prop:value=move || operator_store.get()
+                            on:change=move |ev| set_operator_store.set(event_target_value(&ev))
                         >
-                            <option value="">"None - this server bills nothing for itself"</option>
+                            <option value="">"None - this server issues no invoices to itself"</option>
                             <For
                                 each=move || stores.get()
                                 key=|store| store.id
@@ -304,13 +312,13 @@ pub fn AdminTab() -> impl IntoView {
                             </For>
                         </select>
                         <p class="form-help">
-                            "Subscription invoices are issued on this store, and payments to it \
-                             are what a billing plugin is told about. It needs an enabled payment \
-                             method whose wallet resolves, or it will be refused."
+                            "The server's own invoices are issued on this store, and payments to \
+                             it are what a plugin watching it is told about. It needs an enabled \
+                             payment method whose wallet resolves, or it will be refused."
                         </p>
-                        <Show when=move || !billing_store_active.get()>
+                        <Show when=move || !operator_store_active.get()>
                             <p class="form-help" style="color: var(--color-warning);">
-                                "Pending restart - the server is not billing on this store yet."
+                                "Pending restart - the server is not using this store yet."
                             </p>
                         </Show>
                     </div>
