@@ -402,4 +402,35 @@ mod tests {
             }
         );
     }
+
+    // The full, unmasked xpub is the one thing this API returns nowhere else
+    // - a request built against the wrong id, or against the masked wallet
+    // endpoint instead of `/xpub`, would leak or withhold key material with
+    // no type error to catch it. Only driving `export_wallet_xpub` itself
+    // through a transport that records the request can.
+    #[test]
+    fn export_wallet_xpub_gets_the_xpub_subpath_of_the_given_wallet() {
+        let (transport, recorded) = recording_transport(serde_json::json!({
+            "id": "11111111-1111-1111-1111-111111111111",
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "namespace": "eip155",
+            "xpub": "xpub6D4BDPcP2GT...",
+            "derivation_index": 0,
+            "name": null,
+            "created_at": "2026-01-01T00:00:00Z",
+        }));
+        let client = ApiClient::with_test_transport("", transport);
+
+        let result = block_on(client.export_wallet_xpub("wallet-1"));
+
+        assert!(result.is_ok());
+        assert_eq!(
+            recorded.lock().unwrap().clone().unwrap(),
+            RequestSpec {
+                method: "GET",
+                path: "/api/wallets/wallet-1/xpub".to_string(),
+                body: None,
+            }
+        );
+    }
 }
