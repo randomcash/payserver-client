@@ -26,6 +26,36 @@ fn looks_like_a_private_key(xpub: &str) -> bool {
     trimmed.starts_with("xprv") || trimmed.starts_with("tprv")
 }
 
+/// Turns a failed rotation into the message shown to the operator.
+///
+/// The server's own message wins whenever it sent one - a real diagnosis
+/// beats a guess, even when the input also looks like an xprv, since a
+/// specific version-byte message from the server is more informative than
+/// the canned text below. The private-key guess exists only for the common
+/// case where the server's 400 body is empty, since a blank "HTTP error 400:
+/// " does not tell anyone pasting an xprv what they got wrong.
+fn rotation_error_message(err: &ApiError, xpub: &str) -> String {
+    match err {
+        ApiError::Http {
+            status: 400,
+            message,
+        } if !message.trim().is_empty() => message.clone(),
+        ApiError::Http { status: 400, .. } if looks_like_a_private_key(xpub) => {
+            "That is a private key (xprv), not a public one. Rotation needs an \
+             extended PUBLIC key - the private key should never leave the wallet \
+             software that holds it."
+                .to_string()
+        }
+        ApiError::Http { status: 400, .. } => {
+            "That doesn't look like a valid extended public key, or every \
+             payment method already uses it. Check for a typo or a truncated \
+             paste - a full xpub is over 100 characters."
+                .to_string()
+        }
+        other => other.to_string(),
+    }
+}
+
 /// Names of stores (other than `excluding`) whose resolved wallet matches
 /// `old_xpub_masked`.
 ///
@@ -171,29 +201,7 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
                     let _ = set_refresh.try_update(|c| *c += 1);
                 }
                 Err(e) => {
-                    let message = match &e {
-                        ApiError::Http { status: 400, .. } if looks_like_a_private_key(&xpub) => {
-                            "That is a private key (xprv), not a public one. Rotation needs an \
-                             extended PUBLIC key - the private key should never leave the wallet \
-                             software that holds it."
-                                .to_string()
-                        }
-                        // A non-empty body means the server said something
-                        // more specific than "malformed key" (unsupported
-                        // namespace, for one) - showing that beats a guessed
-                        // diagnosis that may be wrong.
-                        ApiError::Http {
-                            status: 400,
-                            message,
-                        } if !message.trim().is_empty() => message.clone(),
-                        ApiError::Http { status: 400, .. } => {
-                            "That doesn't look like a valid extended public key, or every \
-                             payment method already uses it. Check for a typo or a truncated \
-                             paste - a full xpub is over 100 characters."
-                                .to_string()
-                        }
-                        other => other.to_string(),
-                    };
+                    let message = rotation_error_message(&e, &xpub);
                     let _ = set_rotate_error.try_set(Some(message));
                 }
             }
@@ -602,6 +610,100 @@ mod tests {
         // Confirms the failing lookup actually ran, rather than the whole
         // function short-circuiting before it got there for an unrelated reason.
         assert_eq!(*calls.lock().unwrap(), 1);
+    }
+
+    // =========================================================================
+    // fetch_outstanding_invoice_count - drives the async function the
+    // component actually calls, since the pending/processing sum has to
+    // read as "unknown" rather than a low number when either fetch fails.
+    // =========================================================================
+
+    #[test]
+    fn sums_pending_and_processing_across_both_calls() {
+        let store_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let sid = store_id.clone();
+        let transport: TestTransport = Arc::new(move |spec| {
+            assert_eq!(spec.method, "GET");
+            if spec.path == format!("/api/invoices?store_id={sid}&status=pending&limit=1&offset=0")
+            {
+                Ok(serde_json::json!({ "total": 3, "invoices": [] }))
+            } else if spec.path
+                == format!("/api/invoices?store_id={sid}&status=processing&limit=1&offset=0")
+            {
+                Ok(serde_json::json!({ "total": 2, "invoices": [] }))
+            } else {
+                panic!("unexpected path {}", spec.path);
+            }
+        });
+        let api = ApiClient::with_test_transport("", transport);
+
+        let count = block_on(fetch_outstanding_invoice_count(&api, &store_id));
+
+        assert_eq!(count, Some(5));
+    }
+
+    #[test]
+    fn reports_unknown_rather_than_a_low_count_when_a_fetch_fails() {
+        let store_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let sid = store_id.clone();
+        let transport: TestTransport = Arc::new(move |spec| {
+            if spec.path == format!("/api/invoices?store_id={sid}&status=pending&limit=1&offset=0")
+            {
+                Ok(serde_json::json!({ "total": 3, "invoices": [] }))
+            } else {
+                // The "processing" fetch fails - a regression that read this
+                // as "0 processing" would report 3 outstanding instead of
+                // "could not check," understating exposure after a
+                // compromise.
+                Err(ApiError::Network("timeout".to_string()))
+            }
+        });
+        let api = ApiClient::with_test_transport("", transport);
+
+        let count = block_on(fetch_outstanding_invoice_count(&api, &store_id));
+
+        assert_eq!(count, None);
+    }
+
+    // =========================================================================
+    // rotation_error_message
+    // =========================================================================
+
+    #[test]
+    fn names_a_pasted_private_key_when_the_server_sent_no_message() {
+        let err = ApiError::Http {
+            status: 400,
+            message: String::new(),
+        };
+        let message = rotation_error_message(&err, "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4s");
+        assert!(message.contains("private key"));
+    }
+
+    #[test]
+    fn prefers_the_servers_own_message_even_over_a_private_key_guess() {
+        let err = ApiError::Http {
+            status: 400,
+            message: "unsupported namespace".to_string(),
+        };
+        let message = rotation_error_message(&err, "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4s");
+        assert_eq!(message, "unsupported namespace");
+    }
+
+    #[test]
+    fn falls_back_to_a_generic_malformed_key_message() {
+        let err = ApiError::Http {
+            status: 400,
+            message: String::new(),
+        };
+        let message = rotation_error_message(&err, "not-a-key-at-all");
+        assert!(message.contains("extended public key"));
+    }
+
+    #[test]
+    fn passes_through_a_non_http_error() {
+        let err = ApiError::Network("timeout".to_string());
+        let message = rotation_error_message(&err, "xpub6D4B...eacc");
+        assert_eq!(message, err.to_string());
     }
 
     // =========================================================================
