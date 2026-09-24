@@ -113,8 +113,17 @@ async fn fetch_stores_sharing_wallet(api: &ApiClient, store_id: &str) -> Option<
         if other_id == store_id {
             continue;
         }
-        let other = api.get_store_wallet(&other_id).await.ok()?;
-        resolved.push((other_id, store.name.clone(), other.wallet.xpub_masked));
+        match api.get_store_wallet(&other_id).await {
+            Ok(other) => resolved.push((other_id, store.name.clone(), other.wallet.xpub_masked)),
+            // No wallet resolves for this store at all - a real, ordinary
+            // state (see `get_store_wallet`'s own doc), not a fetch failure.
+            // It cannot share the key being rotated, so it is excluded
+            // rather than collapsing the whole warning to "could not
+            // verify" the moment any other store in the account has never
+            // had a payment method set up.
+            Err(ApiError::Http { status: 404, .. }) => {}
+            Err(_) => return None,
+        }
     }
     Some(stores_sharing_wallet(
         &current.wallet.xpub_masked,
@@ -616,6 +625,45 @@ mod tests {
         // Confirms the failing lookup actually ran, rather than the whole
         // function short-circuiting before it got there for an unrelated reason.
         assert_eq!(*calls.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn treats_a_walletless_candidate_store_as_not_sharing_rather_than_unknown() {
+        let store_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let walletless_id = "33333333-3333-3333-3333-333333333333".to_string();
+        let sharing_id = "44444444-4444-4444-4444-444444444444".to_string();
+        let sid = store_id.clone();
+        let wid = walletless_id.clone();
+        let hid = sharing_id.clone();
+        let transport: TestTransport = Arc::new(move |spec| match spec.path.as_str() {
+            p if p == format!("/api/stores/{}/wallet", sid) => {
+                Ok(sample_wallet_json(&sid, "xpub6D4B...eacc"))
+            }
+            "/api/stores" => Ok(serde_json::json!([
+                sample_store_json(&sid, "This Store"),
+                sample_store_json(&wid, "No Wallet Yet"),
+                sample_store_json(&hid, "Coffee Shop"),
+            ])),
+            // No override, no account primary - an ordinary state for a
+            // store that has never had a payment method set up, not a
+            // fetch failure.
+            p if p == format!("/api/stores/{}/wallet", wid) => Err(ApiError::Http {
+                status: 404,
+                message: String::new(),
+            }),
+            p if p == format!("/api/stores/{}/wallet", hid) => {
+                Ok(sample_wallet_json(&hid, "xpub6D4B...eacc"))
+            }
+            other => panic!("unexpected path {other}"),
+        });
+        let api = ApiClient::with_test_transport("", transport);
+
+        let sharing = block_on(fetch_stores_sharing_wallet(&api, &store_id));
+
+        // The walletless store is silently excluded, not treated as a
+        // reason the whole check is "unknown" - and the store that
+        // genuinely shares the key is still reported.
+        assert_eq!(sharing, Some(vec!["Coffee Shop".to_string()]));
     }
 
     // =========================================================================
