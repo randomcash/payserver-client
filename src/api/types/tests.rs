@@ -1015,3 +1015,77 @@ fn test_user_info_deserialize_minimal() {
     assert!(user.last_login_at.is_none());
     assert!(!user.role.is_admin());
 }
+
+#[test]
+fn a_null_permission_set_reads_as_inheriting_the_role() {
+    assert_eq!(
+        describe_api_key_permissions(&None),
+        "Full access (inherits your role)"
+    );
+    assert!(api_key_is_unrestricted(&None));
+}
+
+#[test]
+fn an_empty_permission_set_reads_as_no_permissions() {
+    assert_eq!(
+        describe_api_key_permissions(&Some(vec![])),
+        "No permissions granted"
+    );
+    assert!(!api_key_is_unrestricted(&Some(vec![])));
+}
+
+#[test]
+fn unrestricted_reads_as_full_access() {
+    let perms = vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms.clone())),
+        "Full access (unrestricted)"
+    );
+    assert!(api_key_is_unrestricted(&Some(perms)));
+}
+
+#[test]
+fn a_named_store_action_reads_as_its_label_not_the_raw_policy_string() {
+    let perms = vec!["ethpay.store.cancreateinvoice".to_string()];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "Create invoices"
+    );
+}
+
+#[test]
+fn several_store_actions_join_into_one_summary() {
+    let perms = vec![
+        "ethpay.store.cancreateinvoice".to_string(),
+        "ethpay.store.canviewstoresettings".to_string(),
+    ];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "Create invoices, View store settings"
+    );
+}
+
+#[test]
+fn a_store_scoped_action_still_reads_by_its_label() {
+    // The `:storeId` suffix narrows enforcement but is not part of what the
+    // list view names - there is no room here to also show which store.
+    let perms = vec![format!(
+        "ethpay.store.cancreateinvoice:{}",
+        uuid::Uuid::new_v4()
+    )];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "Create invoices"
+    );
+}
+
+#[test]
+fn an_unrecognised_policy_string_falls_back_to_itself() {
+    // Defensive: a future server policy this client hasn't been taught about
+    // yet should not disappear from the summary, just render unprettified.
+    let perms = vec!["ethpay.store.canfrobnicate".to_string()];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "ethpay.store.canfrobnicate"
+    );
+}

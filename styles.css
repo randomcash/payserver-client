@@ -5217,6 +5217,35 @@ tr.payment-row {
     flex-shrink: 0;
 }
 
+.api-key-permissions-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+}
+
+.api-key-permission-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.api-key-permissions-summary {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.api-key-permissions-summary-unrestricted {
+    font-size: var(--text-xs);
+    color: var(--color-danger);
+    font-weight: 600;
+}
+
 /* Settings Info Box */
 .settings-info {
     display: flex;

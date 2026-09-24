@@ -1,7 +1,12 @@
 //! API Keys settings tab.
 
+use std::collections::HashSet;
+
 use crate::api::{
-    ApiClient, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponsePayload, RotateApiKeyResponse,
+    API_KEY_GRANTABLE_STORE_ACTIONS, API_KEY_UNRESTRICTED_PERMISSION, ApiClient,
+    ApiKeyInfoWithPermissions, CreateApiKeyRequestWithPermissions,
+    CreateApiKeyResponseWithPermissions, RotateApiKeyResponseWithPermissions,
+    UpdateApiKeyPermissionsRequest, api_key_is_unrestricted, describe_api_key_permissions,
 };
 use leptos::prelude::*;
 
@@ -12,7 +17,7 @@ use super::{IconInfo, IconPlus};
 pub fn ApiKeysTab() -> impl IntoView {
     let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
 
-    // Track version to trigger refetches after create/revoke
+    // Track version to trigger refetches after create/revoke/permission changes
     let (version, set_version) = signal(0u32);
 
     // Load API keys from backend
@@ -25,8 +30,22 @@ pub fn ApiKeysTab() -> impl IntoView {
     // State for create form
     let (show_create, set_show_create) = signal(false);
     let (new_key_name, set_new_key_name) = signal(String::new());
-    let (created_key, set_created_key) = signal(Option::<CreateApiKeyResponsePayload>::None);
+    let (new_key_unrestricted, set_new_key_unrestricted) = signal(false);
+    let (new_key_store_actions, set_new_key_store_actions) = signal(HashSet::<String>::new());
+    let (created_key, set_created_key) =
+        signal(Option::<CreateApiKeyResponseWithPermissions>::None);
     let (loading, set_loading) = signal(false);
+    // Error surfaced on a failed creation — previously the handler swallowed
+    // errors silently, leaving the form open with no feedback while the
+    // spinner just stopped.
+    let (create_error, set_create_error) = signal(Option::<String>::None);
+
+    // Error surfaced on a failed permission change — granting unrestricted
+    // access is refused server-side unless the caller's own role currently
+    // grants it, so a plain user clicking "Grant unrestricted" can fail, and
+    // a silent failure would leave them believing the key was widened when
+    // it was not.
+    let (permissions_error, set_permissions_error) = signal(Option::<String>::None);
 
     // Create handler
     let on_create = move |_| {
@@ -35,20 +54,68 @@ pub fn ApiKeysTab() -> impl IntoView {
             return;
         }
         let client = api.get();
-        let request = CreateApiKeyRequest {
+        let request = CreateApiKeyRequestWithPermissions {
             name: name.trim().to_string(),
             expires_at: None,
+            permissions: if new_key_unrestricted.get() {
+                vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()]
+            } else {
+                new_key_store_actions.get().into_iter().collect()
+            },
         };
         set_loading.set(true);
+        set_create_error.set(None);
         wasm_bindgen_futures::spawn_local(async move {
-            if let Ok(resp) = client.create_api_key(&request).await {
-                set_created_key.set(Some(resp));
-                set_show_create.set(false);
-                set_new_key_name.set(String::new());
-                set_version.update(|v| *v += 1);
+            match client.create_api_key(&request).await {
+                Ok(resp) => {
+                    set_created_key.set(Some(resp));
+                    set_show_create.set(false);
+                    set_new_key_name.set(String::new());
+                    set_new_key_unrestricted.set(false);
+                    set_new_key_store_actions.set(HashSet::new());
+                    set_version.update(|v| *v += 1);
+                }
+                Err(err) => {
+                    set_create_error.set(Some(format!("Failed to create key: {err}")));
+                }
             }
             set_loading.set(false);
         });
+    };
+
+    // Set a key's permission scope to exactly nothing or exactly
+    // unrestricted - the two shapes offered on an existing key's row. The
+    // server accepts more than these two (see the creation form, and
+    // `API_KEY_GRANTABLE_STORE_ACTIONS`), but this control exists to undo a
+    // legacy key's implicit full access quickly, not to re-run the creation
+    // checklist against a key that already exists. "Restrict" sends `[]`
+    // regardless of the key's current scope - the first narrowing a legacy
+    // key (`permissions: None`, inheriting its owner's role in full - the
+    // incident this feature exists to close) ever gets.
+    let make_set_permissions_handler = move |key_id: String, unrestricted: bool| {
+        let client = api.get();
+        move |_| {
+            let client = client.clone();
+            let id = key_id.clone();
+            set_permissions_error.set(None);
+            wasm_bindgen_futures::spawn_local(async move {
+                let request = UpdateApiKeyPermissionsRequest {
+                    permissions: Some(if unrestricted {
+                        vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()]
+                    } else {
+                        Vec::new()
+                    }),
+                };
+                match client.update_api_key_permissions(&id, &request).await {
+                    Ok(_) => set_version.update(|v| *v += 1),
+                    Err(err) => {
+                        set_permissions_error.set(Some(format!(
+                            "Failed to update this key's permissions: {err}"
+                        )));
+                    }
+                }
+            });
+        }
     };
 
     // Revoke handler factory
@@ -65,7 +132,8 @@ pub fn ApiKeysTab() -> impl IntoView {
     };
 
     // State for rotated key display
-    let (rotated_key, set_rotated_key) = signal(Option::<RotateApiKeyResponse>::None);
+    let (rotated_key, set_rotated_key) =
+        signal(Option::<RotateApiKeyResponseWithPermissions>::None);
     // Error surfaced on a failed rotation — previously the handler swallowed
     // errors silently, leaving the user wondering if the click had any effect.
     let (rotate_error, set_rotate_error) = signal(Option::<String>::None);
@@ -124,6 +192,61 @@ pub fn ApiKeysTab() -> impl IntoView {
                                 on:input=move |ev| set_new_key_name.set(event_target_value(&ev))
                             />
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">"Permissions"</label>
+                            <p class="section-desc">
+                                "Unchecked by default: a new key can authenticate but cannot "
+                                "do anything else until you grant it something below."
+                            </p>
+                            <div class="api-key-permissions-list">
+                                {API_KEY_GRANTABLE_STORE_ACTIONS.iter().map(|(policy, label)| {
+                                    let policy_for_checked = policy.to_string();
+                                    let policy_for_change = policy.to_string();
+                                    view! {
+                                        <label class="api-key-permission-item">
+                                            <input
+                                                type="checkbox"
+                                                prop:checked=move || new_key_store_actions.get().contains(&policy_for_checked)
+                                                prop:disabled=move || new_key_unrestricted.get()
+                                                on:change=move |ev| {
+                                                    let checked = event_target_checked(&ev);
+                                                    let policy = policy_for_change.clone();
+                                                    set_new_key_store_actions.update(|actions| {
+                                                        if checked {
+                                                            actions.insert(policy);
+                                                        } else {
+                                                            actions.remove(&policy);
+                                                        }
+                                                    });
+                                                }
+                                            />
+                                            {*label}
+                                        </label>
+                                    }
+                                }).collect_view()}
+                                <p class="section-desc">
+                                    "Granted on every store you can reach. Each action here is "
+                                    "checked individually by the server, so selecting one really "
+                                    "does grant only that one."
+                                </p>
+                            </div>
+                            <div class="api-key-permissions-list" style="border-color: var(--color-danger); margin-top: 8px;">
+                                <label class="api-key-permission-item">
+                                    <input
+                                        type="checkbox"
+                                        prop:checked=move || new_key_unrestricted.get()
+                                        on:change=move |ev| set_new_key_unrestricted.set(event_target_checked(&ev))
+                                    />
+                                    <strong>"Unrestricted (full account access)"</strong>
+                                </label>
+                                <p class="section-desc">
+                                    "Equivalent to your own full role, including installing plugins "
+                                    "- which runs arbitrary SQL and arbitrary code on the server. "
+                                    "Only check this if the key genuinely needs to act as you. "
+                                    "Overrides the actions above."
+                                </p>
+                            </div>
+                        </div>
                         <div class="form-actions">
                             <button
                                 class="ps-btn ps-btn-primary ps-btn-sm"
@@ -143,6 +266,22 @@ pub fn ApiKeysTab() -> impl IntoView {
                 </div>
             })}
 
+            // Creation error — a failed click must not just close the form
+            // silently.
+            {move || create_error.get().map(|msg| view! {
+                <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-danger);">
+                    <div class="ps-card-body">
+                        <p><strong>{msg}</strong></p>
+                        <button
+                            class="ps-btn ps-btn-ghost ps-btn-sm"
+                            on:click=move |_| set_create_error.set(None)
+                        >
+                            "Dismiss"
+                        </button>
+                    </div>
+                </div>
+            })}
+
             // Show newly created key (plaintext shown once)
             {move || created_key.get().map(|key| view! {
                 <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-success);">
@@ -151,6 +290,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">
                             {key.key.clone()}
                         </code>
+                        <p class="section-desc">"Can do: "{describe_api_key_permissions(&Some(key.permissions.clone()))}</p>
                         <button
                             class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_created_key.set(None)
@@ -176,6 +316,23 @@ pub fn ApiKeysTab() -> impl IntoView {
                 </div>
             })}
 
+            // Permission-change error — e.g. a plain user's own key cannot
+            // be granted "unrestricted" server-side, and this must not fail
+            // silently.
+            {move || permissions_error.get().map(|msg| view! {
+                <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-danger);">
+                    <div class="ps-card-body">
+                        <p><strong>{msg}</strong></p>
+                        <button
+                            class="ps-btn ps-btn-ghost ps-btn-sm"
+                            on:click=move |_| set_permissions_error.set(None)
+                        >
+                            "Dismiss"
+                        </button>
+                    </div>
+                </div>
+            })}
+
             // Show rotated key (plaintext shown once)
             {move || rotated_key.get().map(|key| {
                 // Always sent by the server, so there is no "unknown" branch to
@@ -185,6 +342,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                     "The old key remains valid until {}.",
                     key.old_key_grace_expires_at.to_rfc3339()
                 );
+                let permissions_line = format!("Can do: {}", describe_api_key_permissions(&key.permissions));
                 view! {
                 <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-warning);">
                     <div class="ps-card-body">
@@ -193,6 +351,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">
                             {key.key.clone()}
                         </code>
+                        <p class="section-desc">{permissions_line}</p>
                         <button
                             class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_rotated_key.set(None)
@@ -214,7 +373,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                             } else {
                                 view! {
                                     <div class="api-keys-list">
-                                        {keys.into_iter().map(|key: ApiKeyInfo| {
+                                        {keys.into_iter().map(|key: ApiKeyInfoWithPermissions| {
                                             let (status_class, status_label) = if !key.is_active {
                                                 ("badge badge-neutral".to_string(), "Revoked".to_string())
                                             } else if key.deprecated_at.is_some() {
@@ -231,8 +390,19 @@ pub fn ApiKeysTab() -> impl IntoView {
                                             };
                                             let is_active = key.is_active;
                                             let is_deprecated = key.deprecated_at.is_some();
+                                            let permissions_summary = describe_api_key_permissions(&key.permissions);
+                                            let is_unrestricted = api_key_is_unrestricted(&key.permissions);
+                                            let permissions_class = if is_unrestricted {
+                                                "api-key-permissions-summary api-key-permissions-summary-unrestricted"
+                                            } else {
+                                                "api-key-permissions-summary"
+                                            };
                                             let revoke_handler = make_revoke_handler(key.id.to_string());
                                             let rotate_handler = make_rotate_handler(key.id.to_string());
+                                            let grant_unrestricted_handler =
+                                                make_set_permissions_handler(key.id.to_string(), true);
+                                            let restrict_handler =
+                                                make_set_permissions_handler(key.id.to_string(), false);
 
                                             view! {
                                                 <div class="api-key-item">
@@ -243,8 +413,28 @@ pub fn ApiKeysTab() -> impl IntoView {
                                                         </div>
                                                         <code class="api-key-value">{key.key_prefix}</code>
                                                         <span class="api-key-created">"Created "{key.created_at.to_rfc3339()}</span>
+                                                        <span class=permissions_class>"Can do: "{permissions_summary}</span>
                                                     </div>
                                                     <div class="api-key-actions">
+                                                        {is_active.then(|| if is_unrestricted {
+                                                            view! {
+                                                                <button
+                                                                    class="ps-btn ps-btn-ghost ps-btn-sm"
+                                                                    on:click=restrict_handler
+                                                                >
+                                                                    "Restrict"
+                                                                </button>
+                                                            }.into_any()
+                                                        } else {
+                                                            view! {
+                                                                <button
+                                                                    class="ps-btn ps-btn-ghost ps-btn-sm"
+                                                                    on:click=grant_unrestricted_handler
+                                                                >
+                                                                    "Grant unrestricted"
+                                                                </button>
+                                                            }.into_any()
+                                                        })}
                                                         {(is_active && !is_deprecated).then(|| view! {
                                                             <button
                                                                 class="ps-btn ps-btn-ghost ps-btn-sm"
