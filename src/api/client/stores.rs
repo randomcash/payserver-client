@@ -192,7 +192,8 @@ impl ApiClient {
     ///
     /// The server refuses an xpub already registered to another account with a
     /// 409 - one key, one account, so two merchants cannot derive the same
-    /// addresses for different customers.
+    /// addresses for different customers. Called from the add-wallet form on
+    /// the wallets settings page (`src/pages/wallets.rs`).
     pub async fn create_wallet(&self, req: &CreateWalletRequest) -> Result<Wallet, ApiError> {
         self.post("/api/wallets", req).await
     }
@@ -201,6 +202,7 @@ impl ApiClient {
     ///
     /// `is_primary: Some(true)` promotes; `Some(false)` is ignored server-side,
     /// because "no primary" is not a state a merchant can usefully ask for.
+    /// Called from the wallets settings page (`src/pages/wallets.rs`).
     pub async fn update_wallet(
         &self,
         id: &str,
@@ -212,7 +214,8 @@ impl ApiClient {
     /// Delete a wallet.
     ///
     /// Refused while any store still derives from it, so this cannot silently
-    /// strand a store's payment methods.
+    /// strand a store's payment methods. Called from the wallets settings page
+    /// (`src/pages/wallets.rs`).
     pub async fn delete_wallet(&self, id: &str) -> Result<(), ApiError> {
         self.delete(&wallet_path(id)).await
     }
@@ -221,7 +224,8 @@ impl ApiClient {
     ///
     /// Everything else returns it masked. This is the one call that does not,
     /// which is why it is a separate endpoint and should stay a deliberate act
-    /// by the merchant rather than something a page fetches to render.
+    /// by the merchant rather than something a page fetches to render. Called
+    /// from the wallets settings page's export action (`src/pages/wallets.rs`).
     pub async fn export_wallet_xpub(&self, id: &str) -> Result<WalletXpubResponse, ApiError> {
         self.get(&format!("/api/wallets/{}/xpub", id)).await
     }
