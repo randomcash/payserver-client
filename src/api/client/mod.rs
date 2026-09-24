@@ -7,12 +7,16 @@
 //! That is true of all 52 `pub async fn`s here (15 `admin`, 1 `health`, 8
 //! `invoices`, 3 `payments`, 2 `plugins`, 23 `stores`), not just the wallet
 //! writes below: it is this module's structural default, not drift in a few
-//! recent paths. `post`/`patch`/`delete` now carry a `#[cfg(test)]` seam
-//! (`TestTransport`) so `create_wallet`/`update_wallet`/`delete_wallet` run
-//! for real under `cargo test` (see `stores` tests); `get` and every other
-//! function here still cannot be exercised past its own pure helpers without
-//! the same seam extended to `get`, or a `wasm-bindgen-test` harness (already
-//! a dev-dependency, unused in this crate's test runs).
+//! recent paths. `get`/`post`/`patch`/`delete` now carry a `#[cfg(test)]` seam
+//! (`TestTransport`) so `create_wallet`/`update_wallet`/`delete_wallet` and
+//! GET-based callers like `get_store_wallet`/`list_stores` run for real under
+//! `cargo test` (see `stores` and `pages::stores::wallet_tab` tests); `put`
+//! and any function that builds its query string with `js_sys` (list
+//! endpoints that take filters - `list_invoices`, `list_payments`, ...) still
+//! cannot be exercised this way, since `js_sys` calls into `wasm-bindgen`
+//! bindings before the request ever reaches `get`. Those need the same seam
+//! extended to `put`, a `js_sys`-free query builder, or a `wasm-bindgen-test`
+//! harness (already a dev-dependency, unused in this crate's test runs).
 
 use gloo_net::http::{Request, RequestBuilder};
 use serde::{Serialize, de::DeserializeOwned};
@@ -132,6 +136,16 @@ impl ApiClient {
 
     /// Make a GET request.
     async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, ApiError> {
+        #[cfg(test)]
+        if let Some(transport) = &self.test_transport {
+            let response = transport(RequestSpec {
+                method: "GET",
+                path: path.to_string(),
+                body: None,
+            })?;
+            return serde_json::from_value(response).map_err(|e| ApiError::Parse(e.to_string()));
+        }
+
         let request = self
             .build_request("GET", path)
             .build()

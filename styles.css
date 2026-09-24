@@ -4216,6 +4216,13 @@ tr.payment-row {
     color: var(--text-secondary);
 }
 
+/* Wallet Tab */
+.store-tab-wallet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+}
+
 /* Webhooks Tab */
 .store-tab-webhooks {
     display: flex;
@@ -4949,6 +4956,12 @@ tr.payment-row {
     color: var(--text-secondary);
     margin: 0;
     line-height: var(--leading-relaxed);
+}
+
+.rotation-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
 }
 
 /* Mobile Responsive - Wallets */

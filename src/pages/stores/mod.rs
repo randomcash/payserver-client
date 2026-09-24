@@ -7,6 +7,7 @@ mod general_tab;
 mod list;
 mod payment_methods_tab;
 mod settings_tab;
+mod wallet_tab;
 mod webhooks_tab;
 
 pub use detail::StoreDetailPage;
