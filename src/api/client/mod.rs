@@ -8,12 +8,13 @@
 //! `invoices`, 3 `payments`, 2 `plugins`, 23 `stores`), not just the wallet
 //! calls below: it is this module's structural default, not drift in a few
 //! recent paths. `get`/`post`/`patch`/`delete` now carry a `#[cfg(test)]` seam
-//! (`TestTransport`) so `create_wallet`/`update_wallet`/`delete_wallet`/
-//! `export_wallet_xpub` run for real under `cargo test` (see `stores` tests);
-//! `put` and every other function here still cannot be exercised past its own
-//! pure helpers without the same seam extended to `put`, or a
-//! `wasm-bindgen-test` harness (already a dev-dependency, unused in this
-//! crate's test runs).
+//! (`TestTransport`) so `create_wallet` (POST), `update_wallet` (PATCH),
+//! `delete_wallet` (DELETE) and `export_wallet_xpub` (GET) run for real under
+//! `cargo test` (see `stores` tests) - none of the four is a `put` call, so
+//! all four are already inside the seam's coverage, not outside it. `put`
+//! and every other function here still cannot be exercised past its own pure
+//! helpers without the same seam extended to `put`, or a `wasm-bindgen-test`
+//! harness (already a dev-dependency, unused in this crate's test runs).
 
 use gloo_net::http::{Request, RequestBuilder};
 use serde::{Serialize, de::DeserializeOwned};
