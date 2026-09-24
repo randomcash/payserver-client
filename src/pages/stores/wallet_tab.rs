@@ -98,6 +98,10 @@ async fn fetch_outstanding_invoice_count(api: &ApiClient, store_id: &str) -> Opt
 /// Other stores still resolving to `store_id`'s current wallet, or `None` if
 /// the check could not complete.
 ///
+/// `list_stores` is a single, unpaginated call: the server's `GET /stores`
+/// handler queries every store the caller owns or belongs to with no
+/// `LIMIT`/`OFFSET`, so there is no page this loop could miss.
+///
 /// Any failed lookup along the way - the store's own wallet, the store list,
 /// or any one candidate store's wallet - aborts with `None` rather than
 /// returning a list missing that entry: a rotation made in response to a
