@@ -394,9 +394,7 @@ fn EmailSection(
                 // rather than silently dropping a completed passkey/wallet
                 // challenge.
                 set_busy.set(false);
-                set_error.set(Some(
-                    "Something went wrong - please try again.".to_string(),
-                ));
+                set_error.set(Some("Something went wrong - please try again.".to_string()));
                 set_step.set(EmailStep::Idle);
             }
         }
