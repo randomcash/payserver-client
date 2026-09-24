@@ -10,13 +10,15 @@
 //! recent paths. `get`/`post`/`patch`/`delete` now carry a `#[cfg(test)]` seam
 //! (`TestTransport`) so `create_wallet`/`update_wallet`/`delete_wallet` and
 //! GET-based callers like `get_store_wallet`/`list_stores` run for real under
-//! `cargo test` (see `stores` and `pages::stores::wallet_tab` tests); `put`
-//! and any function that builds its query string with `js_sys` (list
-//! endpoints that take filters - `list_invoices`, `list_payments`, ...) still
-//! cannot be exercised this way, since `js_sys` calls into `wasm-bindgen`
-//! bindings before the request ever reaches `get`. Those need the same seam
-//! extended to `put`, a `js_sys`-free query builder, or a `wasm-bindgen-test`
-//! harness (already a dev-dependency, unused in this crate's test runs).
+//! `cargo test` (see `stores` and `pages::stores::wallet_tab` tests). `list_invoices`
+//! now builds its query string with a `js_sys`-free `encode_query_param` for
+//! the same reason and runs under `cargo test` too; `put` and any other list
+//! endpoint that still builds its query string with `js_sys` (`list_payments`,
+//! ...) cannot be exercised this way yet, since `js_sys` calls into
+//! `wasm-bindgen` bindings before the request ever reaches `get`. Those need
+//! the same seam extended to `put`, the same query-builder swap, or a
+//! `wasm-bindgen-test` harness (already a dev-dependency, unused in this
+//! crate's test runs).
 
 use gloo_net::http::{Request, RequestBuilder};
 use serde::{Serialize, de::DeserializeOwned};

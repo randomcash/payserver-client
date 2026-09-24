@@ -61,8 +61,10 @@ fn rotation_error_message(err: &ApiError, xpub: &str) -> String {
 ///
 /// Compared by masked xpub, not wallet id: the masked value is the only
 /// identifier `GET /stores/{id}/wallet` exposes for a store this caller did
-/// not just rotate, and it keeps enough of a base58 key (8 leading + 8
-/// trailing characters) that two different wallets sharing one by chance is
+/// not just rotate. The mask keeps 8 leading and 8 trailing base58
+/// characters, of which the first 4 are the fixed `xpub`/`tpub` prefix, so
+/// the random portion is really about 4 leading plus 8 trailing characters.
+/// That is still enough that two different wallets sharing one by chance is
 /// not a real concern here.
 fn stores_sharing_wallet<'a>(
     old_xpub_masked: &str,

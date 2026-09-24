@@ -431,11 +431,27 @@ mod tests {
 
     #[test]
     fn rotate_store_wallet_posts_the_request_body_to_the_store_rotate_endpoint() {
+        // One populated rotation record, not an empty array: `methods_rotated`
+        // is a count the handler could get right while the audit trail it is
+        // supposed to summarize is missing or malshaped, and an empty
+        // `rotations` fixture can't tell the two apart. This is the payload
+        // `wallet_tab.rs` renders as the per-method table, so a renamed or
+        // retyped field here would decode as a struct-mismatch error the
+        // component turns into a generic failure - or silently drop a column -
+        // without this test ever going red.
         let (transport, recorded) = recording_transport(serde_json::json!({
             "store_id": "22222222-2222-2222-2222-222222222222",
             "new_xpub_masked": "xpub6D4B...eacc",
             "methods_rotated": 1,
-            "rotations": [],
+            "rotations": [{
+                "id": "44444444-4444-4444-4444-444444444444",
+                "payment_method_id": "55555555-5555-5555-5555-555555555555",
+                "chain_id": "eip155:1",
+                "asset_symbol": "ETH",
+                "previous_xpub_masked": "xpub6ZZZ...9999",
+                "previous_derivation_index": 3,
+                "rotated_at": "2026-09-24T12:00:00Z",
+            }],
         }));
         let client = ApiClient::with_test_transport("", transport);
         let req = RotateWalletRequest {
@@ -444,9 +460,17 @@ mod tests {
             namespace: "eip155".to_string(),
         };
 
-        let result = block_on(client.rotate_store_wallet("store-1", &req));
+        let response = block_on(client.rotate_store_wallet("store-1", &req))
+            .expect("rotation response decodes");
 
-        assert!(result.is_ok());
+        assert_eq!(response.methods_rotated, 1);
+        assert_eq!(response.rotations.len(), 1);
+        let rotation = &response.rotations[0];
+        assert_eq!(rotation.previous_xpub_masked, "xpub6ZZZ...9999");
+        assert_eq!(rotation.previous_derivation_index, 3);
+        assert_eq!(rotation.asset_symbol.as_deref(), Some("ETH"));
+        assert_eq!(rotation.chain_id.as_ref().map(|c| c.to_string()), Some("eip155:1".to_string()));
+
         assert_eq!(
             recorded.lock().unwrap().clone().unwrap(),
             RequestSpec {
