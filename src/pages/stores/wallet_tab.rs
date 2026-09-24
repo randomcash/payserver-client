@@ -190,6 +190,12 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
             let req = RotateWalletRequest {
                 xpub: xpub.clone(),
                 reason: (!reason_value.is_empty()).then_some(reason_value),
+                // Not a UI gap: a store cannot hold a payment method on any
+                // chain family other than eip155 today - the server refuses
+                // to create one on a chain with no adapter registered, for
+                // every chain family besides EVM, so eip155 is always the
+                // whole store. A selector here would offer a namespace that
+                // can never have anything to rotate.
                 namespace: "eip155".to_string(),
             };
             match api.rotate_store_wallet(&sid, &req).await {
