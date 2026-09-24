@@ -6,19 +6,22 @@
 //! outside an actual wasm host - so `cargo test` cannot observe the method,
 //! path, or body any of them send. That is true of all 52 `pub async fn`s
 //! here (15 `admin`, 1 `health`, 8 `invoices`, 3 `payments`, 2 `plugins`, 23
-//! `stores`), not just the wallet writes below: it is this module's
+//! `stores`), not just the wallet calls below: it is this module's
 //! structural default, not drift in a few recent paths. `get`/`post`/`patch`/
 //! `delete` now carry a `#[cfg(test)]` seam (`TestTransport`) so calls built
-//! entirely on those - `create_wallet`/`update_wallet`/`delete_wallet` (see
-//! `stores` tests), and the `invoices`/`payments` reads and writes - run for
-//! real under `cargo test`. `put`, the `_empty` variants, and anything that
-//! calls `build_request` directly (`logout`) still cannot be exercised past
-//! their own pure helpers without the same seam extended further, or a
-//! `wasm-bindgen-test` harness (already a dev-dependency, unused in this
-//! crate's test runs). Separately, any call that reaches `js_sys::*` (URL
-//! component encoding) panics the same way on a non-wasm host regardless of
-//! transport - the seam here does not help those branches; see the
-//! `invoices`/`payments` tests for which branches that leaves untested.
+//! entirely on those - `create_wallet` (POST), `update_wallet` (PATCH),
+//! `delete_wallet` (DELETE), `export_wallet_xpub` (GET) (see `stores`
+//! tests) - none of the four is a `put` call, so all four are already inside
+//! the seam's coverage, not outside it - and the `invoices`/`payments` reads
+//! and writes, run for real under `cargo test`. `put`, the `_empty`
+//! variants, and anything that calls `build_request` directly (`logout`)
+//! still cannot be exercised past their own pure helpers without the same
+//! seam extended further, or a `wasm-bindgen-test` harness (already a
+//! dev-dependency, unused in this crate's test runs). Separately, any call
+//! that reaches `js_sys::*` (URL component encoding) panics the same way on
+//! a non-wasm host regardless of transport - the seam here does not help
+//! those branches; see the `invoices`/`payments` tests for which branches
+//! that leaves untested.
 
 use gloo_net::http::{Request, RequestBuilder};
 use serde::{Serialize, de::DeserializeOwned};
