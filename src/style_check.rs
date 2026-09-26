@@ -76,3 +76,54 @@ pub fn literal_classes(source: &str) -> Vec<String> {
     }
     classes
 }
+
+/// Whether `source` writes a `class` attribute any way `literal_classes`
+/// cannot see: `class={expr}` or the brace-free `class=expr` Leptos also
+/// accepts (used by `plugin_page.rs`'s `tone_class`/`notice_class`/
+/// `button_class`), or a conditional `class:name=condition` toggle (used by
+/// `network_selector.rs` and `token_selector.rs`). A caller with one of
+/// these must enumerate its possible outputs and check them directly, the
+/// way `plugin_page.rs` does with `from_functions`.
+pub fn has_dynamic_class_attribute(source: &str) -> bool {
+    let code: String = source
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if code.contains(&["class", ":"].concat()) {
+        return true;
+    }
+    let mut rest = code.as_str();
+    while let Some(at) = rest.find(&["class", "="].concat()) {
+        rest = &rest[at + 6..];
+        if !rest.starts_with('"') {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::has_dynamic_class_attribute;
+
+    /// The check above only means something if it can fail both ways it
+    /// claims to catch, and pass on markup that only ever uses a literal
+    /// `class="..."`.
+    #[test]
+    fn a_dynamic_class_attribute_is_detected() {
+        assert!(has_dynamic_class_attribute(
+            &["class", "={some_fn()}"].concat()
+        ));
+        assert!(has_dynamic_class_attribute(
+            &["class", "=some_fn()"].concat()
+        ));
+        assert!(has_dynamic_class_attribute(
+            &["class", ":selected=is_selected"].concat()
+        ));
+        assert!(!has_dynamic_class_attribute(
+            "<div class=\"loading-container\"></div>"
+        ));
+    }
+}

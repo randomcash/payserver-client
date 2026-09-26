@@ -144,7 +144,7 @@ mod tests {
     // `is_defined` and the literal-class scanner live in `crate::style_check`,
     // shared with `pages/plugin_page.rs`'s copy of this same check, so the
     // two cannot drift apart.
-    use crate::style_check::{is_defined, literal_classes};
+    use crate::style_check::{has_dynamic_class_attribute, is_defined, literal_classes};
 
     /// Every class these components put in the markup must exist in the
     /// stylesheet.
@@ -155,6 +155,11 @@ mod tests {
     /// slow-loading invoice list or invoice detail page rendered as a blank
     /// div rather than a spinner - the build stayed green because a missing
     /// class is not a compile error, only a silent one.
+    ///
+    /// `SOURCE` is the whole file, so `ErrorState`'s `error-container`,
+    /// `error-icon` and `error-message` go through this same scan - they are
+    /// not a separate, untested addition, they are the same bug in the
+    /// component next to `LoadingState` in this file.
     #[test]
     fn every_class_these_components_emit_is_defined_in_the_stylesheet() {
         let mut missing = Vec::new();
@@ -175,28 +180,21 @@ mod tests {
     }
 
     /// `literal_classes` only sees a class written as `class="..."`. A class
-    /// built as `class={some_helper()}` would be invisible to it - exactly
-    /// the gap `plugin_page.rs` closes by calling its own class-choosing
-    /// functions (`tone_class`, `notice_class`, `button_class`) and checking
-    /// their output directly. None of the components here choose a class that
-    /// way today, so this check exists to keep that fact loud: the day one
-    /// does, it must fail until the class is added to the check above,
-    /// the same way `plugin_page.rs`'s `from_functions` list is kept in step
-    /// with the enums it reads.
+    /// built as `class={some_helper()}`, the brace-free `class=some_helper()`,
+    /// or a conditional `class:name=condition` toggle would be invisible to
+    /// it - exactly the gap `plugin_page.rs` closes by calling its own
+    /// class-choosing functions (`tone_class`, `notice_class`,
+    /// `button_class`) and checking their output directly.
+    /// `has_dynamic_class_attribute` (see its own ablation test in
+    /// `style_check.rs`) can actually detect all three forms. None of the
+    /// components here choose a class that way today, so this check exists
+    /// to keep that fact loud: the day one does, it must fail until the
+    /// class is added to the scan above, the same way `plugin_page.rs`'s
+    /// `from_functions` list is kept in step with the enums it reads.
     #[test]
     fn no_class_is_computed_outside_the_literal_scan_above() {
-        // Built from parts, none of which spell `class="` on their own, so
-        // this line does not itself contain the pattern it is checking for -
-        // `SOURCE` is this whole file, tests included.
-        let dynamic_class_attribute = ["class", "=", "{"].concat();
-
-        let code: String = SOURCE
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
         assert!(
-            !code.contains(&dynamic_class_attribute),
+            !has_dynamic_class_attribute(SOURCE),
             "a class attribute written as an expression rather than a literal string \
              appeared in this file - the literal-string scan above cannot see it, so \
              add its possible outputs to that scan the way plugin_page.rs's \
