@@ -10,7 +10,13 @@ against — that is the seam, and it is the reason this repo is separate.
 
 ## This repository is public
 
-No session URLs in commits or PR bodies, no secrets.
+No session URLs in commits or PR bodies, no secrets. Also no ticket ids or
+tracker links in source files — no `RCS-123`, no `linear.app` URL, anywhere in
+code or comments. A ticket id here leaks the shape of unreleased work, and an
+outside reader cannot open it anyway. Write the reason the code exists, not a
+pointer to where someone once explained it; the ticket id belongs in the
+commit message and PR title. `scripts/check-no-ticket-refs.sh` enforces this
+in CI; `CLAUDE.md`, `AGENTS.md` and `docs/` are exempt.
 
 ## It is compiled, which changes what a plugin or theme can be
 
@@ -44,11 +50,11 @@ beside it had all four. Unprefixed, so nothing looked. Generalising it found 78
 more — every class on the 404 page, and the whole of `LoadingState`, which
 renders two empty divs and a paragraph on the invoice list and detail pages.
 
-Those 78 are in `scripts/classes-unstyled-baseline.txt`. **It is meant to
-shrink.** The check fails on a class that is not in it, and also on one that is
-in it and has since been styled — a list that only grows stops meaning anything.
-Never add to it to make a build pass; add the rule, or point the markup at a
-class that has one.
+Those 78 went into `scripts/classes-unstyled-baseline.txt`, which now holds
+fewer — **it is meant to shrink.** The check fails on a class that is not in
+it, and also on one that is in it and has since been styled — a list that
+only grows stops meaning anything. Never add to it to make a build pass; add
+the rule, or point the markup at a class that has one.
 
 What it cannot see is a class chosen by a function — `class=tone_class(tone)`
 puts no literal on the line. `plugin_page.rs` covers its own three such helpers
@@ -106,11 +112,12 @@ that existed before still exists, comment markers balance, braces balance.
 ```bash
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
-cargo test
+cargo test --all-targets
 python3 scripts/check-classes-styled.py
 ```
 
-CI additionally runs a Playwright layout suite and builds the wasm bundle.
+CI additionally checks the crate builds for `wasm32-unknown-unknown`, runs a
+Playwright layout suite, and builds the wasm bundle.
 
 ## Commons is pinned by revision
 

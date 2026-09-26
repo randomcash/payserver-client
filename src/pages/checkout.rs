@@ -9,38 +9,23 @@ use leptos_router::hooks::use_params_map;
 
 use send_wrapper::SendWrapper;
 
-use ui_kit::CopyButton;
+use ui_kit::{CopyButton, format_units};
 
 use crate::api::{ApiClient, ApiError, CheckoutResponse, PaymentOption};
 use crate::services::websocket::{StatusUpdate, WebSocketService};
 use crate::util::chain_name;
 
 mod countdown;
+mod qr_picker;
 use countdown::CountdownTimer;
+use qr_picker::{QrEncoding, QrPicker};
 
-/// Format a human-readable amount from smallest units.
+/// How often the page re-reads the invoice when nothing has pushed to it.
 ///
-/// e.g., "1000000" with 6 decimals -> "1.000000"
-fn format_crypto_amount(smallest_units: &str, decimals: u8) -> String {
-    if decimals == 0 {
-        return smallest_units.to_string();
-    }
-    let s = smallest_units.to_string();
-    let len = s.len();
-    let d = decimals as usize;
-    if len <= d {
-        let zeros = "0".repeat(d - len);
-        format!("0.{}{}", zeros, s.trim_end_matches('0'))
-    } else {
-        let (int_part, frac_part) = s.split_at(len - d);
-        let trimmed = frac_part.trim_end_matches('0');
-        if trimmed.is_empty() {
-            int_part.to_string()
-        } else {
-            format!("{}.{}", int_part, trimmed)
-        }
-    }
-}
+/// Slow enough to be free - six requests a minute against a read budget of
+/// sixty - and fast enough that a customer who has paid is never left looking
+/// at a stale countdown for long.
+const POLL_INTERVAL_MS: u32 = 10_000;
 
 /// Public checkout page.
 #[component]
@@ -58,6 +43,16 @@ pub fn CheckoutPage() -> impl IntoView {
 
     // Refresh counter for manual retry / WS-triggered refresh
     let (refresh, set_refresh) = signal(0u32);
+
+    // Locks the wallet-connect buttons permanently once a send succeeds.
+    // `render_checkout` — including the wallet slot's own status signal —
+    // is rebuilt from scratch on every resource refetch (the poll below,
+    // and every websocket update, which fires right when a just-broadcast
+    // payment is detected), so state local to that subtree can't be what
+    // stops a second click from sending the same payment twice. This lives
+    // above the `Suspense` boundary so it survives those rebuilds; reset
+    // when the invoice itself changes, in the effect below.
+    let sent_lock = RwSignal::new(false);
 
     let checkout_resource = LocalResource::new(move || {
         let api = api.clone();
@@ -81,6 +76,9 @@ pub fn CheckoutPage() -> impl IntoView {
     let ws_for_effect = ws.clone();
     Effect::new(move |_| {
         let id = invoice_id();
+        // A different invoice has nothing to do with whether the previous
+        // one was paid — don't carry the lock across.
+        sent_lock.set(false);
         if id.is_empty() {
             ws_for_effect.disconnect();
             return;
@@ -106,6 +104,40 @@ pub fn CheckoutPage() -> impl IntoView {
         let _ = ws_for_effect.connect(&ws_url, None);
         // Reset refresh so the resource re-fetches with fresh WS state
         set_refresh.update(|n| *n += 1);
+    });
+
+    // A poll behind the socket, because the socket is the fast path and not
+    // the source of truth.
+    //
+    // Without this the page refetched *only* on a WebSocket message, so a
+    // socket that never connected meant a customer who had paid watched the
+    // countdown run out on an invoice the server had already marked paid.
+    // That is what happened: the `ws` rate limit refused the sixth connection
+    // attempt in a minute, the refusal closed the socket, the close scheduled
+    // another attempt, and the loop sustained itself. The payment had settled
+    // six minutes earlier.
+    //
+    // Ten seconds costs six requests a minute against a read budget of sixty,
+    // and it bounds the worst case at "ten seconds late" instead of "never".
+    // The socket still does the work when it is up; this only decides what
+    // happens when it is not.
+    let poll_handle: std::rc::Rc<std::cell::RefCell<Option<gloo_timers::callback::Interval>>> =
+        std::rc::Rc::new(std::cell::RefCell::new(None));
+    let poll_for_effect = poll_handle.clone();
+    Effect::new(move |_| {
+        if invoice_id().is_empty() {
+            *poll_for_effect.borrow_mut() = None;
+            return;
+        }
+        let interval = gloo_timers::callback::Interval::new(POLL_INTERVAL_MS, move || {
+            set_refresh.update(|n| *n += 1);
+        });
+        *poll_for_effect.borrow_mut() = Some(interval);
+    });
+
+    let poll_cleanup = SendWrapper::new(poll_handle);
+    on_cleanup(move || {
+        *poll_cleanup.borrow_mut() = None;
     });
 
     // Clean up WebSocket on unmount
@@ -146,7 +178,7 @@ pub fn CheckoutPage() -> impl IntoView {
                         }.into_any(),
                         Ok(data) => {
                             let data = data.clone();
-                            render_checkout(data, selected_idx, set_selected_idx)
+                            render_checkout(data, selected_idx, set_selected_idx, sent_lock)
                         }
                     })}
                 </Suspense>
@@ -170,6 +202,7 @@ fn render_checkout(
     data: CheckoutResponse,
     selected_idx: ReadSignal<usize>,
     set_selected_idx: WriteSignal<usize>,
+    sent_lock: RwSignal<bool>,
 ) -> AnyView {
     let status = data.status.clone();
 
@@ -281,40 +314,68 @@ fn render_checkout(
                 let opt = options.get(idx).or(options.first());
                 opt.map(|option| {
                     let addr = option.payment_address.clone();
-                    let display_amount = format_crypto_amount(&option.amount, option.decimals);
+                    let display_amount = format_units(&option.amount, option.decimals);
                     let asset = option.asset_symbol.clone();
                     let chain = chain_name(&option.chain_id).to_string();
                     let addr_for_copy = addr.clone();
 
-                    // EIP-681 rather than a bare address, so a scanned QR
-                    // prefills the amount and the chain instead of leaving a
-                    // customer to type `0.04735110051849455` by hand at the one
-                    // moment in the flow where a mistake costs money.
+                    // Which apps can use this QR depends on what the customer is
+                    // paying from, and neither encoding works for everyone: a
+                    // wallet wants EIP-681 (it prefills amount and chain, the
+                    // one time in the flow a typo costs money); an exchange
+                    // withdrawal form takes only a bare address and errors on
+                    // anything else. So both are offered as separate cards
+                    // rather than picking one - EIP-681 first, since a wallet
+                    // is the common case.
                     //
                     // `option.amount` is already base units - the same string
-                    // `format_crypto_amount` divides for display - which is what
-                    // the URI wants. Nothing converts through a float.
+                    // `format_units` divides for display - which is what the
+                    // URI wants. Nothing converts through a float.
                     //
-                    // Falls back to the bare address when a URI cannot be built
-                    // with certainty (a non-EVM chain, an address that does not
-                    // parse). A bare address still lets a customer pay by hand;
-                    // a URI a wallet misreads can send the wrong amount to the
-                    // wrong place.
-                    let qr_data = types::payment_request_uri(
+                    // `display_amount` is the payable amount the customer
+                    // sends: always the plain literal, never the subscript
+                    // summary form, since a wallet has no idea what a
+                    // compressed run of leading zeros means.
+                    //
+                    // The EIP-681 card is omitted, not emptied, when a URI
+                    // cannot be built with certainty (a non-EVM chain, an
+                    // address that does not parse): a card with no URI must not
+                    // appear, since a wallet misparsing one can send the wrong
+                    // amount to the wrong place, where a bare address always
+                    // lets the customer proceed by hand.
+                    let mut encodings = Vec::with_capacity(2);
+                    if let Some(uri) = types::payment_request_uri(
                         &option.chain_id,
                         &addr,
                         &option.amount,
                         option.token_address.as_deref(),
-                    )
-                    .unwrap_or_else(|| addr.clone());
+                    ) {
+                        encodings.push(QrEncoding {
+                            label: "Scan with a wallet",
+                            data: uri,
+                        });
+                    }
+                    encodings.push(QrEncoding {
+                        label: "Copy to an exchange withdrawal",
+                        data: addr.clone(),
+                    });
+
+                    // The `wallet_actions` slot signature is fixed at
+                    // (address, chain_id) — the amount travels through
+                    // context instead, read back inside the slot
+                    // implementation. See `WalletActionsContext`.
+                    provide_context(crate::WalletActionsContext {
+                        amount: option.amount.clone(),
+                        token_address: option.token_address.clone(),
+                        sent_lock,
+                    });
+                    let wallet_actions = (crate::checkout_plugin().wallet_actions)
+                        .and_then(|render| render(&addr, &option.chain_id));
+
                     view! {
                         <div class="checkout-payment-details">
                             <div class="checkout-qr">
-                                <ui_kit::components::crypto::QrCodeCard
-                                    data=qr_data
-                                    label="Scan to pay"
-                                    size=250
-                                />
+                                <QrPicker encodings=encodings />
                             </div>
 
                             // Amount in crypto
@@ -341,6 +402,8 @@ fn render_checkout(
                                     <CopyButton text=addr_for_copy.clone() />
                                 </div>
                             </div>
+
+                            {wallet_actions}
                         </div>
                     }
                 })

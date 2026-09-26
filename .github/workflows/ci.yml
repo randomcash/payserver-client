@@ -25,6 +25,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      # This repository is public. A ticket id in a source file leaks the
+      # title and shape of unreleased work, and an outside reader cannot open
+      # the tracker anyway. Ticket ids belong in the commit message and PR
+      # title, not the tree - see CLAUDE.md.
+      - name: No ticket ids or tracker links in source
+        run: ./scripts/check-no-ticket-refs.sh
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
