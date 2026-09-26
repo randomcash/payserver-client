@@ -184,3 +184,59 @@ impl ApiClient {
         self.get("/api/admin/safe-mode").await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::{RequestSpec, TestTransport};
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    /// Polls `fut` to completion. `get_safe_mode` is driven through a
+    /// `TestTransport` that answers synchronously - `gloo-net` never runs,
+    /// so nothing here ever returns `Poll::Pending` and a full executor
+    /// would be dead weight.
+    fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+        let mut fut = std::pin::pin!(fut);
+        let waker = std::task::Waker::noop();
+        let mut cx = std::task::Context::from_waker(waker);
+        loop {
+            if let std::task::Poll::Ready(value) = fut.as_mut().poll(&mut cx) {
+                return value;
+            }
+        }
+    }
+
+    /// A transport that records the single request it receives and answers
+    /// it with `response`.
+    fn recording_transport(
+        response: serde_json::Value,
+    ) -> (TestTransport, Arc<Mutex<Option<RequestSpec>>>) {
+        let recorded = Arc::new(Mutex::new(None));
+        let recorded_clone = recorded.clone();
+        let transport: TestTransport = Arc::new(move |spec| {
+            *recorded_clone.lock().unwrap() = Some(spec);
+            Ok(response.clone())
+        });
+        (transport, recorded)
+    }
+
+    #[test]
+    fn get_safe_mode_reads_and_deserializes_the_safe_mode_field() {
+        let (transport, recorded) = recording_transport(serde_json::json!({
+            "safe_mode": true,
+        }));
+        let client = ApiClient::with_test_transport("", transport);
+
+        let result = block_on(client.get_safe_mode());
+
+        assert!(result.unwrap().safe_mode);
+        assert_eq!(
+            recorded.lock().unwrap().clone().unwrap(),
+            RequestSpec {
+                method: "GET",
+                path: "/api/admin/safe-mode".to_string(),
+                body: None,
+            }
+        );
+    }
+}
