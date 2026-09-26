@@ -1,17 +1,76 @@
 //! Admin settings tab - server settings and user management (admin only).
 
 use crate::api::{
-    AdminUserInfo, ApiClient, Store, UpdateServerSettingsRequest, UpdateUserRoleRequest,
+    AdminUserInfo, ApiClient, ApiError, SafeModeStatus, Store, UpdateServerSettingsRequest,
+    UpdateUserRoleRequest,
 };
 use leptos::prelude::*;
 use types::ChainId;
 
 use super::IconShield;
 
+/// Which safe-mode banner, if any, the admin tab should show.
+///
+/// Active always wins over CheckFailed: once a check has confirmed safe mode
+/// is on, a later transient fetch error must not downgrade that to "unknown".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SafeModeBanner {
+    Active,
+    CheckFailed,
+    None,
+}
+
+fn safe_mode_banner(safe_mode: bool, check_failed: bool) -> SafeModeBanner {
+    if safe_mode {
+        SafeModeBanner::Active
+    } else if check_failed {
+        SafeModeBanner::CheckFailed
+    } else {
+        SafeModeBanner::None
+    }
+}
+
+/// What the two safe-mode signals should become after a fresh check result.
+///
+/// A success always clears a prior "could not confirm" warning - a stale
+/// failure must not survive the check that just worked. A failure never
+/// reports a `safe_mode` value: a transient error (network blip, session
+/// hiccup) must read as "unknown", not be mistaken for "plugins are fine".
+fn safe_mode_after_check(result: &Result<SafeModeStatus, ApiError>) -> (Option<bool>, bool) {
+    match result {
+        Ok(status) => (Some(status.safe_mode), false),
+        Err(_) => (None, true),
+    }
+}
+
+/// Apply a safe-mode check result to the tab's two signals.
+///
+/// Pulled out of `AdminTab`'s load-on-mount task so the `if let Some` guard -
+/// the thing that actually leaves `safe_mode` untouched on a transient error,
+/// as opposed to `safe_mode_after_check` merely saying it should - runs
+/// against real signals in a test, not just the pure tuple it's fed.
+fn apply_safe_mode_check(
+    result: &Result<SafeModeStatus, ApiError>,
+    set_safe_mode: WriteSignal<bool>,
+    set_safe_mode_check_failed: WriteSignal<bool>,
+) {
+    let (mode, check_failed) = safe_mode_after_check(result);
+    if let Some(mode) = mode {
+        set_safe_mode.set(mode);
+    }
+    set_safe_mode_check_failed.set(check_failed);
+}
+
 /// Admin tab - server settings and user management (admin only).
 #[component]
 pub fn AdminTab() -> impl IntoView {
     let api = use_context::<Signal<ApiClient>>().expect("ApiClient must be provided");
+
+    // Safe mode state - true when the server booted with every plugin disabled.
+    let (safe_mode, set_safe_mode) = signal(false);
+    // Whether the safe-mode check itself failed - kept distinct from `safe_mode`
+    // so a transient fetch error can't be mistaken for "plugins are fine".
+    let (safe_mode_check_failed, set_safe_mode_check_failed) = signal(false);
 
     // Settings form state
     let (default_confirmations, set_default_confirmations) = signal("3".to_string());
@@ -89,6 +148,11 @@ pub fn AdminTab() -> impl IntoView {
                 set_user_total.set(resp.total);
                 set_users.set(resp.users);
             }
+            let result = api.get_safe_mode().await;
+            if let Err(ref e) = result {
+                web_sys::console::error_1(&format!("safe-mode check failed: {e}").into());
+            }
+            apply_safe_mode_check(&result, set_safe_mode, set_safe_mode_check_failed);
         }
     });
 
@@ -194,6 +258,34 @@ pub fn AdminTab() -> impl IntoView {
 
     view! {
         <div class="settings-tab-admin">
+            {move || {
+                match safe_mode_banner(safe_mode.get(), safe_mode_check_failed.get()) {
+                    SafeModeBanner::Active => view! {
+                        <div class="alert alert-error">
+                            <strong>"⚠ SAFE MODE: every plugin is disabled"</strong>
+                            <p>
+                                "The server booted with ETHPAY_DISABLE_PLUGINS set (or the "
+                                "--disable-plugins flag). No plugin is running - including "
+                                "billing, if it is installed as one. Plugins are not "
+                                "uninstalled and their data is untouched: clear the flag and "
+                                "restart to bring them back."
+                            </p>
+                        </div>
+                    }.into_any(),
+                    SafeModeBanner::CheckFailed => view! {
+                        <div class="admin-warning">
+                            <strong>"⚠ Could not confirm plugin status"</strong>
+                            <p>
+                                "The safe-mode check itself failed, so whether every plugin is "
+                                "disabled for this boot is unknown - this is not the same as "
+                                "confirming plugins are running normally."
+                            </p>
+                        </div>
+                    }.into_any(),
+                    SafeModeBanner::None => view! { <span></span> }.into_any(),
+                }
+            }}
+
             <div class="admin-warning">
                 <IconShield />
                 <div>
@@ -469,5 +561,101 @@ pub fn AdminTab() -> impl IntoView {
                 <button class="ps-btn ps-btn-primary" on:click=save_settings>"Save server settings"</button>
             </div>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_check_yet_shows_no_banner() {
+        assert_eq!(safe_mode_banner(false, false), SafeModeBanner::None);
+    }
+
+    #[test]
+    fn safe_mode_confirmed_shows_the_active_banner() {
+        assert_eq!(safe_mode_banner(true, false), SafeModeBanner::Active);
+    }
+
+    #[test]
+    fn a_failed_check_shows_the_check_failed_banner() {
+        assert_eq!(safe_mode_banner(false, true), SafeModeBanner::CheckFailed);
+    }
+
+    #[test]
+    fn a_confirmed_active_mode_outranks_a_later_failed_check() {
+        // Once safe mode has been confirmed on, a later transient fetch
+        // error must not read as "we no longer know" - it stays Active.
+        assert_eq!(safe_mode_banner(true, true), SafeModeBanner::Active);
+    }
+
+    #[test]
+    fn a_successful_check_reports_the_mode_and_clears_any_prior_failure() {
+        let result = Ok(SafeModeStatus { safe_mode: true });
+        assert_eq!(safe_mode_after_check(&result), (Some(true), false));
+
+        let result = Ok(SafeModeStatus { safe_mode: false });
+        assert_eq!(safe_mode_after_check(&result), (Some(false), false));
+    }
+
+    #[test]
+    fn a_failed_check_reports_no_mode_and_flags_the_failure() {
+        let result = Err(ApiError::Network("offline".to_string()));
+        assert_eq!(safe_mode_after_check(&result), (None, true));
+    }
+
+    #[test]
+    fn an_error_after_a_success_does_not_silently_read_as_plugins_fine() {
+        // The signal-update contract: a failure never carries `Some(false)` -
+        // that would be indistinguishable from a check that actually ran and
+        // found plugins enabled. It always reports `None` and lets the
+        // caller leave the last-known `safe_mode` value alone.
+        let ok = safe_mode_after_check(&Ok(SafeModeStatus { safe_mode: false }));
+        let err = safe_mode_after_check(&Err(ApiError::Unauthorized));
+        assert_eq!(ok, (Some(false), false));
+        assert_eq!(err, (None, true));
+    }
+
+    #[test]
+    fn an_error_then_a_success_clears_the_stale_warning() {
+        // This is the round-trip the sticky-banner bug lived in: an initial
+        // failed check must not leave `safe_mode_check_failed` stuck true
+        // forever once a later check succeeds.
+        let (mode, check_failed) = safe_mode_after_check(&Err(ApiError::Network("x".into())));
+        assert_eq!((mode, check_failed), (None, true));
+
+        let (mode, check_failed) = safe_mode_after_check(&Ok(SafeModeStatus { safe_mode: false }));
+        assert_eq!((mode, check_failed), (Some(false), false));
+    }
+
+    #[test]
+    fn a_confirmed_signal_survives_a_later_failed_check() {
+        // safe_mode_after_check proves the *tuple* it returns on a failure
+        // carries no mode. This proves the `if let Some` guard that consumes
+        // that tuple actually leaves a real signal alone: a confirmed `true`
+        // must still read `true` after a subsequent transient error, on the
+        // live signal the component renders from, not just on paper.
+        let (safe_mode, set_safe_mode) = signal(false);
+        let (check_failed, set_check_failed) = signal(false);
+
+        apply_safe_mode_check(
+            &Ok(SafeModeStatus { safe_mode: true }),
+            set_safe_mode,
+            set_check_failed,
+        );
+        assert!(safe_mode.get_untracked());
+        assert!(!check_failed.get_untracked());
+
+        apply_safe_mode_check(
+            &Err(ApiError::Network("x".into())),
+            set_safe_mode,
+            set_check_failed,
+        );
+        assert!(
+            safe_mode.get_untracked(),
+            "a transient error must not clear a confirmed safe mode"
+        );
+        assert!(check_failed.get_untracked());
     }
 }

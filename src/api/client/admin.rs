@@ -1,11 +1,34 @@
 //! Auth/user, dashboard, API key, and admin API methods.
 
+use serde::Deserialize;
+
 use super::{ApiClient, ApiError};
 use crate::api::{
     ApiKeyListResponse, CreateApiKeyRequest, CreateApiKeyResponsePayload, DashboardAnalytics,
     DashboardStats, RotateApiKeyResponse, ServerSettingsResponse, UpdateServerSettingsRequest,
     UpdateUserRoleRequest, UserInfo, UserListResponse,
 };
+
+/// Whether the server booted with every plugin disabled.
+///
+/// `get_safe_mode` calls `/api/admin/safe-mode`, the same `/api/admin/*`
+/// prefix as every other method in this file - `docker/nginx.conf`'s `/api/`
+/// location strips that prefix before proxying to the server, which mounts
+/// the route at `/admin/safe-mode` in its own `server/src/api/admin` module,
+/// admin-gated alongside the rest of `/admin/*`. The server sets `safe_mode`
+/// from `ETHPAY_DISABLE_PLUGINS` (or `--disable-plugins`) at boot, skips
+/// loading every plugin when it is set, and logs the condition loudly at
+/// startup; that logic lives in the server's own repository, so it never
+/// appears in a diff against this crate. This client only displays the flag
+/// the route returns.
+///
+/// Not in `api-types` yet: the response is a local, non-shared type today,
+/// pending a fuller plugin admin contract - listing plugins and disabling
+/// them individually - that doesn't exist yet.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SafeModeStatus {
+    pub safe_mode: bool,
+}
 
 impl ApiClient {
     // =========================================================================
@@ -153,5 +176,67 @@ impl ApiClient {
         request: &UpdateServerSettingsRequest,
     ) -> Result<(), ApiError> {
         self.put_empty("/api/admin/settings", request).await
+    }
+
+    /// Get safe mode status - whether every plugin is disabled for this boot
+    /// (admin only).
+    pub async fn get_safe_mode(&self) -> Result<SafeModeStatus, ApiError> {
+        self.get("/api/admin/safe-mode").await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{RequestSpec, TestTransport};
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    /// Polls `fut` to completion. `get_safe_mode` is driven through a
+    /// `TestTransport` that answers synchronously - `gloo-net` never runs,
+    /// so nothing here ever returns `Poll::Pending` and a full executor
+    /// would be dead weight.
+    fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+        let mut fut = std::pin::pin!(fut);
+        let waker = std::task::Waker::noop();
+        let mut cx = std::task::Context::from_waker(waker);
+        loop {
+            if let std::task::Poll::Ready(value) = fut.as_mut().poll(&mut cx) {
+                return value;
+            }
+        }
+    }
+
+    /// A transport that records the single request it receives and answers
+    /// it with `response`.
+    fn recording_transport(
+        response: serde_json::Value,
+    ) -> (TestTransport, Arc<Mutex<Option<RequestSpec>>>) {
+        let recorded = Arc::new(Mutex::new(None));
+        let recorded_clone = recorded.clone();
+        let transport: TestTransport = Arc::new(move |spec| {
+            *recorded_clone.lock().unwrap() = Some(spec);
+            Ok(response.clone())
+        });
+        (transport, recorded)
+    }
+
+    #[test]
+    fn get_safe_mode_reads_and_deserializes_the_safe_mode_field() {
+        let (transport, recorded) = recording_transport(serde_json::json!({
+            "safe_mode": true,
+        }));
+        let client = ApiClient::with_test_transport("", transport);
+
+        let result = block_on(client.get_safe_mode());
+
+        assert!(result.unwrap().safe_mode);
+        assert_eq!(
+            recorded.lock().unwrap().clone().unwrap(),
+            RequestSpec {
+                method: "GET",
+                path: "/api/admin/safe-mode".to_string(),
+                body: None,
+            }
+        );
     }
 }
