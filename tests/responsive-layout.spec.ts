@@ -210,6 +210,11 @@ test.describe('table column alignment', () => {
  * rule, in which case the *page* scrolls sideways instead of the table - the
  * one outcome that is explicitly not allowed - or the rule could simply not
  * apply and the old clipping would return.
+ *
+ * The status cell below is plain text, not a styled span: `PageElement::Table`
+ * carries `rows: Vec<Vec<String>>` with no slot for a badge, and the plugin
+ * that fills this table keeps only a badge's text for its status column, so
+ * `<td>Active</td>` is what the live page emits, not a simplification of it.
  */
 test.describe('plugin page table overflow', () => {
   const TABLE = `
