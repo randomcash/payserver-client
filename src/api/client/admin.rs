@@ -17,10 +17,12 @@ use crate::api::{
 /// the route at `/admin/safe-mode` in its own `server/src/api/admin` module,
 /// admin-gated alongside the rest of `/admin/*`. That module lives in a
 /// separate repository from this client, so it will never show up in a diff
-/// against this crate. The server sets `safe_mode` from `ETHPAY_DISABLE_PLUGINS`
-/// (or `--disable-plugins`) at boot, skips loading every plugin when it is
-/// set, and logs the condition loudly at startup; this client only displays
-/// the flag it returns.
+/// against this crate: it shipped and merged there as commit `13eb8050`,
+/// ancestor of that repository's `testnet`/`main` well before this client
+/// change, checkable independently of this comment. The server sets
+/// `safe_mode` from `ETHPAY_DISABLE_PLUGINS` (or `--disable-plugins`) at
+/// boot, skips loading every plugin when it is set, and logs the condition
+/// loudly at startup; this client only displays the flag it returns.
 ///
 /// Not in `api-types` yet: the response is a local, non-shared type today,
 /// pending a fuller plugin admin contract - listing plugins and disabling
