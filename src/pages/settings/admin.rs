@@ -1,7 +1,8 @@
 //! Admin settings tab - server settings and user management (admin only).
 
 use crate::api::{
-    AdminUserInfo, ApiClient, ApiError, SafeModeStatus, Store, UpdateServerSettingsRequest, UpdateUserRoleRequest,
+    AdminUserInfo, ApiClient, ApiError, SafeModeStatus, Store, UpdateServerSettingsRequest,
+    UpdateUserRoleRequest,
 };
 use leptos::prelude::*;
 use types::ChainId;
