@@ -11,10 +11,17 @@ use crate::api::{
 
 /// Whether the server booted with every plugin disabled.
 ///
-/// Not in `api-types` yet: the server's `/admin/safe-mode` is itself a local,
-/// non-shared type today (see that endpoint's doc comment) pending a fuller
-/// plugin admin contract - listing plugins and disabling them individually -
-/// that doesn't exist yet.
+/// Backed by `GET /admin/safe-mode` in the server's own `server/src/api/admin`
+/// module, admin-gated and mounted alongside the rest of `/admin/*` - that is
+/// a separate repository from this client, so it will never show up in a diff
+/// against this crate. The server sets `safe_mode` from `ETHPAY_DISABLE_PLUGINS`
+/// (or `--disable-plugins`) at boot, skips loading every plugin when it is
+/// set, and logs the condition loudly at startup; this client only displays
+/// the flag it returns.
+///
+/// Not in `api-types` yet: the response is a local, non-shared type today,
+/// pending a fuller plugin admin contract - listing plugins and disabling
+/// them individually - that doesn't exist yet.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SafeModeStatus {
     pub safe_mode: bool,
