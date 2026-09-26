@@ -11,18 +11,16 @@ use crate::api::{
 
 /// Whether the server booted with every plugin disabled.
 ///
-/// `get_safe_mode` below calls `/api/admin/safe-mode`, the same `/api/admin/*`
+/// `get_safe_mode` calls `/api/admin/safe-mode`, the same `/api/admin/*`
 /// prefix as every other method in this file - `docker/nginx.conf`'s `/api/`
 /// location strips that prefix before proxying to the server, which mounts
 /// the route at `/admin/safe-mode` in its own `server/src/api/admin` module,
-/// admin-gated alongside the rest of `/admin/*`. That module lives in a
-/// separate repository from this client, so it will never show up in a diff
-/// against this crate: it shipped and merged there as commit `13eb8050`,
-/// ancestor of that repository's `testnet`/`main` well before this client
-/// change, checkable independently of this comment. The server sets
-/// `safe_mode` from `ETHPAY_DISABLE_PLUGINS` (or `--disable-plugins`) at
-/// boot, skips loading every plugin when it is set, and logs the condition
-/// loudly at startup; this client only displays the flag it returns.
+/// admin-gated alongside the rest of `/admin/*`. The server sets `safe_mode`
+/// from `ETHPAY_DISABLE_PLUGINS` (or `--disable-plugins`) at boot, skips
+/// loading every plugin when it is set, and logs the condition loudly at
+/// startup; that logic lives in the server's own repository, so it never
+/// appears in a diff against this crate. This client only displays the flag
+/// the route returns.
 ///
 /// Not in `api-types` yet: the response is a local, non-shared type today,
 /// pending a fuller plugin admin contract - listing plugins and disabling
