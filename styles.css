@@ -880,6 +880,20 @@ a:hover {
     text-decoration: underline;
 }
 
+@media (max-width: 768px) {
+    /* Without this, a column with unbreakable content (a long decimal, a
+       status badge) shrinks until it wraps or clips instead of the table
+       scrolling inside `.table-container` (rule above, at line 814) - the
+       same pairing `.addresses-table`/`.addresses-table-container` already
+       uses below. `check-classes-styled.py`, wired into CI as "Every class
+       in the markup has a rule", checks every emitted class regardless of
+       prefix, so `.table`/`.table-container` are covered and that pairing
+       can't silently go stale. */
+    .table {
+        min-width: 500px;
+    }
+}
+
 /* ============================================
    Buttons
    ============================================ */
