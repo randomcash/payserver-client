@@ -555,6 +555,13 @@ a:hover {
     .main-header-actions .ps-btn span {
         display: none;
     }
+
+    /* No icon to fall back on, and the invoices page has its own create
+       control, so this stops competing for space rather than degrading
+       into an unlabelled box. */
+    .header-create-invoice {
+        display: none;
+    }
 }
 
 /* User menu dropdown */
@@ -663,16 +670,23 @@ a:hover {
 
 /* The page shell every screen in this app has, written down once.
  *
- * `.invoices-page`, `.stores-page` and `.wallets-page` each spell out these
- * exact five declarations for themselves, which is how a sixth screen ends up
- * with none of them: a plugin page was rendering into `.page`, a class this
- * stylesheet does not define at all, so it had no max width, no column and no
- * gap - it was the one screen in the product with no layout.
+ * `.invoices-page`, `.stores-page`, `.wallets-page`, `.payments-page` and
+ * `.settings-page` used to each spell out these exact declarations for
+ * themselves, which is how a sixth screen ended up with none of them: a
+ * plugin page was rendering into `.page`, a class this stylesheet does not
+ * define at all, so it had no max width, no column and no gap - it was the
+ * one screen in the product with no layout. `.payments-page` had also drifted
+ * to just the width pair, missing the flex layout every other screen has.
  *
- * Named in the `ps-` vocabulary the rest of the client is migrating to, so
- * folding the other three in is an edit to their selector lists rather than
- * another copy of this block. */
-.ps-page {
+ * Named in the `ps-` vocabulary the rest of the client is migrating to.
+ * Per-page rules below only override where a screen genuinely differs
+ * (`.settings-page`'s narrower max-width). */
+.ps-page,
+.invoices-page,
+.payments-page,
+.stores-page,
+.wallets-page,
+.settings-page {
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
@@ -2145,13 +2159,6 @@ tr.payment-row {
 /* ============================================
    Invoices Page
    ============================================ */
-.invoices-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    width: 100%;
-    max-width: var(--content-max-width);
-}
 
 /* Toolbar: Filters + Search */
 .invoices-toolbar {
@@ -3250,11 +3257,6 @@ tr.payment-row {
 /* ============================================
    Payments Page
    ============================================ */
-.payments-page {
-    width: 100%;
-    max-width: var(--content-max-width);
-}
-
 .payments-toolbar {
     display: flex;
     align-items: center;
@@ -3757,14 +3759,6 @@ tr.payment-row {
 /* ============================================
    Stores Page
    ============================================ */
-
-.stores-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    width: 100%;
-    max-width: var(--content-max-width);
-}
 
 .stores-toolbar {
     display: flex;
@@ -4461,14 +4455,6 @@ tr.payment-row {
    Wallets Page
    ============================================ */
 
-.wallets-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    width: 100%;
-    max-width: var(--content-max-width);
-}
-
 .wallets-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -5056,10 +5042,6 @@ tr.payment-row {
    ============================================ */
 
 .settings-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    width: 100%;
     max-width: 900px;
 }
 
@@ -6552,6 +6534,42 @@ tr.payment-row {
 .checkout-copy-btn:hover {
     background: var(--color-primary);
     color: white;
+}
+
+/* Wallet connect (EIP-6963) — supplementary to the address/QR above, never a
+   replacement, so it only ever adds a section rather than restyling one. */
+.checkout-wallet-actions {
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border-color);
+}
+
+.checkout-wallet-label {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-2);
+}
+
+.checkout-wallet-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.checkout-wallet-status {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.checkout-wallet-error {
+    color: var(--color-red-500);
+}
+
+.checkout-wallet-success {
+    color: var(--color-green-500);
 }
 
 /* Footer */

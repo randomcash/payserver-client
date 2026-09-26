@@ -1,4 +1,24 @@
 //! HTTP client for the payserver API.
+//!
+//! Every method in this module's six files reaches the network only through
+//! `get`/`get_text`/`post`/`put`/`patch`/`delete` (plus the `_empty` variants)
+//! below, which call into `gloo-net` and panic the instant a request is built
+//! outside an actual wasm host - so `cargo test` cannot observe the method,
+//! path, or body any of them send. That is true of all 52 `pub async fn`s
+//! here (15 `admin`, 1 `health`, 8 `invoices`, 3 `payments`, 2 `plugins`, 23
+//! `stores`), not just the wallet writes below: it is this module's
+//! structural default, not drift in a few recent paths. `get`/`post`/`patch`/
+//! `delete` now carry a `#[cfg(test)]` seam (`TestTransport`) so calls built
+//! entirely on those - `create_wallet`/`update_wallet`/`delete_wallet` (see
+//! `stores` tests), and the `invoices`/`payments` reads and writes - run for
+//! real under `cargo test`. `put`, the `_empty` variants, and anything that
+//! calls `build_request` directly (`logout`) still cannot be exercised past
+//! their own pure helpers without the same seam extended further, or a
+//! `wasm-bindgen-test` harness (already a dev-dependency, unused in this
+//! crate's test runs). Separately, any call that reaches `js_sys::*` (URL
+//! component encoding) panics the same way on a non-wasm host regardless of
+//! transport - the seam here does not help those branches; see the
+//! `invoices`/`payments` tests for which branches that leaves untested.
 
 use gloo_net::http::{Request, RequestBuilder};
 use serde::{Serialize, de::DeserializeOwned};
@@ -26,11 +46,36 @@ pub enum ApiError {
     Unauthorized,
 }
 
+/// A request as `post`/`patch`/`delete` are about to hand it off - method,
+/// path, and (if any) body - captured so a test can assert on the object
+/// actually produced by a call like `create_wallet`, not just on a pure
+/// helper around it. Test-only: nothing in the real request path outside
+/// `#[cfg(test)]` ever constructs one.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RequestSpec {
+    pub method: &'static str,
+    pub path: String,
+    pub body: Option<serde_json::Value>,
+}
+
+/// A test double for the transport, standing in for `gloo-net`. `gloo-net`
+/// calls into `wasm-bindgen`-imported bindings the instant a request is
+/// built, which panics ("cannot call wasm-bindgen imported functions on
+/// non-wasm targets") outside an actual wasm host - so this is the only way
+/// to run `create_wallet`/`update_wallet`/`delete_wallet` themselves, rather
+/// than a helper extracted from them, under `cargo test`.
+#[cfg(test)]
+pub(crate) type TestTransport =
+    std::sync::Arc<dyn Fn(RequestSpec) -> Result<serde_json::Value, ApiError> + Send + Sync>;
+
 /// API client for a payserver.
 #[derive(Clone)]
 pub struct ApiClient {
     base_url: String,
     token: Option<String>,
+    #[cfg(test)]
+    test_transport: Option<TestTransport>,
 }
 
 impl ApiClient {
@@ -39,6 +84,23 @@ impl ApiClient {
         Self {
             base_url: base_url.into(),
             token: None,
+            #[cfg(test)]
+            test_transport: None,
+        }
+    }
+
+    /// Create a client whose `post`/`patch`/`delete` calls are answered by
+    /// `transport` instead of `gloo-net`, so the async function itself -
+    /// including the request it builds - runs under `cargo test`.
+    #[cfg(test)]
+    pub(crate) fn with_test_transport(
+        base_url: impl Into<String>,
+        transport: TestTransport,
+    ) -> Self {
+        Self {
+            base_url: base_url.into(),
+            token: None,
+            test_transport: Some(transport),
         }
     }
 
@@ -78,6 +140,16 @@ impl ApiClient {
 
     /// Make a GET request.
     async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, ApiError> {
+        #[cfg(test)]
+        if let Some(transport) = &self.test_transport {
+            let response = transport(RequestSpec {
+                method: "GET",
+                path: path.to_string(),
+                body: None,
+            })?;
+            return serde_json::from_value(response).map_err(|e| ApiError::Parse(e.to_string()));
+        }
+
         let request = self
             .build_request("GET", path)
             .build()
@@ -93,6 +165,21 @@ impl ApiClient {
 
     /// Make a GET request returning raw text (for CSV downloads).
     async fn get_text(&self, path: &str) -> Result<String, ApiError> {
+        #[cfg(test)]
+        if let Some(transport) = &self.test_transport {
+            let response = transport(RequestSpec {
+                method: "GET",
+                path: path.to_string(),
+                body: None,
+            })?;
+            return match response {
+                serde_json::Value::String(s) => Ok(s),
+                other => Err(ApiError::Parse(format!(
+                    "test transport: expected a string response for get_text, got {other}"
+                ))),
+            };
+        }
+
         let request = self
             .build_request("GET", path)
             .build()
@@ -127,6 +214,17 @@ impl ApiClient {
         path: &str,
         body: &B,
     ) -> Result<T, ApiError> {
+        #[cfg(test)]
+        if let Some(transport) = &self.test_transport {
+            let body = serde_json::to_value(body).map_err(|e| ApiError::Parse(e.to_string()))?;
+            let response = transport(RequestSpec {
+                method: "POST",
+                path: path.to_string(),
+                body: Some(body),
+            })?;
+            return serde_json::from_value(response).map_err(|e| ApiError::Parse(e.to_string()));
+        }
+
         let request = self
             .build_request("POST", path)
             .json(body)
@@ -165,6 +263,17 @@ impl ApiClient {
         path: &str,
         body: &B,
     ) -> Result<T, ApiError> {
+        #[cfg(test)]
+        if let Some(transport) = &self.test_transport {
+            let body = serde_json::to_value(body).map_err(|e| ApiError::Parse(e.to_string()))?;
+            let response = transport(RequestSpec {
+                method: "PATCH",
+                path: path.to_string(),
+                body: Some(body),
+            })?;
+            return serde_json::from_value(response).map_err(|e| ApiError::Parse(e.to_string()));
+        }
+
         let request = self
             .build_request("PATCH", path)
             .json(body)
@@ -180,6 +289,16 @@ impl ApiClient {
 
     /// Make a DELETE request.
     async fn delete(&self, path: &str) -> Result<(), ApiError> {
+        #[cfg(test)]
+        if let Some(transport) = &self.test_transport {
+            transport(RequestSpec {
+                method: "DELETE",
+                path: path.to_string(),
+                body: None,
+            })?;
+            return Ok(());
+        }
+
         let request = self
             .build_request("DELETE", path)
             .build()
