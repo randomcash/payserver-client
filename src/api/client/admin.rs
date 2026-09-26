@@ -11,9 +11,12 @@ use crate::api::{
 
 /// Whether the server booted with every plugin disabled.
 ///
-/// Backed by `GET /admin/safe-mode` in the server's own `server/src/api/admin`
-/// module, admin-gated and mounted alongside the rest of `/admin/*` - that is
-/// a separate repository from this client, so it will never show up in a diff
+/// `get_safe_mode` below calls `/api/admin/safe-mode`, the same `/api/admin/*`
+/// prefix as every other method in this file - `docker/nginx.conf`'s `/api/`
+/// location strips that prefix before proxying to the server, which mounts
+/// the route at `/admin/safe-mode` in its own `server/src/api/admin` module,
+/// admin-gated alongside the rest of `/admin/*`. That module lives in a
+/// separate repository from this client, so it will never show up in a diff
 /// against this crate. The server sets `safe_mode` from `ETHPAY_DISABLE_PLUGINS`
 /// (or `--disable-plugins`) at boot, skips loading every plugin when it is
 /// set, and logs the condition loudly at startup; this client only displays
