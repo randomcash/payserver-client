@@ -43,6 +43,24 @@ fn safe_mode_after_check(result: &Result<SafeModeStatus, ApiError>) -> (Option<b
     }
 }
 
+/// Apply a safe-mode check result to the tab's two signals.
+///
+/// Pulled out of `AdminTab`'s load-on-mount task so the `if let Some` guard -
+/// the thing that actually leaves `safe_mode` untouched on a transient error,
+/// as opposed to `safe_mode_after_check` merely saying it should - runs
+/// against real signals in a test, not just the pure tuple it's fed.
+fn apply_safe_mode_check(
+    result: &Result<SafeModeStatus, ApiError>,
+    set_safe_mode: WriteSignal<bool>,
+    set_safe_mode_check_failed: WriteSignal<bool>,
+) {
+    let (mode, check_failed) = safe_mode_after_check(result);
+    if let Some(mode) = mode {
+        set_safe_mode.set(mode);
+    }
+    set_safe_mode_check_failed.set(check_failed);
+}
+
 /// Admin tab - server settings and user management (admin only).
 #[component]
 pub fn AdminTab() -> impl IntoView {
@@ -134,11 +152,7 @@ pub fn AdminTab() -> impl IntoView {
             if let Err(ref e) = result {
                 web_sys::console::error_1(&format!("safe-mode check failed: {e}").into());
             }
-            let (mode, check_failed) = safe_mode_after_check(&result);
-            if let Some(mode) = mode {
-                set_safe_mode.set(mode);
-            }
-            set_safe_mode_check_failed.set(check_failed);
+            apply_safe_mode_check(&result, set_safe_mode, set_safe_mode_check_failed);
         }
     });
 
@@ -613,5 +627,35 @@ mod tests {
 
         let (mode, check_failed) = safe_mode_after_check(&Ok(SafeModeStatus { safe_mode: false }));
         assert_eq!((mode, check_failed), (Some(false), false));
+    }
+
+    #[test]
+    fn a_confirmed_signal_survives_a_later_failed_check() {
+        // safe_mode_after_check proves the *tuple* it returns on a failure
+        // carries no mode. This proves the `if let Some` guard that consumes
+        // that tuple actually leaves a real signal alone: a confirmed `true`
+        // must still read `true` after a subsequent transient error, on the
+        // live signal the component renders from, not just on paper.
+        let (safe_mode, set_safe_mode) = signal(false);
+        let (check_failed, set_check_failed) = signal(false);
+
+        apply_safe_mode_check(
+            &Ok(SafeModeStatus { safe_mode: true }),
+            set_safe_mode,
+            set_check_failed,
+        );
+        assert!(safe_mode.get_untracked());
+        assert!(!check_failed.get_untracked());
+
+        apply_safe_mode_check(
+            &Err(ApiError::Network("x".into())),
+            set_safe_mode,
+            set_check_failed,
+        );
+        assert!(
+            safe_mode.get_untracked(),
+            "a transient error must not clear a confirmed safe mode"
+        );
+        assert!(check_failed.get_untracked());
     }
 }
