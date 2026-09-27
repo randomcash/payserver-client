@@ -7,14 +7,21 @@ use crate::api::{
 };
 
 /// Percent-encodes a query parameter value the way `js_sys::encode_uri_component`
-/// does, in plain Rust.
+/// does.
 ///
-/// `list_invoices` is the one filtered list call a UI component (the wallet
-/// rotation tab's outstanding-invoice count) needs to drive under `cargo
-/// test`, and `js_sys::encode_uri_component` panics off a wasm host before
-/// the request ever reaches the `get`/test-transport seam in `mod.rs`. This
-/// keeps the request this function builds identical while making it possible
-/// to run outside a browser.
+/// On the real wasm target this delegates to `js_sys::encode_uri_component`
+/// itself, so `list_invoices`'s actual request encoding is unchanged. The
+/// hand-rolled fallback exists only so `list_invoices` - the one filtered
+/// list call a UI component (the wallet rotation tab's outstanding-invoice
+/// count) needs to drive under `cargo test` - can run on the host target,
+/// where the `js_sys` binding panics before the request ever reaches the
+/// `get`/test-transport seam in `mod.rs`.
+#[cfg(target_arch = "wasm32")]
+fn encode_query_param(value: &str) -> String {
+    js_sys::encode_uri_component(value).to_string()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn encode_query_param(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.bytes() {
@@ -171,8 +178,10 @@ mod tests {
     // those two needs a `wasm-bindgen-test` run in a real (or headless)
     // browser, which this crate's test suite does not do today. `list_invoices`
     // no longer has this limitation: its string filters go through
-    // `encode_query_param` above instead of `js_sys`, so it's fully testable
-    // here.
+    // `encode_query_param` above, which is `cfg`-gated to fall back to a
+    // plain-Rust encoder on the host target this test module actually runs
+    // on, so it's fully testable here without touching what the wasm build
+    // sends.
 
     /// Polls `fut` to completion. Every test below drives its call through
     /// a `TestTransport` that answers synchronously - `gloo-net` never runs,
