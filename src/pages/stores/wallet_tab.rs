@@ -149,6 +149,22 @@ async fn fetch_stores_sharing_wallet(api: &ApiClient, store_id: &str) -> Option<
     ))
 }
 
+/// Whether the "Confirm rotation" button should be disabled.
+///
+/// `outstanding` and `other_stores` being `None` means "unknown" - a check
+/// still loading, or one that failed - not "zero" or "no other stores". Either
+/// must block confirmation exactly like an in-flight rotation does, or an
+/// operator can click through without ever seeing the warning that failed to
+/// load.
+fn confirm_rotation_disabled(
+    rotating: bool,
+    loading_warnings: bool,
+    outstanding: &Option<i64>,
+    other_stores: &Option<Vec<String>>,
+) -> bool {
+    rotating || loading_warnings || outstanding.is_none() || other_stores.is_none()
+}
+
 /// Wallet rotation tab.
 #[component]
 pub fn WalletTab(store_id: String) -> impl IntoView {
@@ -445,10 +461,12 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
                                     class="ps-btn ps-btn-primary ps-btn-sm"
                                     on:click=on_confirm_rotate
                                     disabled=move || {
-                                        rotating.get()
-                                            || loading_warnings.get()
-                                            || outstanding.get().is_none()
-                                            || other_stores.get().is_none()
+                                        confirm_rotation_disabled(
+                                            rotating.get(),
+                                            loading_warnings.get(),
+                                            &outstanding.get(),
+                                            &other_stores.get(),
+                                        )
                                     }
                                 >
                                     {move || if rotating.get() { "Rotating..." } else { "Confirm rotation" }}
@@ -905,5 +923,57 @@ mod tests {
         let resolved = vec![("store-2", "Coffee Shop", "xpub6ZZZ...9999")];
         let sharing = stores_sharing_wallet("xpub6D4B...eacc", "store-1", resolved.into_iter());
         assert!(sharing.is_empty());
+    }
+
+    // =========================================================================
+    // confirm_rotation_disabled - the boolean the "Confirm rotation" button's
+    // `disabled` attribute is wired to. Both warnings resolving is what tells
+    // the operator whether they're actually safe, so this must stay blocked
+    // until neither is unknown, not just until neither is still loading.
+    // =========================================================================
+
+    #[test]
+    fn enabled_once_both_checks_resolve() {
+        assert!(!confirm_rotation_disabled(
+            false,
+            false,
+            &Some(0),
+            &Some(Vec::new())
+        ));
+    }
+
+    #[test]
+    fn disabled_while_rotation_is_in_flight() {
+        assert!(confirm_rotation_disabled(
+            true,
+            false,
+            &Some(0),
+            &Some(Vec::new())
+        ));
+    }
+
+    #[test]
+    fn disabled_while_warnings_are_still_loading() {
+        assert!(confirm_rotation_disabled(
+            false,
+            true,
+            &Some(0),
+            &Some(Vec::new())
+        ));
+    }
+
+    #[test]
+    fn disabled_when_the_outstanding_invoice_check_failed() {
+        assert!(confirm_rotation_disabled(
+            false,
+            false,
+            &None,
+            &Some(Vec::new())
+        ));
+    }
+
+    #[test]
+    fn disabled_when_the_other_stores_check_failed() {
+        assert!(confirm_rotation_disabled(false, false, &Some(0), &None));
     }
 }
