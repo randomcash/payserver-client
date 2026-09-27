@@ -18,7 +18,7 @@ use crate::api::{
 /// `get`/test-transport seam in `mod.rs`.
 #[cfg(target_arch = "wasm32")]
 fn encode_query_param(value: &str) -> String {
-    js_sys::encode_uri_component(value).to_string()
+    js_sys::encode_uri_component(value).into()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
