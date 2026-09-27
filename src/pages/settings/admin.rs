@@ -70,6 +70,11 @@ pub fn AdminTab() -> impl IntoView {
                 set_invoice_expiry.set(settings.invoice_expiry_minutes.to_string());
                 set_rate_limit.set(settings.rate_limit_rpm.to_string());
                 set_enabled_chain_ids.set(settings.enabled_chain_ids);
+                // `billing_store_id`/`billing_store_id_active` are still
+                // named after `api_types::admin`'s shared DTO, pinned by rev
+                // from payserver-commons and not yet renamed there - see that
+                // repository's own commit. Everything user-visible on this
+                // page already says "operator store".
                 set_operator_store.set(
                     settings
                         .billing_store_id
@@ -113,6 +118,10 @@ pub fn AdminTab() -> impl IntoView {
             // clears the setting. An absent field would mean "leave it
             // alone", which is what an older client sends and is not what a
             // save from this page means.
+            //
+            // Named `billing_store_id` to match `UpdateServerSettingsRequest`,
+            // which is pinned from payserver-commons and has not yet picked
+            // up that repository's own rename.
             let billing_store_id = Some(if operator_store.is_empty() {
                 None
             } else {
