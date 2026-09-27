@@ -7,17 +7,22 @@
 //! path, or body any of them send. That is true of all 52 `pub async fn`s
 //! here (15 `admin`, 1 `health`, 8 `invoices`, 3 `payments`, 2 `plugins`, 23
 //! `stores`), not just the wallet writes below: it is this module's
-//! structural default, not drift in a few recent paths. `get`/`post`/`patch`/
-//! `delete` now carry a `#[cfg(test)]` seam (`TestTransport`) so calls built
-//! entirely on those - `create_wallet`/`update_wallet`/`delete_wallet` (see
-//! `stores` tests), and the `invoices`/`payments` reads and writes - run for
-//! real under `cargo test`. `put`, the `_empty` variants, and anything that
-//! calls `build_request` directly (`logout`) still cannot be exercised past
-//! their own pure helpers without the same seam extended further, or a
-//! `wasm-bindgen-test` harness (already a dev-dependency, unused in this
-//! crate's test runs). Separately, any call that reaches `js_sys::*` (URL
-//! component encoding) panics the same way on a non-wasm host regardless of
-//! transport - the seam here does not help those branches; see the
+//! structural default, not drift in a few recent paths. `get`/`get_text`/
+//! `post`/`patch`/`delete` now carry a `#[cfg(test)]` seam (`TestTransport`)
+//! so calls built entirely on those - `create_wallet`/`update_wallet`/
+//! `delete_wallet` and GET-based callers like `get_store_wallet`/`list_stores`
+//! (see `stores` and `pages::stores::wallet_tab` tests), and the
+//! `invoices`/`payments` reads and writes - run for real under `cargo test`.
+//! `put`, the `_empty` variants, and anything that calls `build_request`
+//! directly (`logout`) still cannot be exercised past their own pure helpers
+//! without the same seam extended further, or a `wasm-bindgen-test` harness
+//! (already a dev-dependency, unused in this crate's test runs). Separately,
+//! any call that reaches `js_sys::*` (URL component encoding) panics the same
+//! way on a non-wasm host regardless of transport - the seam here does not
+//! help those branches. `list_invoices` builds its query string with a
+//! `js_sys`-free `encode_query_param` instead and so is fully testable; every
+//! other list endpoint that still calls `js_sys` (`export_invoices_csv`,
+//! `list_payments`, `export_payments_csv`, ...) is not - see the
 //! `invoices`/`payments` tests for which branches that leaves untested.
 
 use gloo_net::http::{Request, RequestBuilder};

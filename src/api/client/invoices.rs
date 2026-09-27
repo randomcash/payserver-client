@@ -6,6 +6,44 @@ use crate::api::{
     Payment, TxHashLookupResponse,
 };
 
+/// Percent-encodes a query parameter value the way `js_sys::encode_uri_component`
+/// does.
+///
+/// On the real wasm target this delegates to `js_sys::encode_uri_component`
+/// itself, so `list_invoices`'s actual request encoding is unchanged. The
+/// hand-rolled fallback exists only so `list_invoices` - the one filtered
+/// list call a UI component (the wallet rotation tab's outstanding-invoice
+/// count) needs to drive under `cargo test` - can run on the host target,
+/// where the `js_sys` binding panics before the request ever reaches the
+/// `get`/test-transport seam in `mod.rs`.
+#[cfg(target_arch = "wasm32")]
+fn encode_query_param(value: &str) -> String {
+    js_sys::encode_uri_component(value).into()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn encode_query_param(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'!'
+            | b'~'
+            | b'*'
+            | b'\''
+            | b'('
+            | b')' => out.push(byte as char),
+            _ => out.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+    out
+}
+
 impl ApiClient {
     /// List invoices with filters and pagination.
     ///
@@ -26,16 +64,16 @@ impl ApiClient {
     ) -> Result<InvoiceListResponse, ApiError> {
         let mut params = Vec::new();
         if let Some(sid) = store_id {
-            params.push(format!("store_id={}", js_sys::encode_uri_component(sid)));
+            params.push(format!("store_id={}", encode_query_param(sid)));
         }
         if let Some(s) = status {
-            params.push(format!("status={}", js_sys::encode_uri_component(s)));
+            params.push(format!("status={}", encode_query_param(s)));
         }
         if let Some(c) = currency {
-            params.push(format!("currency={}", js_sys::encode_uri_component(c)));
+            params.push(format!("currency={}", encode_query_param(c)));
         }
         if let Some(q) = search {
-            params.push(format!("search={}", js_sys::encode_uri_component(q)));
+            params.push(format!("search={}", encode_query_param(q)));
         }
         if let Some(l) = limit {
             params.push(format!("limit={}", l));
@@ -130,15 +168,20 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     // `get_checkout` calls `js_sys::encode_uri_component` unconditionally, and
-    // `list_invoices`/`export_invoices_csv` call it on every `Some` string
-    // filter. That binding panics ("cannot call wasm-bindgen imported
-    // functions on non-wasm targets") the instant it runs outside an actual
-    // wasm host, regardless of what transport answers the request underneath
-    // it - so `get_checkout` cannot be driven through `cargo test` on this
-    // workspace's host target at all, and the two list/export functions below
-    // are only exercised with the `Some` filters that don't touch encoding.
-    // Covering the encoding branches needs a `wasm-bindgen-test` run in a real
-    // (or headless) browser, which this crate's test suite does not do today.
+    // `export_invoices_csv` calls it on every `Some` string filter. That
+    // binding panics ("cannot call wasm-bindgen imported functions on
+    // non-wasm targets") the instant it runs outside an actual wasm host,
+    // regardless of what transport answers the request underneath it - so
+    // `get_checkout` cannot be driven through `cargo test` on this
+    // workspace's host target at all, and `export_invoices_csv` below is only
+    // exercised with the `None` filters that don't touch encoding. Covering
+    // those two needs a `wasm-bindgen-test` run in a real (or headless)
+    // browser, which this crate's test suite does not do today. `list_invoices`
+    // no longer has this limitation: its string filters go through
+    // `encode_query_param` above, which is `cfg`-gated to fall back to a
+    // plain-Rust encoder on the host target this test module actually runs
+    // on, so it's fully testable here without touching what the wasm build
+    // sends.
 
     /// Polls `fut` to completion. Every test below drives its call through
     /// a `TestTransport` that answers synchronously - `gloo-net` never runs,
@@ -207,9 +250,47 @@ mod tests {
     }
 
     #[test]
+    fn encode_query_param_leaves_unreserved_characters_alone() {
+        assert_eq!(
+            encode_query_param("abcXYZ019-_.!~*'()"),
+            "abcXYZ019-_.!~*'()"
+        );
+    }
+
+    #[test]
+    fn encode_query_param_percent_encodes_everything_else() {
+        assert_eq!(encode_query_param("pending invoice"), "pending%20invoice");
+        assert_eq!(encode_query_param("a&b=c"), "a%26b%3Dc");
+    }
+
+    #[test]
+    fn list_invoices_builds_the_filtered_path_without_a_wasm_host() {
+        let (transport, recorded) =
+            recording_transport(serde_json::json!({ "total": 0, "invoices": [] }));
+        let client = ApiClient::with_test_transport("", transport);
+
+        let result = block_on(client.list_invoices(
+            Some("store-1"),
+            Some("pending"),
+            None,
+            None,
+            Some(1),
+            Some(0),
+        ));
+
+        assert!(result.is_ok());
+        assert_eq!(
+            recorded.lock().unwrap().clone().unwrap(),
+            RequestSpec {
+                method: "GET",
+                path: "/api/invoices?store_id=store-1&status=pending&limit=1&offset=0".to_string(),
+                body: None,
+            }
+        );
+    }
+
+    #[test]
     fn list_invoices_sends_only_the_filters_that_were_set() {
-        // `store_id`/`status`/`currency`/`search` are left `None` here - see
-        // the module-level note above on why.
         let (transport, recorded) = recording_transport(serde_json::json!({
             "total": 0,
             "invoices": [],
