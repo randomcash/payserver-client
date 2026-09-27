@@ -46,7 +46,6 @@ evm-token-name
 evm-token-option
 evm-token-selector
 evm-token-symbol
-evm-wallet-actions
 form-hint
 form-input-sm
 form-status
