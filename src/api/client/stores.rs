@@ -469,7 +469,10 @@ mod tests {
         assert_eq!(rotation.previous_xpub_masked, "xpub6ZZZ...9999");
         assert_eq!(rotation.previous_derivation_index, 3);
         assert_eq!(rotation.asset_symbol.as_deref(), Some("ETH"));
-        assert_eq!(rotation.chain_id.as_ref().map(|c| c.to_string()), Some("eip155:1".to_string()));
+        assert_eq!(
+            rotation.chain_id.as_ref().map(|c| c.to_string()),
+            Some("eip155:1".to_string())
+        );
 
         assert_eq!(
             recorded.lock().unwrap().clone().unwrap(),
