@@ -707,6 +707,23 @@ mod tests {
     }
 
     #[test]
+    fn a_figure_tones_the_value_itself_not_a_badge_beside_it() {
+        let html = render(&PageElement::Figure(Figure {
+            label: "Lapsed".to_string(),
+            value: "7".to_string(),
+            tone: Tone::Danger,
+        }))
+        .to_html();
+        assert!(html.contains("ps-stat-label") && html.contains("Lapsed"));
+        assert!(html.contains(r#"class="ps-stat-value ps-stat-value-danger""#));
+        assert!(strip_tags(&html).contains('7'));
+        assert!(
+            !html.contains("badge"),
+            "a figure must never fall back to a coloured pill"
+        );
+    }
+
+    #[test]
     fn a_form_renders_its_children_without_being_submittable() {
         let html = render(&PageElement::Form(Form {
             children: vec![PageElement::Input(Input {
