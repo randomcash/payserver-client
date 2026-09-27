@@ -1,5 +1,4 @@
 import { defineConfig } from '@playwright/test';
-import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
@@ -21,15 +20,16 @@ import { resolve } from 'node:path';
 // rather than only ones that go through a wrapper script, which a bare
 // `npx playwright test` bypasses entirely.
 //
-// Wiping the directory here rather than trapping it on exit means even an
-// interruption no trap can catch (SIGKILL, a killed job) leaves at most one
-// stale profile behind instead of accumulating one per interruption — the
-// next invocation clears it before using it.
+// This assignment only ever points at the same deterministic path, so it's
+// safe to run once per process with no coordination. The directory itself is
+// created (and wiped of anything a killed previous run left behind) in
+// globalSetup instead of here, because this module is re-imported by every
+// `fullyParallel` worker independently — an `rmSync`/`mkdirSync` pair run
+// from here would race a sibling worker that already has a browser profile
+// open under the same path. globalSetup runs exactly once, before any worker
+// starts.
 if (!process.env.CI) {
-  const scratch = resolve(process.cwd(), '.tmp');
-  rmSync(scratch, { recursive: true, force: true });
-  mkdirSync(scratch, { recursive: true });
-  process.env.TMPDIR = scratch;
+  process.env.TMPDIR = resolve(process.cwd(), '.tmp');
 }
 
 export default defineConfig({
@@ -37,6 +37,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
+  globalSetup: process.env.CI ? undefined : require.resolve('./playwright.global-setup.ts'),
   reporter: process.env.CI ? [['github'], ['list']] : [['list']],
   use: { browserName: 'chromium' },
 });
