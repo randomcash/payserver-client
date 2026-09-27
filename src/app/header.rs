@@ -76,7 +76,10 @@ where
                     >
                         <IconBell />
                     </button>
-                    <button class="ps-btn ps-btn-primary ps-btn-sm" on:click=move |_| create_invoice.open()>
+                    <button
+                        class="ps-btn ps-btn-primary ps-btn-sm header-create-invoice"
+                        on:click=move |_| create_invoice.open()
+                    >
                         <span>"Create Invoice"</span>
                     </button>
                     <div class="user-menu" node_ref=menu_ref>
