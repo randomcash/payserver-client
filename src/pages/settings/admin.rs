@@ -71,17 +71,13 @@ pub fn AdminTab() -> impl IntoView {
                 set_invoice_expiry.set(settings.invoice_expiry_minutes.to_string());
                 set_rate_limit.set(settings.rate_limit_rpm.to_string());
                 set_enabled_chain_ids.set(settings.enabled_chain_ids);
-                // `.billing_store_id`/`.billing_store_id_active`: the shared
-                // `ServerSettingsResponse` from payserver-commons, pinned by
-                // rev and not yet renamed there - see that repository's own
-                // commit.
                 set_operator_store.set(
                     settings
-                        .billing_store_id
+                        .operator_store_id
                         .map(|id| id.0.to_string())
                         .unwrap_or_default(),
                 );
-                set_operator_store_active.set(settings.billing_store_id_active);
+                set_operator_store_active.set(settings.operator_store_id_active);
             }
             // Offered as a list rather than a UUID field. An operator should
             // not have to copy an identifier out of a URL to configure where
@@ -124,15 +120,12 @@ pub fn AdminTab() -> impl IntoView {
                 operator_store_value.parse().ok().map(types::StoreId)
             });
 
-            // `billing_store_id`: the shared `UpdateServerSettingsRequest`
-            // from payserver-commons, pinned by rev and not yet renamed
-            // there - see that repository's own commit.
             let request = UpdateServerSettingsRequest {
                 default_confirmations: confirmations,
                 invoice_expiry_minutes: expiry,
                 rate_limit_rpm: rpm,
                 enabled_chain_ids: chains,
-                billing_store_id: operator_store_id,
+                operator_store_id,
             };
             match api.update_server_settings(&request).await {
                 Ok(()) => {

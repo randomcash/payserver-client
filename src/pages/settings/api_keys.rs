@@ -38,6 +38,7 @@ pub fn ApiKeysTab() -> impl IntoView {
         let request = CreateApiKeyRequest {
             name: name.trim().to_string(),
             expires_at: None,
+            permissions: Vec::new(),
         };
         set_loading.set(true);
         wasm_bindgen_futures::spawn_local(async move {
