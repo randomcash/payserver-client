@@ -104,14 +104,23 @@ async fn fetch_outstanding_invoice_count(api: &ApiClient, store_id: &str) -> Opt
 /// handler queries every store the caller owns or belongs to with no
 /// `LIMIT`/`OFFSET`, so there is no page this loop could miss.
 ///
-/// Any failed lookup along the way - the store's own wallet, the store list,
-/// or any one candidate store's wallet - aborts with `None` rather than
-/// returning a list missing that entry: a rotation made in response to a
-/// compromise treats "no other stores" and "couldn't check" as the same
-/// green light otherwise, and a silently short list is worse than an
-/// explicit "could not verify."
+/// Any failed lookup along the way - the store list, or any one candidate
+/// store's wallet - aborts with `None` rather than returning a list missing
+/// that entry: a rotation made in response to a compromise treats "no other
+/// stores" and "couldn't check" as the same green light otherwise, and a
+/// silently short list is worse than an explicit "could not verify." A 404
+/// on the store's *own* wallet is the one exception - see below - since it
+/// answers the question rather than leaving it unknown.
 async fn fetch_stores_sharing_wallet(api: &ApiClient, store_id: &str) -> Option<Vec<String>> {
-    let current = api.get_store_wallet(store_id).await.ok()?;
+    let current = match api.get_store_wallet(store_id).await {
+        Ok(w) => w,
+        // No wallet resolves for the store being rotated either - the same
+        // ordinary, non-error state handled below for other stores. Nothing
+        // can share a wallet that does not exist yet, so this is answered
+        // ("no other stores"), not unknown.
+        Err(ApiError::Http { status: 404, .. }) => return Some(Vec::new()),
+        Err(_) => return None,
+    };
     let stores = api.list_stores().await.ok()?;
     let mut resolved = Vec::with_capacity(stores.len());
     for store in &stores {
@@ -164,18 +173,15 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
     let (rotate_error, set_rotate_error) = signal(None::<String>);
     let (last_rotation, set_last_rotation) = signal(None::<RotateWalletResponse>);
 
-    let sid_confirm = store_id.clone();
-    let on_start_confirm = move |_| {
-        let xpub = new_xpub.get_untracked().trim().to_string();
-        if xpub.is_empty() {
-            return;
-        }
-        set_rotate_error.set(None);
-        set_last_rotation.set(None);
-        set_confirming.set(true);
+    // Runs both pre-confirmation checks. Shared by the initial "Rotate"
+    // click and the retry button below - a transient fetch failure must not
+    // be a dead end, since the confirm button stays disabled until both
+    // checks report `Some`.
+    let sid_checks = store_id.clone();
+    let run_warning_checks = move || {
         set_loading_warnings.set(true);
         let api = api.get();
-        let sid = sid_confirm.clone();
+        let sid = sid_checks.clone();
         leptos::task::spawn_local(async move {
             // In-flight invoices (pending, processing) keep collecting on the
             // old key after rotation - that is correct behaviour, and it is
@@ -191,6 +197,24 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
             let _ = set_other_stores.try_set(sharing);
             let _ = set_loading_warnings.try_set(false);
         });
+    };
+
+    let on_start_confirm = {
+        let run_warning_checks = run_warning_checks.clone();
+        move |_| {
+            let xpub = new_xpub.get_untracked().trim().to_string();
+            if xpub.is_empty() {
+                return;
+            }
+            set_rotate_error.set(None);
+            set_last_rotation.set(None);
+            set_confirming.set(true);
+            run_warning_checks();
+        }
+    };
+
+    let on_retry_checks = move |_| {
+        run_warning_checks();
     };
 
     let sid_rotate = store_id.clone();
@@ -334,6 +358,7 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
 
                     {move || confirming.get().then(|| {
                         let on_confirm_rotate = on_confirm_rotate.clone();
+                        let on_retry_checks = on_retry_checks.clone();
                         view! {
                         <div class="rotation-confirm">
                             <div class="addresses-info">
@@ -392,11 +417,39 @@ pub fn WalletTab(store_id: String) -> impl IntoView {
                                 </p>
                             </div>
 
+                            {move || (!loading_warnings.get()
+                                && (outstanding.get().is_none() || other_stores.get().is_none()))
+                                .then(|| {
+                                    let on_retry_checks = on_retry_checks.clone();
+                                    view! {
+                                        <div class="addresses-info">
+                                            <IconInfo />
+                                            <p style="color: var(--color-error)">
+                                                "One of the checks above failed. Confirming is \
+                                                 disabled until it succeeds - a rotation made \
+                                                 without seeing these warnings can look complete \
+                                                 when it is not."
+                                            </p>
+                                            <button
+                                                class="ps-btn ps-btn-secondary ps-btn-sm"
+                                                on:click=on_retry_checks
+                                            >
+                                                "Retry checks"
+                                            </button>
+                                        </div>
+                                    }
+                                })}
+
                             <div class="form-actions">
                                 <button
                                     class="ps-btn ps-btn-primary ps-btn-sm"
                                     on:click=on_confirm_rotate
-                                    disabled=move || rotating.get() || loading_warnings.get()
+                                    disabled=move || {
+                                        rotating.get()
+                                            || loading_warnings.get()
+                                            || outstanding.get().is_none()
+                                            || other_stores.get().is_none()
+                                    }
                                 >
                                     {move || if rotating.get() { "Rotating..." } else { "Confirm rotation" }}
                                 </button>
@@ -670,6 +723,30 @@ mod tests {
         // reason the whole check is "unknown" - and the store that
         // genuinely shares the key is still reported.
         assert_eq!(sharing, Some(vec!["Coffee Shop".to_string()]));
+    }
+
+    #[test]
+    fn reports_no_other_stores_rather_than_unknown_when_the_store_itself_has_no_wallet() {
+        let store_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let sid = store_id.clone();
+        let transport: TestTransport = Arc::new(move |spec| match spec.path.as_str() {
+            // No override, no account primary for the store being rotated -
+            // an ordinary state (the "Rotate wallet key" card renders
+            // whether or not a wallet resolved), not a fetch failure.
+            p if p == format!("/api/stores/{}/wallet", sid) => Err(ApiError::Http {
+                status: 404,
+                message: String::new(),
+            }),
+            other => panic!("unexpected path {other}"),
+        });
+        let api = ApiClient::with_test_transport("", transport);
+
+        let sharing = block_on(fetch_stores_sharing_wallet(&api, &store_id));
+
+        // Nothing can share a wallet that does not exist yet - this is
+        // answered, not unknown, and must not read as a fetch failure that
+        // blocks confirmation.
+        assert_eq!(sharing, Some(Vec::new()));
     }
 
     // =========================================================================
