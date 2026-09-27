@@ -1212,10 +1212,7 @@ mod tests {
         let csv = dashboard_volume_csv(&data);
         let mut lines = csv.lines();
         lines.next(); // header
-        assert_eq!(
-            lines.next().unwrap(),
-            "\"WEIRD,\"\"TOKEN\"\"\",1.5,3,100.0"
-        );
+        assert_eq!(lines.next().unwrap(), "\"WEIRD,\"\"TOKEN\"\"\",1.5,3,100.0");
     }
 
     #[test]
