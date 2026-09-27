@@ -250,7 +250,17 @@ fn csv_row(fields: &[&str]) -> String {
 /// `/dashboard/analytics` has no CSV form of its own, and this needs no new
 /// endpoint to be a useful export of what the merchant is already looking at.
 fn dashboard_volume_csv(data: &DashboardAnalytics) -> String {
-    let mut content = csv_row(&["asset", "total_amount", "payment_count", "share_percent"]);
+    // `share_percent` is the asset's share of the window's payment *count*,
+    // not of `total_amount` - the two can disagree (a high-value, low-frequency
+    // asset vs. a low-value, high-frequency one). Naming the column for what it
+    // actually measures avoids a merchant reading it next to `total_amount` as
+    // a volume split.
+    let mut content = csv_row(&[
+        "asset",
+        "total_amount",
+        "payment_count",
+        "payment_count_share_percent",
+    ]);
     for asset in &data.assets {
         content.push_str(&csv_row(&[
             &asset.asset_symbol,
@@ -1176,7 +1186,7 @@ mod tests {
         let mut lines = csv.lines();
         assert_eq!(
             lines.next().unwrap(),
-            "asset,total_amount,payment_count,share_percent"
+            "asset,total_amount,payment_count,payment_count_share_percent"
         );
         assert_eq!(lines.next().unwrap(), "ETH,1.5,3,100.0");
         assert_eq!(lines.next().unwrap(), "");
@@ -1215,7 +1225,7 @@ mod tests {
         let csv = dashboard_volume_csv(&data);
         assert_eq!(
             csv,
-            "asset,total_amount,payment_count,share_percent\r\n\r\ndate,asset,amount,payment_count\r\n"
+            "asset,total_amount,payment_count,payment_count_share_percent\r\n\r\ndate,asset,amount,payment_count\r\n"
         );
     }
 
