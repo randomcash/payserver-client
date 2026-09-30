@@ -197,6 +197,140 @@ test.describe('table column alignment', () => {
 });
 
 /**
+ * A plugin table (`plugin_page.rs` renders every `PageElement::Table` as
+ * `.table-container > table.table`) has no fixed column widths, so a narrow
+ * viewport used to shrink columns to fit instead of scrolling - clipping a
+ * long decimal (`PAID TO DATE`, a NUMERIC(38,18) sum) mid-word and wrapping a
+ * status cell onto a second line. `.table` now gets a `min-width` under the
+ * same breakpoint the sibling tables already use, forcing `.table-container`
+ * (which sets `overflow-x: auto`) to scroll instead of the columns squeezing.
+ *
+ * Two things could still go wrong that a screenshot would catch and a class
+ * name would not: the min-width could land on a container with no scroll
+ * rule, in which case the *page* scrolls sideways instead of the table - the
+ * one outcome that is explicitly not allowed - or the rule could simply not
+ * apply and the old clipping would return.
+ *
+ * The status cell below is plain text, not a styled span: `PageElement::Table`
+ * carries `rows: Vec<Vec<String>>` with no slot for a badge, and the plugin
+ * that fills this table keeps only a badge's text for its status column, so
+ * `<td>Active</td>` is what the live page emits, not a simplification of it.
+ */
+test.describe('plugin page table overflow', () => {
+  const TABLE = `
+    <div class="ps-page">
+      <div class="ps-card">
+        <div class="ps-card-body">
+          <div class="table-container">
+            <table class="table">
+              <thead><tr><th>Plan</th><th>Status</th><th>Paid To Date</th></tr></thead>
+              <tbody>
+                <tr><td>Pro Monthly</td><td>Active</td><td>0.500000000000000000 USDC</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  test('the table scrolls inside its own container on a narrow screen', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.setContent(`<style>${CSS}</style>${TABLE}`);
+
+    const overflowX = await page
+      .locator('.table-container')
+      .evaluate((el) => getComputedStyle(el).overflowX);
+    expect(overflowX, '.table-container must be the scroll boundary').toBe('auto');
+
+    const { containerScrolls, tableWidth } = await page.locator('.table-container').evaluate((el) => ({
+      containerScrolls: el.scrollWidth > el.clientWidth,
+      tableWidth: el.querySelector('table')!.getBoundingClientRect().width,
+    }));
+    expect(containerScrolls, 'the wide table must overflow its own container').toBe(true);
+    expect(tableWidth, 'table must not be squeezed narrower than its min-width').toBeGreaterThanOrEqual(500);
+  });
+
+  test('the page body does not scroll sideways when the table does', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.setContent(`<style>${CSS}</style>${TABLE}`);
+
+    const bodyOverflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(bodyOverflows, 'the table must scroll inside .table-container, not push the page wide').toBe(false);
+  });
+});
+
+/**
+ * `.payment-method-row` has the identical collision: the dashboard's payment
+ * methods breakdown renders each entry as `<div class="payment-method-row">`
+ * and wants a flex layout, while the Payment Methods tab's table renders
+ * `<tr class="payment-method-row">`. `display: flex` on that `<tr>` drops it
+ * out of table layout, so its cells stop sharing the widths `<thead>`
+ * computed - full-width headers over a left-bunched strip of cells.
+ *
+ * This suite is CSS-only by design (see playwright.config.ts): the markup
+ * below is hand-authored, not rendered by the app, so it proves the stylesheet
+ * behaves correctly against table markup shaped like the real thing - it does
+ * not by itself prove the live component emits that shape. That question (is
+ * the row's `<tr>` actually a direct child of `<tbody>`, or does something
+ * hoist or wrap it) was checked separately by mounting the real
+ * `PaymentMethodsTab` component in a browser against a stubbed API response
+ * and inspecting the live tree, twice now on separate passes with the same
+ * result; see the comment on `tr.payment-method-row` in styles.css for the
+ * measurements and for why hoisting can't happen at all in a CSR app (the
+ * browser algorithm that does it only runs while parsing HTML text, and this
+ * app never produces any - it builds DOM nodes directly).
+ */
+test.describe('payment methods table column alignment', () => {
+  const TABLE = `
+    <div class="payment-methods-table-container">
+      <table class="payment-methods-table">
+        <thead><tr>
+          <th>Asset</th><th>Network</th><th>Type</th>
+          <th>Derivation Index</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          <tr class="payment-method-row">
+            <td><div class="payment-method-asset"><span class="payment-method-symbol">USDC</span></div></td>
+            <td><span class="payment-method-network">Sepolia</span></td>
+            <td><span class="payment-method-type">ERC20</span></td>
+            <td><code class="payment-method-index">0</code></td>
+            <td><button class="badge badge-success">Enabled</button></td>
+            <td><button class="ps-btn ps-btn-ghost ps-btn-sm">Delete</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  test('every header sits exactly over its column', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setContent(`<style>${CSS}</style><div style="padding:24px">${TABLE}</div>`);
+
+    const cols = await page.evaluate(() => {
+      const ths = [...document.querySelectorAll('.payment-methods-table thead th')];
+      const tds = [...document.querySelectorAll('.payment-methods-table tbody td')];
+      return ths.map((th, i) => ({
+        col: (th.textContent || 'actions').trim() || 'actions',
+        dx: Math.round(tds[i].getBoundingClientRect().left - th.getBoundingClientRect().left),
+      }));
+    });
+
+    expect(cols.length, 'header and body must have the same number of cells').toBe(6);
+    for (const { col, dx } of cols) {
+      expect(dx, `"${col}" header must sit over its column`).toBe(0);
+    }
+  });
+
+  test('a table row stays a table row', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setContent(`<style>${CSS}</style>${TABLE}`);
+    const display = await page.locator('.payment-methods-table tbody tr').evaluate((el) => getComputedStyle(el).display);
+    expect(display, 'flex here silently destroys column alignment').toBe('table-row');
+  });
+});
+
+/**
  * `.ps-recovery-confirm` carried a copy of the `.ps-checkbox-label` rule -
  * `display: flex` with the warning background and padding. Applied to the step
  * container instead of the checkbox, it laid the four children out as four

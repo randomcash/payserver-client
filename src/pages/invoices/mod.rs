@@ -1,4 +1,4 @@
-//! Invoice management pages - Stripe-inspired design.
+//! Invoice management pages.
 //!
 //! Uses types from `crate::api::types` which mirror the backend.
 //!

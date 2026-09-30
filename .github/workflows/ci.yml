@@ -25,6 +25,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      # This repository is public. A ticket id in a source file leaks the
+      # title and shape of unreleased work, and an outside reader cannot open
+      # the tracker anyway. Ticket ids belong in the commit message and PR
+      # title, not the tree - see CLAUDE.md.
+      - name: No ticket ids or tracker links in source
+        run: ./scripts/check-no-ticket-refs.sh
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -68,7 +76,7 @@ jobs:
       # nothing else here notices: the layout suite asserts geometry rather than
       # colour, and e2e locates elements by class, which still match - unstyled.
       # That shipped once, stripping 104 buttons of their styling on testnet.
-      - name: Every ps- class in the markup has a rule
+      - name: Every class in the markup has a rule
         run: python3 scripts/check-classes-styled.py
 
       # The bundle is what ships, and it is the only configuration where

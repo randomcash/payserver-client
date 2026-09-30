@@ -4,13 +4,126 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
 
+use ui_kit::CopyButton;
+
 use crate::api::{ApiClient, ApiError, Invoice, InvoiceStatusExt, Payment};
 use crate::components::{TimelineState, payment_state};
 
 use super::helpers::{
     IconExport, chain_name, confirmed_payment_count, format_amount, format_date,
-    get_metadata_field, payment_status, payment_status_class, truncate_hex,
+    get_metadata_field, payment_status, payment_status_class, scale_smallest_units, truncate_hex,
 };
+
+/// The customer-facing checkout URL for an invoice, or `None` if the origin
+/// can't be read.
+///
+/// Not the current (admin) URL - a merchant copying this link is sending it
+/// to whoever owes them money, so it has to be the public one regardless of
+/// where in the dashboard the button was clicked. `/checkout/:id` is mounted
+/// in the same `Router` as the admin routes (`src/app/mod.rs`), so the
+/// browser's own origin is always the right one - there is no separate
+/// public/admin split to get wrong.
+///
+/// `None` rather than defaulting to an empty origin: a relative
+/// `/checkout/{id}` with no scheme or host still looks like a link and
+/// `CopyButton` would still report success, so the merchant copies something
+/// that resolves to nothing. The caller renders a disabled control instead,
+/// same as every other not-actually-available action on this page.
+fn checkout_url(invoice_id: &str) -> Option<String> {
+    let origin = web_sys::window().and_then(|w| w.location().origin().ok())?;
+    if origin.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{origin}/checkout/{}",
+        js_sys::encode_uri_component(invoice_id)
+    ))
+}
+
+/// Escape a field for CSV output: quote it if it holds a comma, quote or
+/// newline, doubling any quotes inside.
+fn csv_escape(field: &str) -> String {
+    if field.contains(',') || field.contains('"') || field.contains('\n') || field.contains('\r') {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
+}
+
+/// Build one CRLF-terminated CSV row.
+fn csv_row(fields: &[&str]) -> String {
+    let mut row = fields
+        .iter()
+        .map(|f| csv_escape(f))
+        .collect::<Vec<_>>()
+        .join(",");
+    row.push_str("\r\n");
+    row
+}
+
+/// Render an invoice and its payments as CSV, for the "Download" action.
+///
+/// Client-side, from data the page already has - the server holds no
+/// per-invoice export today, and this is enough to be the merchant's record
+/// of a single invoice without a new endpoint.
+fn invoice_csv(invoice: &Invoice, payments: &[Payment]) -> String {
+    let order_id = get_metadata_field(invoice, "order_id").unwrap_or_default();
+    let buyer_email = get_metadata_field(invoice, "buyer_email").unwrap_or_default();
+
+    let mut content = csv_row(&[
+        "id",
+        "store_id",
+        "status",
+        "currency",
+        "amount",
+        "amount_received",
+        "created_at",
+        "expires_at",
+        "order_id",
+        "customer_email",
+    ]);
+    content.push_str(&csv_row(&[
+        &invoice.id,
+        &invoice.store_id,
+        invoice.status.label(),
+        &invoice.currency,
+        &invoice.amount,
+        &invoice.amount_received,
+        &invoice.created_at.to_rfc3339(),
+        &invoice.expires_at.to_rfc3339(),
+        &order_id,
+        &buyer_email,
+    ]));
+
+    if !payments.is_empty() {
+        content.push_str("\r\n");
+        content.push_str(&csv_row(&[
+            "payment_tx_hash",
+            "asset_symbol",
+            "amount",
+            "status",
+            "from_address",
+            "detected_at",
+            "confirmed_at",
+        ]));
+        for p in payments {
+            let from = p.from_address.clone().unwrap_or_default();
+            let confirmed = p.confirmed_at.map(|t| t.to_rfc3339()).unwrap_or_default();
+            let amount = scale_smallest_units(&p.amount, p.decimals);
+            content.push_str(&csv_row(&[
+                &p.tx_hash,
+                &p.asset_symbol,
+                &amount,
+                payment_status(p),
+                &from,
+                &p.detected_at.to_rfc3339(),
+                &confirmed,
+            ]));
+        }
+    }
+
+    content
+}
 
 /// Invoice detail page - fetches from GET /invoices/{id} and GET /invoices/{id}/payments.
 #[component]
@@ -104,19 +217,31 @@ fn InvoiceDetailContent(invoice: Invoice, payments: Vec<Payment>) -> impl IntoVi
                 })}
             </div>
             <div class="invoice-detail-actions">
-                // Neither action is wired up; both would silently no-op.
+                {match checkout_url(&invoice.id) {
+                    Some(url) => view! {
+                        <CopyButton text=url label="Copy link" class="ps-btn-sm" />
+                    }.into_any(),
+                    None => view! {
+                        <button
+                            class="ps-btn ps-btn-secondary ps-btn-sm"
+                            disabled=true
+                            title="Couldn't read this site's address, so there's no link to copy"
+                        >
+                            "Copy link"
+                        </button>
+                    }.into_any(),
+                }}
                 <button
                     class="ps-btn ps-btn-secondary ps-btn-sm"
-                    disabled=true
-                    title="Copy link is not implemented yet"
-                >
-                    <IconCopy />
-                    "Copy link"
-                </button>
-                <button
-                    class="ps-btn ps-btn-secondary ps-btn-sm"
-                    disabled=true
-                    title="Download is not implemented yet"
+                    on:click={
+                        let invoice = invoice.clone();
+                        let payments = payments.clone();
+                        move |_| {
+                            let csv = invoice_csv(&invoice, &payments);
+                            let filename = format!("invoice-{}.csv", invoice.id);
+                            crate::pages::trigger_csv_download(&csv, &filename);
+                        }
+                    }
                 >
                     <IconExport />
                     "Download"
@@ -383,13 +508,85 @@ fn IconArrowLeft() -> impl IntoView {
     }
 }
 
-/// Copy icon for the "Copy link" action.
-#[component]
-fn IconCopy() -> impl IntoView {
-    view! {
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::InvoiceStatus;
+    use types::ChainId;
+
+    fn sample_invoice() -> Invoice {
+        Invoice {
+            id: "inv-1".into(),
+            store_id: "store-1".into(),
+            store_name: None,
+            currency: "USD".into(),
+            status: InvoiceStatus::Paid,
+            customer_email: None,
+            amount: "30.000000000000000000".into(),
+            amount_received: "30.000000000000000000".into(),
+            created_at: "2024-01-01T00:00:00Z".parse().unwrap(),
+            expires_at: "2024-01-02T00:00:00Z".parse().unwrap(),
+            metadata: Some(serde_json::json!({"order_id": "ORD, 1", "buyer_email": "a@b.com"})),
+            payment_options: vec![],
+        }
+    }
+
+    fn sample_payment() -> Payment {
+        Payment {
+            id: "p1".into(),
+            store_id: None,
+            store_name: None,
+            chain_id: ChainId::evm(1),
+            invoice_id: "inv-1".into(),
+            // Raw wei, deliberately not equal to its human amount (0.05 ETH):
+            // a test that used a value where raw and scaled agree couldn't
+            // have caught the CSV export writing the unscaled amount.
+            amount: "50000000000000000".into(),
+            asset_symbol: "ETH".into(),
+            token_address: None,
+            tx_hash: "0xabc".into(),
+            block_number: Some(1),
+            detected_at: "2024-01-01T00:05:00Z".parse().unwrap(),
+            confirmed_at: Some("2024-01-01T00:10:00Z".parse().unwrap()),
+            from_address: Some("0xdef".into()),
+            reorged: false,
+            decimals: 18,
+        }
+    }
+
+    #[test]
+    fn csv_escape_quotes_only_when_needed() {
+        assert_eq!(csv_escape("plain"), "plain");
+        assert_eq!(csv_escape("a,b"), "\"a,b\"");
+        assert_eq!(csv_escape("a\"b"), "\"a\"\"b\"");
+        assert_eq!(csv_escape("a\nb"), "\"a\nb\"");
+    }
+
+    #[test]
+    fn invoice_csv_scales_payment_amounts_and_escapes_metadata() {
+        let csv = invoice_csv(&sample_invoice(), &[sample_payment()]);
+        let mut lines = csv.lines();
+        assert_eq!(
+            lines.next().unwrap(),
+            "id,store_id,status,currency,amount,amount_received,created_at,expires_at,order_id,customer_email"
+        );
+        // The order_id holds a comma, so it must come back quoted rather than
+        // splitting the row into an extra column.
+        assert_eq!(
+            lines.next().unwrap(),
+            "inv-1,store-1,Paid,USD,30.000000000000000000,30.000000000000000000,2024-01-01T00:00:00+00:00,2024-01-02T00:00:00+00:00,\"ORD, 1\",a@b.com"
+        );
+        assert!(csv.contains(
+            "payment_tx_hash,asset_symbol,amount,status,from_address,detected_at,confirmed_at"
+        ));
+        assert!(csv.contains(
+            "0xabc,ETH,0.05,confirmed,0xdef,2024-01-01T00:05:00+00:00,2024-01-01T00:10:00+00:00"
+        ));
+    }
+
+    #[test]
+    fn invoice_csv_omits_the_payments_section_when_there_are_none() {
+        let csv = invoice_csv(&sample_invoice(), &[]);
+        assert!(!csv.contains("payment_tx_hash"));
     }
 }

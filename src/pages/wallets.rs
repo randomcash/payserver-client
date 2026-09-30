@@ -1,4 +1,4 @@
-//! Wallet management pages - Stripe-inspired design.
+//! Wallet management pages.
 //!
 //! Wallets contain HD wallet (xpub) configurations that can be used
 //! across stores for payment method setup.

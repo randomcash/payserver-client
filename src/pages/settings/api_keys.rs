@@ -4,13 +4,98 @@ use std::collections::HashSet;
 
 use crate::api::{
     API_KEY_GRANTABLE_STORE_ACTIONS, ApiClient, ApiKeyInfoWithPermissions,
-    CreateApiKeyRequestWithPermissions, CreateApiKeyResponseWithPermissions,
-    RotateApiKeyResponseWithPermissions, api_key_is_unrestricted, build_api_key_permissions,
-    describe_api_key_permissions,
+    CreateApiKeyResponseWithPermissions, CreateKeyRefusal, RotateApiKeyResponseWithPermissions,
+    api_key_is_unrestricted, describe_api_key_permissions, plan_create_api_key_request,
 };
 use leptos::prelude::*;
 
 use super::{IconInfo, IconPlus};
+
+const NO_PERMISSIONS_MESSAGE: &str =
+    "Grant at least one permission: a key with none cannot do anything.";
+
+/// The scope line shown for a key: on the list, and on a just-created or
+/// just-rotated key. Unrestricted keys get their own class so they read as
+/// the dangerous ones.
+#[component]
+fn ApiKeyScope(permissions: Option<Vec<String>>) -> impl IntoView {
+    let class = if api_key_is_unrestricted(&permissions) {
+        "api-key-permissions-summary api-key-permissions-summary-unrestricted"
+    } else {
+        "api-key-permissions-summary"
+    };
+    view! { <span class=class>"Can do: "{describe_api_key_permissions(&permissions)}</span> }
+}
+
+/// The create form's permission picker. "Unrestricted" overrides the
+/// individual actions, so their boxes are disabled while it is ticked.
+#[component]
+fn PermissionChecklist(
+    actions: ReadSignal<HashSet<String>>,
+    set_actions: WriteSignal<HashSet<String>>,
+    unrestricted: ReadSignal<bool>,
+    set_unrestricted: WriteSignal<bool>,
+) -> impl IntoView {
+    let (new_key_store_actions, set_new_key_store_actions) = (actions, set_actions);
+    let (new_key_unrestricted, set_new_key_unrestricted) = (unrestricted, set_unrestricted);
+    view! {
+        <div class="form-group">
+            <label class="form-label">"Permissions"</label>
+            <p class="section-desc">
+                "Unchecked by default: a new key can authenticate but cannot "
+                "do anything else until you grant it something below."
+            </p>
+            <div class="api-key-permissions-list">
+                {API_KEY_GRANTABLE_STORE_ACTIONS.iter().map(|(policy, label)| {
+                    let policy_for_checked = policy.to_string();
+                    let policy_for_change = policy.to_string();
+                    view! {
+                        <label class="api-key-permission-item">
+                            <input
+                                type="checkbox"
+                                prop:checked=move || new_key_store_actions.get().contains(&policy_for_checked)
+                                prop:disabled=move || new_key_unrestricted.get()
+                                on:change=move |ev| {
+                                    let checked = event_target_checked(&ev);
+                                    let policy = policy_for_change.clone();
+                                    set_new_key_store_actions.update(|actions| {
+                                        if checked {
+                                            actions.insert(policy);
+                                        } else {
+                                            actions.remove(&policy);
+                                        }
+                                    });
+                                }
+                            />
+                            {*label}
+                        </label>
+                    }
+                }).collect_view()}
+                <p class="section-desc">
+                    "Granted on every store you can reach. Each action here is "
+                    "checked individually by the server, so selecting one really "
+                    "does grant only that one."
+                </p>
+            </div>
+            <div class="api-key-permissions-list" style="border-color: var(--color-danger); margin-top: 8px;">
+                <label class="api-key-permission-item">
+                    <input
+                        type="checkbox"
+                        prop:checked=move || new_key_unrestricted.get()
+                        on:change=move |ev| set_new_key_unrestricted.set(event_target_checked(&ev))
+                    />
+                    <strong>"Unrestricted (full account access)"</strong>
+                </label>
+                <p class="section-desc">
+                    "Equivalent to your own full role, including installing plugins "
+                    "- which runs arbitrary SQL and arbitrary code on the server. "
+                    "Only check this if the key genuinely needs to act as you. "
+                    "Overrides the actions above."
+                </p>
+            </div>
+        </div>
+    }
+}
 
 /// API Keys tab.
 #[component]
@@ -42,24 +127,19 @@ pub fn ApiKeysTab() -> impl IntoView {
 
     // Create handler
     let on_create = move |_| {
-        let name = new_key_name.get();
-        if name.trim().is_empty() {
-            return;
-        }
-        let permissions =
-            build_api_key_permissions(new_key_unrestricted.get(), &new_key_store_actions.get());
-        if permissions.is_empty() {
-            set_create_error.set(Some(
-                "Grant at least one permission: a key with none cannot do anything.".to_string(),
-            ));
-            return;
-        }
-        let client = api.get();
-        let request = CreateApiKeyRequestWithPermissions {
-            name: name.trim().to_string(),
-            expires_at: None,
-            permissions,
+        let request = match plan_create_api_key_request(
+            &new_key_name.get(),
+            new_key_unrestricted.get(),
+            &new_key_store_actions.get(),
+        ) {
+            Ok(request) => request,
+            Err(CreateKeyRefusal::BlankName) => return,
+            Err(CreateKeyRefusal::NoPermissions) => {
+                set_create_error.set(Some(NO_PERMISSIONS_MESSAGE.to_string()));
+                return;
+            }
         };
+        let client = api.get();
         set_loading.set(true);
         set_create_error.set(None);
         wasm_bindgen_futures::spawn_local(async move {
@@ -154,61 +234,12 @@ pub fn ApiKeysTab() -> impl IntoView {
                                 on:input=move |ev| set_new_key_name.set(event_target_value(&ev))
                             />
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">"Permissions"</label>
-                            <p class="section-desc">
-                                "Unchecked by default: a new key can authenticate but cannot "
-                                "do anything else until you grant it something below."
-                            </p>
-                            <div class="api-key-permissions-list">
-                                {API_KEY_GRANTABLE_STORE_ACTIONS.iter().map(|(policy, label)| {
-                                    let policy_for_checked = policy.to_string();
-                                    let policy_for_change = policy.to_string();
-                                    view! {
-                                        <label class="api-key-permission-item">
-                                            <input
-                                                type="checkbox"
-                                                prop:checked=move || new_key_store_actions.get().contains(&policy_for_checked)
-                                                prop:disabled=move || new_key_unrestricted.get()
-                                                on:change=move |ev| {
-                                                    let checked = event_target_checked(&ev);
-                                                    let policy = policy_for_change.clone();
-                                                    set_new_key_store_actions.update(|actions| {
-                                                        if checked {
-                                                            actions.insert(policy);
-                                                        } else {
-                                                            actions.remove(&policy);
-                                                        }
-                                                    });
-                                                }
-                                            />
-                                            {*label}
-                                        </label>
-                                    }
-                                }).collect_view()}
-                                <p class="section-desc">
-                                    "Granted on every store you can reach. Each action here is "
-                                    "checked individually by the server, so selecting one really "
-                                    "does grant only that one."
-                                </p>
-                            </div>
-                            <div class="api-key-permissions-list" style="border-color: var(--color-danger); margin-top: 8px;">
-                                <label class="api-key-permission-item">
-                                    <input
-                                        type="checkbox"
-                                        prop:checked=move || new_key_unrestricted.get()
-                                        on:change=move |ev| set_new_key_unrestricted.set(event_target_checked(&ev))
-                                    />
-                                    <strong>"Unrestricted (full account access)"</strong>
-                                </label>
-                                <p class="section-desc">
-                                    "Equivalent to your own full role, including installing plugins "
-                                    "- which runs arbitrary SQL and arbitrary code on the server. "
-                                    "Only check this if the key genuinely needs to act as you. "
-                                    "Overrides the actions above."
-                                </p>
-                            </div>
-                        </div>
+                        <PermissionChecklist
+                            actions=new_key_store_actions
+                            set_actions=set_new_key_store_actions
+                            unrestricted=new_key_unrestricted
+                            set_unrestricted=set_new_key_unrestricted
+                        />
                         <div class="form-actions">
                             <button
                                 class="ps-btn ps-btn-primary ps-btn-sm"
@@ -252,7 +283,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">
                             {key.key.clone()}
                         </code>
-                        <p class="section-desc">"Can do: "{describe_api_key_permissions(&key.permissions)}</p>
+                        <p class="section-desc"><ApiKeyScope permissions=key.permissions.clone() /></p>
                         <button
                             class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_created_key.set(None)
@@ -287,7 +318,6 @@ pub fn ApiKeysTab() -> impl IntoView {
                     "The old key remains valid until {}.",
                     key.old_key_grace_expires_at.to_rfc3339()
                 );
-                let permissions_line = format!("Can do: {}", describe_api_key_permissions(&key.permissions));
                 view! {
                 <div class="ps-card" style="margin-bottom: 16px; border-color: var(--color-warning);">
                     <div class="ps-card-body">
@@ -296,7 +326,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">
                             {key.key.clone()}
                         </code>
-                        <p class="section-desc">{permissions_line}</p>
+                        <p class="section-desc"><ApiKeyScope permissions=key.permissions.clone() /></p>
                         <button
                             class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_rotated_key.set(None)
@@ -335,13 +365,6 @@ pub fn ApiKeysTab() -> impl IntoView {
                                             };
                                             let is_active = key.is_active;
                                             let is_deprecated = key.deprecated_at.is_some();
-                                            let permissions_summary = describe_api_key_permissions(&key.permissions);
-                                            let is_unrestricted = api_key_is_unrestricted(&key.permissions);
-                                            let permissions_class = if is_unrestricted {
-                                                "api-key-permissions-summary api-key-permissions-summary-unrestricted"
-                                            } else {
-                                                "api-key-permissions-summary"
-                                            };
                                             let revoke_handler = make_revoke_handler(key.id.to_string());
                                             let rotate_handler = make_rotate_handler(key.id.to_string());
 
@@ -354,7 +377,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                                                         </div>
                                                         <code class="api-key-value">{key.key_prefix}</code>
                                                         <span class="api-key-created">"Created "{key.created_at.to_rfc3339()}</span>
-                                                        <span class=permissions_class>"Can do: "{permissions_summary}</span>
+                                                        <ApiKeyScope permissions=key.permissions />
                                                     </div>
                                                     <div class="api-key-actions">
                                                         {(is_active && !is_deprecated).then(|| view! {
@@ -394,5 +417,66 @@ pub fn ApiKeysTab() -> impl IntoView {
                 </div>
             </div>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use leptos::prelude::RenderHtml;
+
+    fn scope_html(permissions: Option<Vec<String>>) -> String {
+        view! { <ApiKeyScope permissions /> }.to_html()
+    }
+
+    fn checklist_html() -> String {
+        let (actions, set_actions) = signal(HashSet::<String>::new());
+        let (unrestricted, set_unrestricted) = signal(false);
+        view! { <PermissionChecklist actions set_actions unrestricted set_unrestricted /> }
+            .to_html()
+    }
+
+    #[test]
+    fn a_narrowed_key_lists_only_what_it_was_granted() {
+        let html = scope_html(Some(vec!["ethpay.store.cancreateinvoice".to_string()]));
+        assert!(html.contains("Can do: "), "{html}");
+        assert!(html.contains("Create invoices"), "{html}");
+        assert!(!html.contains("Modify store settings"), "{html}");
+        assert!(!html.contains("unrestricted"), "{html}");
+    }
+
+    #[test]
+    fn an_unrestricted_key_is_marked_as_the_dangerous_one() {
+        for permissions in [None, Some(vec!["unrestricted".to_string()])] {
+            let html = scope_html(permissions);
+            assert!(
+                html.contains("api-key-permissions-summary-unrestricted"),
+                "{html}"
+            );
+            assert!(html.contains("Full access"), "{html}");
+        }
+    }
+
+    #[test]
+    fn a_key_with_nothing_granted_says_so() {
+        assert!(scope_html(Some(vec![])).contains("No permissions granted"));
+    }
+
+    #[test]
+    fn the_create_form_offers_every_grantable_action_and_unrestricted() {
+        let html = checklist_html();
+        for (_, label) in API_KEY_GRANTABLE_STORE_ACTIONS {
+            assert!(html.contains(label), "missing {label}: {html}");
+        }
+        // One box per action, plus the unrestricted one.
+        assert_eq!(
+            html.matches(r#"type="checkbox""#).count(),
+            API_KEY_GRANTABLE_STORE_ACTIONS.len() + 1,
+            "{html}"
+        );
+        assert!(html.contains("Unrestricted"), "{html}");
+        // The picker must not offer server-level permissions the server does
+        // not enforce individually.
+        assert!(!html.contains("ethpay.server."), "{html}");
     }
 }

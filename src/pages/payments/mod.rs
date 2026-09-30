@@ -1,4 +1,4 @@
-//! Payments pages - Stripe-inspired payment history view.
+//! Payments pages: the payment history view.
 //!
 //! Uses types from `crate::api::types` which mirror the backend.
 

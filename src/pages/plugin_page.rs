@@ -23,11 +23,12 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 use payserver_plugin_api::page::{
-    Badge, Button, ButtonVariant, Card, Direction, Form, Grid, Input, Notice, PageElement, Row,
-    Section, Select, Stack, Tab, Table, Tabs, Tone,
+    Badge, Button, ButtonVariant, Card, Direction, Fields, Form, Grid, Input, Notice, PageElement,
+    Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone,
 };
 
 use crate::api::ApiClient;
+use crate::components::LoadingState;
 
 /// Whether a plugin-supplied link may be followed.
 ///
@@ -85,6 +86,37 @@ fn render(element: &PageElement) -> AnyView {
         }
         .into_any(),
 
+        // Prose. Drawn with the host's own type styles rather than anything
+        // the plugin chose - a plugin says what the text is doing, never how
+        // big it is, so a plugin page cannot drift away from the screens
+        // beside it.
+        PageElement::Text(Text { text, style }) => {
+            let class = match style {
+                TextStyle::Body => "plugin-text",
+                TextStyle::Muted => "plugin-text plugin-text-muted",
+                TextStyle::Strong => "plugin-text plugin-text-strong",
+            };
+            view! { <p class=class>{text.clone()}</p> }.into_any()
+        }
+
+        // Label-and-value pairs, as a definition list. A `<dl>` because that
+        // is what this is, and because it lets the stylesheet collapse to one
+        // column on a narrow screen without the renderer knowing the width.
+        PageElement::Fields(Fields { fields }) => {
+            let rows = fields
+                .iter()
+                .map(|field| {
+                    view! {
+                        <div class="plugin-field-row">
+                            <dt class="plugin-field-key">{field.label.clone()}</dt>
+                            <dd class="plugin-field-value">{field.value.clone()}</dd>
+                        </div>
+                    }
+                })
+                .collect_view();
+            view! { <dl class="plugin-fields">{rows}</dl> }.into_any()
+        }
+
         PageElement::Notice(Notice { text, tone }) => view! {
             <div class=notice_class(*tone) role="status">{text.clone()}</div>
         }
@@ -111,12 +143,38 @@ fn render(element: &PageElement) -> AnyView {
             }
         }
 
-        PageElement::Card(Card { title, children }) => {
+        // `ps-card`, not `card`. Both are defined, and they are not the same:
+        // `ps-card` clips its children and `ps-card-header` styles its own
+        // `h3`, which is why the title needs no class of its own. The rest of
+        // this client draws 41 cards the `ps-` way and this renderer drew the
+        // only one that did not - a plugin's page sat beside screens it did
+        // not match, in the one place a merchant is asked for money.
+        PageElement::Card(Card {
+            title,
+            badge,
+            children,
+        }) => {
             let children = render_all(children);
+            // The header is a flex row with `space-between`, which is what
+            // makes this a status *on* the card rather than the first thing
+            // in it - the same slot the invoice detail page puts its payment
+            // count in. A badge with no title still gets one, right-aligned,
+            // because a status with nothing to be about is still a status.
+            let header = (title.is_some() || badge.is_some()).then(|| {
+                let badge = badge.clone().map(|badge| {
+                    view! { <span class=tone_class(badge.tone)>{badge.text}</span> }
+                });
+                view! {
+                    <div class="ps-card-header">
+                        <h3>{title.clone().unwrap_or_default()}</h3>
+                        {badge}
+                    </div>
+                }
+            });
             view! {
-                <div class="card">
-                    {title.clone().map(|t| view! { <div class="card-header"><h3 class="card-title">{t}</h3></div> })}
-                    <div class="card-body">{children}</div>
+                <div class="ps-card">
+                    {header}
+                    <div class="ps-card-body">{children}</div>
                 </div>
             }
             .into_any()
@@ -194,7 +252,7 @@ fn render(element: &PageElement) -> AnyView {
             view! {
                 <label class="plugin-field">
                     {label.clone().map(|l| view! { <span class="plugin-field-label">{l}</span> })}
-                    <input class="input" placeholder=placeholder disabled=true />
+                    <input class="form-input" placeholder=placeholder disabled=true />
                 </label>
             }
             .into_any()
@@ -205,7 +263,7 @@ fn render(element: &PageElement) -> AnyView {
             view! {
                 <label class="plugin-field">
                     {label.clone().map(|l| view! { <span class="plugin-field-label">{l}</span> })}
-                    <select class="input" disabled=true>
+                    <select class="form-input" disabled=true>
                         {options.into_iter().map(|o| view! { <option>{o}</option> }).collect_view()}
                     </select>
                 </label>
@@ -248,6 +306,24 @@ fn render_all(children: &[PageElement]) -> Vec<AnyView> {
 }
 
 /// A plugin page, addressed by plugin id and path.
+///
+/// # The page around the page
+///
+/// A plugin ships the *contents* of a screen. Everything that makes it one of
+/// this product's screens rather than a panel floating on a background - the
+/// column, the gap, the width it stops at, the title at the top - belongs
+/// here, because a plugin has no way to express any of it and should not.
+///
+/// It was missing. This rendered into `class="page"`, which the stylesheet
+/// does not define, so a plugin page had no max width, no vertical rhythm and
+/// no heading while every screen beside it had all three. That is the whole
+/// of why these looked like they came from somewhere else.
+///
+/// The title comes from the plugin's own manifest - the same `label` the
+/// sidebar entry is drawn from - so the heading on the page and the link that
+/// reached it always say the same thing. Fetched alongside the page itself
+/// rather than passed down, because a page reached by its URL directly has no
+/// navigation state to have been passed anything by.
 #[component]
 pub fn PluginPageView() -> impl IntoView {
     let params = use_params_map();
@@ -261,16 +337,38 @@ pub fn PluginPageView() -> impl IntoView {
             if plugin_id.is_empty() || path.is_empty() {
                 return Err(crate::api::ApiError::Parse("no page requested".to_string()));
             }
-            api.get_plugin_page(&plugin_id, &path).await
+
+            // The heading is not worth failing the page over: a merchant who
+            // can see what they owe under an untitled heading is better off
+            // than one who sees an error because the nav list timed out.
+            let title = api
+                .list_plugin_pages()
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .find(|listed| listed.plugin_id == plugin_id && listed.path == path)
+                .map(|listed| listed.label);
+
+            api.get_plugin_page(&plugin_id, &path)
+                .await
+                .map(|element| (title, element))
         }
     });
 
     view! {
-        <div class="page">
-            <Suspense fallback=|| view! { <div class="loading">"Loading…"</div> }>
+        <div class="ps-page">
+            <Suspense fallback=|| view! { <LoadingState message="Loading…" /> }.into_any()>
                 {move || Suspend::new(async move {
                     match page.await {
-                        Ok(element) => render(&element),
+                        Ok((title, element)) => view! {
+                            {title.map(|title| view! {
+                                <div class="page-header-row">
+                                    <div><h1 class="page-title">{title}</h1></div>
+                                </div>
+                            })}
+                            {render(&element)}
+                        }
+                        .into_any(),
                         // The server answers 502 for a plugin that could not
                         // draw its page and 404 for one that has no such
                         // page. Neither is something a merchant can act on,
@@ -295,6 +393,171 @@ pub fn PluginPageView() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use leptos::prelude::RenderHtml;
+
+    /// Tags stripped, so an assertion can check for real text content rather
+    /// than markup that merely mentions it in an attribute.
+    fn strip_tags(html: &str) -> String {
+        let mut out = String::with_capacity(html.len());
+        let mut in_tag = false;
+        for c in html.chars() {
+            match c {
+                '<' => in_tag = true,
+                '>' => in_tag = false,
+                _ if !in_tag => out.push(c),
+                _ => {}
+            }
+        }
+        out
+    }
+
+    /// The stylesheet, read at compile time so the check below is against the
+    /// file that actually ships.
+    const STYLES: &str = include_str!("../../styles.css");
+
+    /// This file, likewise, so the class names in its markup are checked
+    /// rather than a list of them that someone has to remember to update.
+    const SOURCE: &str = include_str!("plugin_page.rs");
+
+    /// Whether `styles.css` has any rule that could match `class`.
+    ///
+    /// Looks for the selector as a whole token - `.ps-card` must not be
+    /// satisfied by `.ps-card-body` - and accepts it anywhere a selector may
+    /// legally end: a brace, a comma, whitespace, a combinator, a pseudo, or
+    /// another class in a compound selector.
+    fn is_defined(class: &str) -> bool {
+        // Comments stripped first. This stylesheet contains a comment that
+        // mentions `.page` by name - written while fixing the very bug this
+        // guard exists to catch - and a scan that counted it would report the
+        // class as defined because someone described it.
+        let styles = strip_comments(STYLES);
+        let needle = format!(".{class}");
+        let mut from = 0;
+        while let Some(at) = styles[from..].find(&needle) {
+            let start = from + at;
+            let after = styles[start + needle.len()..].chars().next();
+            let before = styles[..start].chars().next_back();
+            // Not preceded by an identifier character, or `.ps-page` would be
+            // found inside `.x.ps-page` only - which is fine - but also
+            // inside a longer name it is not part of.
+            let boundary_before =
+                before.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
+            let boundary_after =
+                after.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
+            if boundary_before && boundary_after {
+                return true;
+            }
+            from = start + 1;
+        }
+        false
+    }
+
+    /// `/* ... */` removed, so a class named in prose is not mistaken for a
+    /// class that is styled.
+    fn strip_comments(css: &str) -> String {
+        let mut out = String::with_capacity(css.len());
+        let mut rest = css;
+        while let Some(open) = rest.find("/*") {
+            out.push_str(&rest[..open]);
+            match rest[open + 2..].find("*/") {
+                Some(close) => rest = &rest[open + 2 + close + 2..],
+                None => return out,
+            }
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// Every class this renderer puts in the markup must exist in the
+    /// stylesheet.
+    ///
+    /// This is the check that was missing. The page shell was
+    /// `class="page"` - a class `styles.css` does not define at all - so a
+    /// plugin page had no max width, no column and no gap while every screen
+    /// beside it had all three, and nothing anywhere said so. A class name is
+    /// a reference to a rule, and a reference that resolves to nothing is the
+    /// one kind of styling mistake that is completely silent: the markup is
+    /// valid, the build is green, and the page is simply unstyled.
+    #[test]
+    fn every_class_this_renderer_emits_is_defined_in_the_stylesheet() {
+        let mut missing = Vec::new();
+
+        // The literal `class` attributes in the markup above, with this
+        // file's own comments dropped first - the doc comments here quote
+        // class names while explaining them.
+        let code: String = SOURCE
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut rest = code.as_str();
+        while let Some(at) = rest.find("class=\"") {
+            rest = &rest[at + 7..];
+            let Some(end) = rest.find('"') else { break };
+            let (value, tail) = rest.split_at(end);
+            rest = tail;
+            for class in value.split_whitespace() {
+                if !is_defined(class) {
+                    missing.push(class.to_string());
+                }
+            }
+        }
+
+        // And the ones chosen by a function, taken by calling it rather than
+        // by reading it - a variant added to any of these enums shows up here
+        // without anyone remembering to extend a list.
+        let from_functions = [
+            Tone::Neutral,
+            Tone::Info,
+            Tone::Success,
+            Tone::Warning,
+            Tone::Danger,
+        ]
+        .into_iter()
+        .flat_map(|tone| [tone_class(tone), notice_class(tone)])
+        .chain(
+            [
+                ButtonVariant::Primary,
+                ButtonVariant::Secondary,
+                ButtonVariant::Danger,
+                ButtonVariant::Ghost,
+                ButtonVariant::Outline,
+            ]
+            .into_iter()
+            .map(button_class),
+        );
+        for value in from_functions {
+            for class in value.split_whitespace() {
+                if !is_defined(class) {
+                    missing.push(class.to_string());
+                }
+            }
+        }
+
+        missing.sort();
+        missing.dedup();
+        assert!(
+            missing.is_empty(),
+            "these classes are emitted by the plugin page renderer and defined nowhere \
+             in styles.css, so they style nothing: {missing:?}"
+        );
+    }
+
+    /// The check above only means something if it can fail.
+    #[test]
+    fn a_class_the_stylesheet_does_not_define_is_detected() {
+        assert!(
+            !is_defined("definitely-not-a-class-in-this-stylesheet"),
+            "the detector must not report an undefined class as present"
+        );
+        assert!(is_defined("ps-page"), "and must find one that is present");
+        assert!(
+            !is_defined("page"),
+            "`.page` is exactly the class this renderer used to emit and the \
+             stylesheet has never defined; if this starts passing, the guard above \
+             has stopped guarding"
+        );
+    }
 
     /// A plugin is not a trusted source of somewhere to send a merchant who
     /// is about to pay. Only a path on this origin is followed.
@@ -313,5 +576,267 @@ mod tests {
         );
         assert_eq!(safe_href("checkout/9f3a"), None, "a bare relative path");
         assert_eq!(safe_href(""), None);
+    }
+
+    /// The module doc calls a silently blank panel beside a paywall "the
+    /// worst thing this renderer could produce". Checked against markup a
+    /// browser would actually receive, not the `view!` literal by eye.
+    ///
+    /// `render` is the same private helper `PluginPageView` calls above to
+    /// draw the page mounted at `/plugins/:id/:path` in `app/mod.rs` - this
+    /// exercises the renderer that ships, not a revived one.
+    ///
+    /// `PageElement::Unknown` is not just constructible in a test: the type
+    /// is `#[serde(tag = "type", ...)]` with `#[serde(other)]` on `Unknown`
+    /// (`payserver-plugin-api/src/page.rs`), so any `type` string a plugin
+    /// sends that predates this client's vocabulary deserializes into it on
+    /// the real network path, `ApiClient::get_plugin_page` in
+    /// `api/client/plugins.rs`. This test exercises what that path produces
+    /// once it reaches `render`, not a value only test code can build.
+    #[test]
+    fn an_unrecognised_element_renders_a_visible_placeholder() {
+        let html = render(&PageElement::Unknown).to_html();
+        assert!(html.contains("plugin-notice plugin-notice-warning"));
+        assert!(html.contains(r#"role="status""#));
+        assert!(html.contains("This part of the page needs a newer version of the dashboard."));
+    }
+
+    // The fifteen variants below were in the same position `Unknown` was
+    // before the test above: shipped, read, and never executed. Same three
+    // assertions each - classes, the element's own contract, and that its
+    // text actually reaches the markup - against `render`'s real output, not
+    // the `view!` literal by eye.
+    //
+    // Ablated as a sample rather than all fifteen: `a_badge_renders_...` and
+    // `a_table_renders_...` below, one assertion broken at a time (wrong
+    // class, wrong tag/structure, blanked text), each confirmed to fail on
+    // its own before the source was restored.
+
+    #[test]
+    fn a_badge_renders_its_tone_class_and_text() {
+        let html = render(&PageElement::Badge(Badge {
+            text: "Beta".to_string(),
+            tone: Tone::Info,
+        }))
+        .to_html();
+        assert!(html.contains("badge badge-info"));
+        assert!(html.contains("<span"), "a badge is inline, not a block");
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_button_with_a_link_renders_as_an_anchor_to_it() {
+        let html = render(&PageElement::Button(Button {
+            label: "Pay now".to_string(),
+            variant: ButtonVariant::Primary,
+            href: Some("/checkout/9f3a".to_string()),
+        }))
+        .to_html();
+        assert!(html.contains("btn btn-primary"));
+        assert!(html.contains("<a ") && html.contains(r#"href="/checkout/9f3a""#));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_card_renders_a_header_over_a_body() {
+        let html = render(&PageElement::Card(Card {
+            title: Some("Balances".to_string()),
+            badge: None,
+            children: vec![PageElement::Text(Text {
+                text: "Updated a moment ago".to_string(),
+                style: TextStyle::Muted,
+            })],
+        }))
+        .to_html();
+        assert!(
+            html.contains("ps-card")
+                && html.contains("ps-card-header")
+                && html.contains("ps-card-body")
+        );
+        assert!(html.contains("<h3>Balances</h3>"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn fields_render_as_a_definition_list() {
+        let html = render(&PageElement::Fields(Fields {
+            fields: vec![payserver_plugin_api::page::Field {
+                label: "Price".to_string(),
+                value: "0.50 USDC every 30 days".to_string(),
+            }],
+        }))
+        .to_html();
+        assert!(
+            html.contains("plugin-fields")
+                && html.contains("plugin-field-key")
+                && html.contains("plugin-field-value")
+        );
+        assert!(html.contains("<dl") && html.contains("<dt") && html.contains("<dd"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_form_renders_its_children_without_being_submittable() {
+        let html = render(&PageElement::Form(Form {
+            children: vec![PageElement::Input(Input {
+                label: Some("Amount".to_string()),
+                placeholder: "0.00".to_string(),
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-form"));
+        assert!(
+            !html.contains("<form"),
+            "there is no action system - a plugin form must never render as a \
+             submittable <form>, only as a layout container"
+        );
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_grid_renders_its_column_count_into_the_grid_style() {
+        let html = render(&PageElement::Grid(Grid {
+            columns: 3,
+            children: vec![PageElement::Text(Text {
+                text: "cell".to_string(),
+                style: TextStyle::Body,
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-grid"));
+        assert!(html.contains("grid-template-columns:repeat(3,"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn an_input_renders_disabled_with_its_label() {
+        let html = render(&PageElement::Input(Input {
+            label: Some("Amount".to_string()),
+            placeholder: "0.00".to_string(),
+        }))
+        .to_html();
+        assert!(html.contains("plugin-field") && html.contains("form-input"));
+        assert!(
+            html.contains("<input") && html.contains("disabled"),
+            "there is no action system yet - an input must not be editable"
+        );
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_notice_renders_its_tone_class_and_status_role() {
+        let html = render(&PageElement::Notice(Notice {
+            text: "Read-only preview".to_string(),
+            tone: Tone::Warning,
+        }))
+        .to_html();
+        assert!(html.contains("plugin-notice plugin-notice-warning"));
+        assert!(html.contains(r#"role="status""#));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_row_lays_its_children_out_horizontally() {
+        let html = render(&PageElement::Row(Row {
+            children: vec![PageElement::Text(Text {
+                text: "cell".to_string(),
+                style: TextStyle::Body,
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-stack plugin-stack-row"));
+        assert!(html.contains("<p") && html.contains("cell"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_section_renders_a_heading_over_its_children() {
+        let html = render(&PageElement::Section(Section {
+            title: Some("Advanced".to_string()),
+            children: vec![PageElement::Text(Text {
+                text: "cell".to_string(),
+                style: TextStyle::Body,
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-section") && html.contains("plugin-section-title"));
+        assert!(html.contains("<h2") && html.contains("Advanced"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_select_renders_disabled_with_its_options() {
+        let html = render(&PageElement::Select(Select {
+            label: Some("Network".to_string()),
+            options: vec!["Ethereum".to_string(), "Polygon".to_string()],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-field") && html.contains("form-input"));
+        assert!(
+            html.contains("<select") && html.contains("disabled") && html.contains("<option"),
+            "there is no action system yet - a select must not be editable"
+        );
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_stack_renders_its_direction_class() {
+        let html = render(&PageElement::Stack(Stack {
+            direction: Direction::Column,
+            children: vec![PageElement::Text(Text {
+                text: "cell".to_string(),
+                style: TextStyle::Body,
+            })],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-stack plugin-stack-column"));
+        assert!(html.contains("<p") && html.contains("cell"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_table_renders_header_and_row_structure() {
+        let html = render(&PageElement::Table(Table {
+            headers: vec!["Chain".to_string(), "Balance".to_string()],
+            rows: vec![vec!["eip155:1".to_string(), "1.2".to_string()]],
+        }))
+        .to_html();
+        assert!(html.contains("table-container") && html.contains(r#"class="table""#));
+        assert!(
+            html.contains("<thead")
+                && html.contains("<th")
+                && html.contains("<tbody")
+                && html.contains("<td")
+        );
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn tabs_render_every_tab_stacked_with_its_own_heading() {
+        let html = render(&PageElement::Tabs(Tabs {
+            tabs: vec![Tab {
+                label: "Overview".to_string(),
+                content: vec![PageElement::Text(Text {
+                    text: "cell".to_string(),
+                    style: TextStyle::Body,
+                })],
+            }],
+        }))
+        .to_html();
+        assert!(html.contains("plugin-tabs") && html.contains("plugin-tab-label"));
+        assert!(html.contains("<h3") && html.contains("Overview"));
+        assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn text_renders_its_style_class() {
+        let html = render(&PageElement::Text(Text {
+            text: "Your subscription starts once the first invoice is paid.".to_string(),
+            style: TextStyle::Strong,
+        }))
+        .to_html();
+        assert!(html.contains("plugin-text plugin-text-strong"));
+        assert!(html.contains("<p"));
+        assert!(!strip_tags(&html).trim().is_empty());
     }
 }

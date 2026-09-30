@@ -9,10 +9,9 @@ use crate::components::{NoStoreSelected, PAGE_SIZE, Pagination};
 use crate::services::StatusUpdate;
 use crate::util::{chain_name, short_store_id, use_debounced_search};
 
-use super::format::{
-    format_crypto_amount, format_date, payment_status, payment_status_class, truncate_hash,
-};
+use super::format::{format_date, payment_status, payment_status_class, truncate_hash};
 use super::icons::{IconChevronRight, IconExport, IconExternalLink, IconMore, IconSearch};
+use ui_kit::{CompactAmount, units_to_decimal};
 
 /// Payments list page.
 #[component]
@@ -412,11 +411,8 @@ fn PaymentRow(payment: Payment, show_store: bool) -> impl IntoView {
     let invoice_id = truncate_hash(&payment.invoice_id, 8, 4);
     let invoice_link = payment.invoice_id.clone();
     let payment_link = payment.id.clone();
-    let amount_display = format!(
-        "{} {}",
-        format_crypto_amount(&payment.amount, payment.decimals),
-        payment.asset_symbol
-    );
+    let amount_decimal = units_to_decimal(&payment.amount, payment.decimals);
+    let asset_symbol = payment.asset_symbol.clone();
 
     view! {
         <tr class="payment-row">
@@ -438,7 +434,9 @@ fn PaymentRow(payment: Payment, show_store: bool) -> impl IntoView {
                 </td>
             })}
             <td>
-                <span class="payment-amount">{amount_display}</span>
+                <span class="payment-amount">
+                    <CompactAmount value=amount_decimal symbol=asset_symbol />
+                </span>
             </td>
             <td>
                 <span class="payment-network">{network}</span>
@@ -477,17 +475,16 @@ fn PaymentCard(payment: Payment, show_store: bool) -> impl IntoView {
     let invoice_id = truncate_hash(&payment.invoice_id, 8, 4);
     let invoice_link = payment.invoice_id.clone();
     let payment_link = payment.id.clone();
-    let amount_display = format!(
-        "{} {}",
-        format_crypto_amount(&payment.amount, payment.decimals),
-        payment.asset_symbol
-    );
+    let amount_decimal = units_to_decimal(&payment.amount, payment.decimals);
+    let asset_symbol = payment.asset_symbol.clone();
 
     view! {
         <div class="payment-card">
             <div class="payment-card-header">
                 <div class="payment-card-amount">
-                    <span class="payment-card-amount-value">{amount_display}</span>
+                    <span class="payment-card-amount-value">
+                        <CompactAmount value=amount_decimal symbol=asset_symbol />
+                    </span>
                     <span class="payment-card-network">{network}</span>
                 </div>
                 <span class=status_class>{status}</span>

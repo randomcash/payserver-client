@@ -1,4 +1,4 @@
-//! Store management pages - Stripe-inspired design.
+//! Store management pages.
 //!
 //! Uses types from `crate::api::types` which mirror the backend.
 

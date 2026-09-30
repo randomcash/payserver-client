@@ -1,4 +1,4 @@
-//! Root application component with Stripe-inspired layout.
+//! Root application component: the shell every page renders inside.
 
 mod header;
 mod icons;

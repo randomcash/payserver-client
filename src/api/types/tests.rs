@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashSet;
 use types::ChainId;
 use types::InvoiceStatus;
 
@@ -1158,4 +1159,71 @@ fn an_unrecognised_policy_string_falls_back_to_itself() {
         describe_api_key_permissions(&Some(perms)),
         "ethpay.store.canfrobnicate"
     );
+}
+
+#[test]
+fn create_plan_sends_exactly_the_checked_actions() {
+    let actions: HashSet<String> = ["ethpay.store.cancreateinvoice".to_string()].into();
+    let req = plan_create_api_key_request("  ci  ", false, &actions).unwrap();
+    assert_eq!(req.name, "ci");
+    assert!(req.expires_at.is_none());
+    assert_eq!(req.permissions, vec!["ethpay.store.cancreateinvoice"]);
+    let v = serde_json::to_value(&req).unwrap();
+    assert_eq!(
+        v["permissions"],
+        serde_json::json!(["ethpay.store.cancreateinvoice"])
+    );
+}
+
+#[test]
+fn create_plan_unrestricted_overrides_checked_actions() {
+    let actions: HashSet<String> = ["ethpay.store.cancreateinvoice".to_string()].into();
+    let req = plan_create_api_key_request("ci", true, &actions).unwrap();
+    assert_eq!(req.permissions, vec!["unrestricted"]);
+}
+
+#[test]
+fn create_plan_refuses_a_key_with_no_permissions_and_a_blank_name() {
+    assert_eq!(
+        plan_create_api_key_request("ci", false, &HashSet::new()).unwrap_err(),
+        CreateKeyRefusal::NoPermissions
+    );
+    assert_eq!(
+        plan_create_api_key_request("   ", true, &HashSet::new()).unwrap_err(),
+        CreateKeyRefusal::BlankName
+    );
+}
+
+#[test]
+fn responses_carry_the_permissions_field_under_its_wire_name() {
+    let id = uuid::Uuid::new_v4();
+    let scope = serde_json::json!(["ethpay.store.cancreateinvoice:store-1"]);
+    let list: ApiKeyListResponseWithPermissions = serde_json::from_value(serde_json::json!({
+        "keys": [{
+            "id": id, "name": "k", "key_prefix": "rc_", "is_active": true,
+            "created_at": "2026-01-01T00:00:00Z", "last_used_at": null,
+            "expires_at": null, "rate_limit_rpm": null, "deprecated_at": null,
+            "deprecation_expires_at": null, "permissions": scope
+        }]
+    }))
+    .unwrap();
+    assert_eq!(
+        list.keys[0].permissions.as_deref(),
+        Some(&["ethpay.store.cancreateinvoice:store-1".to_string()][..])
+    );
+    let created: CreateApiKeyResponseWithPermissions = serde_json::from_value(serde_json::json!({
+        "id": id, "name": "k", "key_prefix": "rc_", "is_active": true,
+        "created_at": "2026-01-01T00:00:00Z", "expires_at": null,
+        "key": "secret", "permissions": scope
+    }))
+    .unwrap();
+    assert_eq!(created.permissions.unwrap().len(), 1);
+    let rotated: RotateApiKeyResponseWithPermissions = serde_json::from_value(serde_json::json!({
+        "id": id, "name": "k", "key_prefix": "rc_",
+        "created_at": "2026-01-01T00:00:00Z", "key": "secret",
+        "old_key_deprecated_at": "2026-01-01T00:00:00Z",
+        "old_key_grace_expires_at": "2026-01-02T00:00:00Z", "permissions": scope
+    }))
+    .unwrap();
+    assert_eq!(rotated.permissions.unwrap().len(), 1);
 }

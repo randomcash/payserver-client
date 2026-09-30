@@ -8,10 +8,9 @@ use crate::api::{ApiClient, Payment};
 use crate::components::TimelineState;
 use crate::util::chain_name;
 
-use super::format::{
-    format_crypto_amount, format_date, payment_status, payment_status_class, truncate_hash,
-};
+use super::format::{format_date, payment_status, payment_status_class, truncate_hash};
 use super::icons::{IconArrowLeft, IconChevronRight, IconCopy, IconExternalLink, IconInvoice};
+use ui_kit::{CompactAmount, units_to_decimal};
 
 /// Payment detail page.
 #[component]
@@ -55,11 +54,8 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
     let network = chain_name(&payment.chain_id).to_string();
     let status = payment_status(&payment);
     let status_class = payment_status_class(&payment);
-    let amount_display = format!(
-        "{} {}",
-        format_crypto_amount(&payment.amount, payment.decimals),
-        payment.asset_symbol
-    );
+    let amount_decimal = units_to_decimal(&payment.amount, payment.decimals);
+    let asset_symbol = payment.asset_symbol.clone();
     let detected_display = format_date(&payment.detected_at.to_rfc3339());
     let confirmed_display = payment
         .confirmed_at
@@ -105,7 +101,9 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                         "Payments"
                     </A>
                     <div class="payment-detail-title-row">
-                        <h1 class="payment-detail-title">{amount_display.clone()}</h1>
+                        <h1 class="payment-detail-title">
+                            <CompactAmount value=amount_decimal.clone() symbol=asset_symbol.clone() />
+                        </h1>
                         <span class=status_class>{status}</span>
                     </div>
                     <p class="payment-detail-subtitle">{network.clone()}" · "{detected_display.clone()}</p>
@@ -175,7 +173,9 @@ fn PaymentDetailView(payment: Payment) -> impl IntoView {
                         <div class="ps-card-body">
                             <div class="detail-row">
                                 <span class="detail-label">"Amount Received"</span>
-                                <span class="detail-value detail-value-lg">{amount_display}</span>
+                                <span class="detail-value detail-value-lg">
+                                    <CompactAmount value=amount_decimal symbol=asset_symbol />
+                                </span>
                             </div>
                             {payment.token_address.clone().map(|addr| view! {
                                 <div class="detail-row">

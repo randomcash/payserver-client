@@ -73,6 +73,7 @@ pub struct PluginPage {
     pub plugin_id: String,
     pub path: String,
     pub label: String,
+    pub icon: payserver_plugin_api::PageIcon,
 }
 
 /// `GET /api/plugins`, as the server sends it.
@@ -91,6 +92,7 @@ pub struct PluginPagesInfo {
 pub struct PluginPageInfo {
     pub path: String,
     pub label: String,
+    pub icon: payserver_plugin_api::PageIcon,
 }
 
 // =========================================================================
@@ -100,8 +102,7 @@ pub struct PluginPageInfo {
 // responses rather than extending the pinned `api_types` structs for them:
 // `api-types` lives in payserver-commons, and landing a field there is the
 // three-step dance (merge, bump the pinned rev, `cargo update`) described in
-// this repo's `CLAUDE.md` - a cross-repo change this ticket cannot complete
-// on its own. The wire shape only grows a field on top of the pinned types,
+// this repo's `CLAUDE.md`. The wire shape only grows a field on top of the pinned types,
 // so nothing about the existing `ApiKeyInfo`/`CreateApiKeyRequest` aliases
 // breaks; these are additional types for the endpoints that need the extra
 // field.
@@ -207,6 +208,37 @@ pub fn build_api_key_permissions(unrestricted: bool, actions: &HashSet<String>) 
         .filter(|(policy, _)| actions.contains(*policy))
         .map(|(policy, _)| policy.to_string())
         .collect()
+}
+
+/// What the create form submits, or the reason it must not be sent: a blank
+/// name is ignored, and a key with no permission at all is refused before the
+/// server is asked, since the server reads an empty list as "authenticate and
+/// nothing else".
+pub fn plan_create_api_key_request(
+    name: &str,
+    unrestricted: bool,
+    actions: &HashSet<String>,
+) -> Result<CreateApiKeyRequestWithPermissions, CreateKeyRefusal> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CreateKeyRefusal::BlankName);
+    }
+    let permissions = build_api_key_permissions(unrestricted, actions);
+    if permissions.is_empty() {
+        return Err(CreateKeyRefusal::NoPermissions);
+    }
+    Ok(CreateApiKeyRequestWithPermissions {
+        name: name.to_string(),
+        expires_at: None,
+        permissions,
+    })
+}
+
+/// Why `plan_create_api_key_request` declined to build a request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateKeyRefusal {
+    BlankName,
+    NoPermissions,
 }
 
 /// `CreateApiKeyRequest` (api-types) plus the permission scope chosen at

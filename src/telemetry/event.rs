@@ -18,8 +18,8 @@ pub struct Report<'a> {
     pub kind: &'a str,
     /// Human-readable failure text (panic message, `Error.message`, …).
     pub message: &'a str,
-    /// Raw JS/WASM stack. errex has no source maps yet, so this ships verbatim
-    /// (after redaction) and is read as-is.
+    /// Raw JS/WASM stack. The collector has no source maps yet, so this ships
+    /// verbatim (after redaction) and is read as-is.
     pub stack: Option<String>,
     /// Route the failure happened on — `location.pathname` only, never the
     /// query string or fragment.

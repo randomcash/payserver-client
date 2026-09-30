@@ -1,4 +1,4 @@
-/* EVM PayServer Client - Stripe-inspired Design */
+/* EVM PayServer Client - design tokens and component styles */
 
 /* Inter font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -7,7 +7,9 @@
    Design Tokens
    ============================================ */
 :root {
-    /* Primary Colors - Stripe-like indigo */
+    /* Primary colours. Indigo: high enough contrast on both grounds to
+     * carry a primary action without shouting, and distinct from the
+     * semantic green/amber/red so an accent never reads as a status. */
     --color-primary: #635bff;
     --color-primary-hover: #5851ea;
     --color-primary-light: #e8e7ff;
@@ -59,7 +61,8 @@
     --border-radius-xl: 12px;
     --border-radius-full: 9999px;
 
-    /* Shadows - Stripe's subtle layered shadows */
+    /* Shadows. Layered and shallow: a card should read as lifted off the
+     * page, not as floating above it. */
     --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
@@ -552,6 +555,13 @@ a:hover {
     .main-header-actions .ps-btn span {
         display: none;
     }
+
+    /* No icon to fall back on, and the invoices page has its own create
+       control, so this stops competing for space rather than degrading
+       into an unlabelled box. */
+    .header-create-invoice {
+        display: none;
+    }
 }
 
 /* User menu dropdown */
@@ -656,6 +666,32 @@ a:hover {
    ============================================ */
 .page-header {
     margin-bottom: var(--space-6);
+}
+
+/* The page shell every screen in this app has, written down once.
+ *
+ * `.invoices-page`, `.stores-page`, `.wallets-page`, `.payments-page` and
+ * `.settings-page` used to each spell out these exact declarations for
+ * themselves, which is how a sixth screen ended up with none of them: a
+ * plugin page was rendering into `.page`, a class this stylesheet does not
+ * define at all, so it had no max width, no column and no gap - it was the
+ * one screen in the product with no layout. `.payments-page` had also drifted
+ * to just the width pair, missing the flex layout every other screen has.
+ *
+ * Named in the `ps-` vocabulary the rest of the client is migrating to.
+ * Per-page rules below only override where a screen genuinely differs
+ * (`.settings-page`'s narrower max-width). */
+.ps-page,
+.invoices-page,
+.payments-page,
+.stores-page,
+.wallets-page,
+.settings-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    width: 100%;
+    max-width: var(--content-max-width);
 }
 
 .page-header-row {
@@ -842,6 +878,20 @@ a:hover {
 
 .table-cell-link:hover {
     text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    /* Without this, a column with unbreakable content (a long decimal, a
+       status badge) shrinks until it wraps or clips instead of the table
+       scrolling inside `.table-container` (rule above, at line 828) - the
+       same pairing `.addresses-table`/`.addresses-table-container` already
+       uses below. `check-classes-styled.py`, wired into CI as "Every class
+       in the markup has a rule", checks every emitted class regardless of
+       prefix, so `.table`/`.table-container` are covered and that pairing
+       can't silently go stale. */
+    .table {
+        min-width: 500px;
+    }
 }
 
 /* ============================================
@@ -1468,7 +1518,7 @@ a:hover {
 .evm-network-status-item.disconnected .evm-network-status-indicator { color: var(--color-error); }
 
 /* ============================================
-   Dashboard - Stripe-inspired
+   Dashboard
    ============================================ */
 .dashboard {
     display: flex;
@@ -1813,6 +1863,41 @@ a:hover {
     gap: var(--space-3);
 }
 
+/* Same class, two different elements: the dashboard breakdown uses a <div>
+   and wants the flex layout above, but the payment-methods table's <tr>
+   reuses this class name too - `display: flex` takes it out of table layout,
+   so its cells stop sharing the header's column widths. Same collision
+   already fixed for tr.payment-row below; give this one the same override.
+
+   Confirmed against the real rendered DOM, not just the markup in this file:
+   mounted PaymentMethodsTab in a browser with a stubbed API response and
+   inspected the live tree. The row's <tr> is a direct child of <tbody> with
+   or without this rule - so the table-nesting/parser-hoisting theory this
+   ticket also suspected does not apply here. Removing this rule reproduces
+   the reported symptom exactly (computed display: flex, headers 626-819px
+   right of their columns); restoring it makes every header sit at dx=0.
+
+   Re-verified independently on a later pass, against a fresh mount of the
+   same component with a stubbed response: `tr.parentElement === tbody` is
+   true both with and without this rule; with it removed, computed display
+   flips to `flex` and every header lands 714-973px right of its column
+   (dx 0, -714, -772, -784, -960, -973 across the six columns); with it
+   restored, every dx is 0. Numbers differ slightly from the pass above
+   because the stub payload's field lengths differ - the shape doesn't.
+
+   The DOM-nesting theory isn't just empirically absent here, it's
+   structurally impossible: table-content-model hoisting (the algorithm
+   that can move a <tr> out from under a non-<table> ancestor) is part of
+   the HTML tree-construction algorithm and runs only while the browser's
+   HTML parser is tokenizing markup - `innerHTML`, `document.write`, the
+   initial page load. This app is CSR: Leptos's `view!` macro builds nodes
+   with `document.createElement`/`appendChild`, which never invokes that
+   parser, so there is no mechanism available to hoist anything regardless
+   of what any one test run happens to observe. */
+tr.payment-method-row {
+    display: table-row;
+}
+
 .payment-method-info {
     display: flex;
     align-items: center;
@@ -2086,15 +2171,8 @@ tr.payment-row {
 }
 
 /* ============================================
-   Invoices Page - Stripe-inspired
+   Invoices Page
    ============================================ */
-.invoices-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    width: 100%;
-    max-width: var(--content-max-width);
-}
 
 /* Toolbar: Filters + Search */
 .invoices-toolbar {
@@ -3193,11 +3271,6 @@ tr.payment-row {
 /* ============================================
    Payments Page
    ============================================ */
-.payments-page {
-    width: 100%;
-    max-width: var(--content-max-width);
-}
-
 .payments-toolbar {
     display: flex;
     align-items: center;
@@ -3700,14 +3773,6 @@ tr.payment-row {
 /* ============================================
    Stores Page
    ============================================ */
-
-.stores-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    width: 100%;
-    max-width: var(--content-max-width);
-}
 
 .stores-toolbar {
     display: flex;
@@ -4404,14 +4469,6 @@ tr.payment-row {
    Wallets Page
    ============================================ */
 
-.wallets-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    width: 100%;
-    max-width: var(--content-max-width);
-}
-
 .wallets-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -4999,10 +5056,6 @@ tr.payment-row {
    ============================================ */
 
 .settings-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    width: 100%;
     max-width: 900px;
 }
 
@@ -6348,6 +6401,84 @@ tr.payment-row {
     border-bottom: 1px solid var(--border-color);
 }
 
+/* QR picker: one card per encoding, paged with arrows, dots or a swipe */
+.checkout-qr-picker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+    touch-action: pan-y;
+    outline: none;
+}
+
+.checkout-qr-picker:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 4px;
+    border-radius: var(--border-radius-md);
+}
+
+.checkout-qr-track {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.checkout-qr-card {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.checkout-qr-card-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.checkout-qr-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    padding: 0;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-full);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.checkout-qr-arrow:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.checkout-qr-dots {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.checkout-qr-dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border: none;
+    border-radius: var(--border-radius-full);
+    background: var(--border-color-strong);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.checkout-qr-dot-active {
+    background: var(--color-primary);
+}
+
 .checkout-qr-placeholder {
     text-align: center;
 }
@@ -6446,6 +6577,42 @@ tr.payment-row {
 .checkout-copy-btn:hover {
     background: var(--color-primary);
     color: white;
+}
+
+/* Wallet connect (EIP-6963) — supplementary to the address/QR above, never a
+   replacement, so it only ever adds a section rather than restyling one. */
+.checkout-wallet-actions {
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border-color);
+}
+
+.checkout-wallet-label {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-2);
+}
+
+.checkout-wallet-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.checkout-wallet-status {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.checkout-wallet-error {
+    color: var(--color-red-500);
+}
+
+.checkout-wallet-success {
+    color: var(--color-green-500);
 }
 
 /* Footer */
@@ -6600,6 +6767,16 @@ tr.payment-row {
     gap: var(--space-5);
 }
 
+/* A tab's content, stacked. The renderer draws every tab's content at once -
+ * switching one is an interaction it cannot tell the plugin about - so these
+ * need separating from each other the way sections do. Emitted since the
+ * renderer was written and never defined until now. */
+.plugin-tab {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
 .plugin-tab-label {
     font-size: var(--text-sm);
     font-weight: 600;
@@ -6615,4 +6792,76 @@ tr.payment-row {
 .plugin-tabs .btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+}
+
+/* Plugin pages: prose and label/value pairs.
+   These two are why a plugin page can look like the rest of the product at
+   all - before them every piece of text had to be a badge, so a detail page
+   rendered as rows of coloured pills. */
+
+.plugin-text {
+    margin: 0;
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.plugin-text-muted {
+    color: var(--text-muted);
+}
+
+.plugin-text-strong {
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+}
+
+.plugin-fields {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* A row per pair, label left and value right, with a hairline between - the
+   same shape the rest of the app uses for detail panels. */
+.plugin-field-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.plugin-field-row:last-child {
+    border-bottom: none;
+}
+
+.plugin-field-key {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+
+.plugin-field-value {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    word-break: break-word;
+}
+
+/* Stacked on a narrow screen: a long value pushed hard right against its
+   label is unreadable well before the row actually overflows. */
+@media (max-width: 480px) {
+    .plugin-field-row {
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .plugin-field-value {
+        text-align: left;
+    }
 }
