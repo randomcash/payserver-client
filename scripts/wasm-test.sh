@@ -31,4 +31,13 @@ fi
 rustup target add wasm32-unknown-unknown >/dev/null
 
 export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner
-cargo test --target wasm32-unknown-unknown --lib
+# A green run that executed nothing (module cfg'd out, runner mis-wired) would
+# look identical to a pass, so require at least as many tests as are tagged.
+expected="$(git grep -hE '^\s*#\[wasm_bindgen_test\]' -- src | wc -l )"
+out="$(cargo test --target wasm32-unknown-unknown --lib 2>&1)" || { echo "$out"; exit 1; }
+echo "$out"
+ran="$(grep -oP 'running \K\d+(?= tests?)' <<<"$out" | awk '{n+=$1} END {print n+0}')"
+if [ "$ran" -lt "$expected" ]; then
+  echo "::error::$expected wasm_bindgen_test tests are tagged but only $ran ran" >&2
+  exit 1
+fi
