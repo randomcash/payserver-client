@@ -35,12 +35,15 @@ export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner
 # look identical to a pass. Plain `#[test]`s also run under the wasm runner, so
 # a count cannot tell them from the tagged ones: require each tagged test by
 # name to be reported as passing.
-names="$(git grep -hA1 -E '^\s*#\[wasm_bindgen_test\]' -- src | grep -oP '\bfn \K\w+' || true)"
+# The fn name is the first `fn` after the attribute, so a doc comment or a
+# second attribute in between cannot drop a test from the required list.
+names="$(git grep -h -E '^\s*(#\[wasm_bindgen_test\]|(pub )?(async )?fn \w+)' -- src |
+  awk '/#\[wasm_bindgen_test\]/ {armed=1; next} armed && match($0, /fn [A-Za-z0-9_]+/) {print substr($0, RSTART+3, RLENGTH-3); armed=0}' || true)"
 [ -n "$names" ] || { echo "::error::no #[wasm_bindgen_test] tests found under src" >&2; exit 1; }
 out="$(cargo test --target wasm32-unknown-unknown --lib 2>&1)" || { echo "$out"; exit 1; }
 echo "$out"
 for name in $names; do
-  grep -qE "^test .*::${name} \.\.\. ok$|^test ${name} \.\.\. ok$" <<<"$out" || {
+  grep -qE "^test (.*::)?wallet_tx_assembly_tests::${name} \.\.\. ok$" <<<"$out" || {
     echo "::error::wasm_bindgen_test '$name' is tagged but was not reported as passing" >&2
     exit 1
   }
