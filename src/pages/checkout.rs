@@ -224,6 +224,13 @@ fn cmp_decimal(a: &str, b: &str) -> Option<std::cmp::Ordering> {
 /// waiting on confirmations. Expiry no longer decides the outcome then, so the
 /// countdown stops. A partial payment does not qualify: more is still needed
 /// before the deadline. A malformed amount keeps the countdown running.
+///
+/// `amount` and `amount_received` are both taken from the same invoice record
+/// and are both in the invoice currency; the server's own settlement check
+/// compares exactly these two fields. The server also accepts a payment a
+/// small store-configured tolerance short of `amount`, which the checkout
+/// response does not expose, so this test is deliberately stricter: such a
+/// payment keeps the countdown running rather than stopping it early.
 fn is_awaiting_confirmations(status: &str, amount: &str, amount_received: &str) -> bool {
     status == "processing"
         && matches!(
