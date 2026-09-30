@@ -32,12 +32,16 @@ rustup target add wasm32-unknown-unknown >/dev/null
 
 export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner
 # A green run that executed nothing (module cfg'd out, runner mis-wired) would
-# look identical to a pass, so require at least as many tests as are tagged.
-expected="$(git grep -hE '^\s*#\[wasm_bindgen_test\]' -- src | wc -l )"
+# look identical to a pass. Plain `#[test]`s also run under the wasm runner, so
+# a count cannot tell them from the tagged ones: require each tagged test by
+# name to be reported as passing.
+names="$(git grep -hA1 -E '^\s*#\[wasm_bindgen_test\]' -- src | grep -oP '\bfn \K\w+' || true)"
+[ -n "$names" ] || { echo "::error::no #[wasm_bindgen_test] tests found under src" >&2; exit 1; }
 out="$(cargo test --target wasm32-unknown-unknown --lib 2>&1)" || { echo "$out"; exit 1; }
 echo "$out"
-ran="$(grep -oP 'running \K\d+(?= tests?)' <<<"$out" | awk '{n+=$1} END {print n+0}')"
-if [ "$ran" -lt "$expected" ]; then
-  echo "::error::$expected wasm_bindgen_test tests are tagged but only $ran ran" >&2
-  exit 1
-fi
+for name in $names; do
+  grep -qE "^test .*::${name} \.\.\. ok$|^test ${name} \.\.\. ok$" <<<"$out" || {
+    echo "::error::wasm_bindgen_test '$name' is tagged but was not reported as passing" >&2
+    exit 1
+  }
+done
