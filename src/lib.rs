@@ -923,6 +923,38 @@ mod wallet_tx_assembly_tests {
         assert!(result.is_err());
         assert!(own_keys(&target).is_empty());
     }
+
+    /// A target that accepts `from` but has a read-only `blocked` key: the
+    /// refusal happens after an earlier set succeeded, so a check dropped from
+    /// any later key (not just `from`) would let a partial object through.
+    fn assemble_with_read_only(blocked: &str, fields: TransferTxFields) -> Result<(), String> {
+        let target = js_sys::Object::new();
+        let descriptor = js_sys::Object::new();
+        js_sys::Reflect::set(&descriptor, &"value".into(), &"preset".into()).unwrap();
+        js_sys::Reflect::set(&descriptor, &"writable".into(), &false.into()).unwrap();
+        js_sys::Object::define_property(&target, &blocked.into(), &descriptor);
+
+        let result = assemble_transfer_tx(&target, "0xfrom", fields);
+        assert_eq!(get(&target, blocked), "preset");
+        result
+    }
+
+    #[wasm_bindgen_test]
+    fn a_refused_later_key_errors_on_each_of_to_data_and_value() {
+        let erc20 = || TransferTxFields::Erc20 {
+            to: "0xtoken".to_string(),
+            data: "0xcalldata".to_string(),
+        };
+        let native = || TransferTxFields::Native {
+            to: "0xrecipient".to_string(),
+            value: "0x1".to_string(),
+        };
+
+        assert!(assemble_with_read_only("to", erc20()).is_err());
+        assert!(assemble_with_read_only("data", erc20()).is_err());
+        assert!(assemble_with_read_only("to", native()).is_err());
+        assert!(assemble_with_read_only("value", native()).is_err());
+    }
 }
 
 /// Mount the app into `#app`, clearing whatever placeholder is there first.
