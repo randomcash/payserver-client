@@ -2,11 +2,10 @@
 
 use super::{ApiClient, ApiError};
 use crate::api::{
-    ApiKeyInfoWithPermissions, ApiKeyListResponseWithPermissions,
-    CreateApiKeyRequestWithPermissions, CreateApiKeyResponseWithPermissions, DashboardAnalytics,
-    DashboardStats, RotateApiKeyResponseWithPermissions, ServerSettingsResponse,
-    UpdateApiKeyPermissionsRequest, UpdateServerSettingsRequest, UpdateUserRoleRequest, UserInfo,
-    UserListResponse,
+    ApiKeyListResponseWithPermissions, CreateApiKeyRequestWithPermissions,
+    CreateApiKeyResponseWithPermissions, DashboardAnalytics, DashboardStats,
+    RotateApiKeyResponseWithPermissions, ServerSettingsResponse, UpdateServerSettingsRequest,
+    UpdateUserRoleRequest, UserInfo, UserListResponse,
 };
 
 impl ApiClient {
@@ -102,23 +101,6 @@ impl ApiClient {
     /// Revoke an API key.
     pub async fn revoke_api_key(&self, id: &str) -> Result<(), ApiError> {
         self.delete(&format!("/api/users/api-keys/{}", id)).await
-    }
-
-    /// Narrow, or (for a still-unrestricted caller) widen back to
-    /// unrestricted, an API key's permission scope. The server also accepts
-    /// `permissions: None` here to clear a key back to literally inheriting
-    /// its owner's role rather than storing an explicit `unrestricted`
-    /// entry, but the two are equivalent at request time - the extractor
-    /// re-checks the owner's *current* role either way - so this client
-    /// never sends `None`; every call narrows to `[]` or widens to
-    /// `["unrestricted"]`.
-    pub async fn update_api_key_permissions(
-        &self,
-        id: &str,
-        request: &UpdateApiKeyPermissionsRequest,
-    ) -> Result<ApiKeyInfoWithPermissions, ApiError> {
-        self.patch(&format!("/api/users/api-keys/{}/permissions", id), request)
-            .await
     }
 
     /// Rotate an API key (deprecates old, creates new). The replacement

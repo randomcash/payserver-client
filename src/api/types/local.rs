@@ -104,6 +104,12 @@ pub struct PluginPageInfo {
 // so nothing about the existing `ApiKeyInfo`/`CreateApiKeyRequest` aliases
 // breaks; these are additional types for the endpoints that need the extra
 // field.
+//
+// Keep these mirrors until this crate's commons pin is past the commit that
+// adds `permissions` to the shared api-key types, then replace them with the
+// shared ones. There is deliberately no type for editing a key's permissions:
+// the server has no such route. A key's scope is fixed at creation; to change
+// it, create a new key and revoke the old one.
 // =========================================================================
 
 /// Unrestricted access: equivalent to the key owner's full role, including
@@ -238,12 +244,5 @@ pub struct RotateApiKeyResponseWithPermissions {
     pub key: String,
     pub old_key_deprecated_at: DateTime<Utc>,
     pub old_key_grace_expires_at: DateTime<Utc>,
-    pub permissions: Option<Vec<String>>,
-}
-
-/// Body for `PATCH /api/users/api-keys/{id}/permissions`.
-#[derive(Debug, Clone, Serialize)]
-pub struct UpdateApiKeyPermissionsRequest {
-    /// `None` clears the key back to "inherit the owner's role in full".
     pub permissions: Option<Vec<String>>,
 }
