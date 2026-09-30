@@ -76,7 +76,7 @@ jobs:
       # nothing else here notices: the layout suite asserts geometry rather than
       # colour, and e2e locates elements by class, which still match - unstyled.
       # That shipped once, stripping 104 buttons of their styling on testnet.
-      - name: Every ps- class in the markup has a rule
+      - name: Every class in the markup has a rule
         run: python3 scripts/check-classes-styled.py
 
       # The bundle is what ships, and it is the only configuration where
