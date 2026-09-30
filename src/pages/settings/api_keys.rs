@@ -64,7 +64,12 @@ fn ApiKeyScope(permissions: Option<Vec<String>>) -> impl IntoView {
     } else {
         "api-key-permissions-summary"
     };
-    view! { <span class=class>"Can do: "{describe_api_key_permissions(&permissions)}</span> }
+    view! {
+        <span class=class>
+            "Can do: "
+            {describe_api_key_permissions(&permissions)}
+        </span>
+    }
 }
 
 /// The create form's permission picker. "Unrestricted" overrides the
