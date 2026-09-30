@@ -13,7 +13,7 @@ use ui_kit::{CopyButton, format_units};
 
 use crate::api::{ApiClient, ApiError, CheckoutResponse, PaymentOption};
 use crate::services::websocket::{StatusUpdate, WebSocketService};
-use crate::util::chain_name;
+use crate::util::{chain_name, format_fiat_amount};
 
 mod countdown;
 mod qr_picker;
@@ -212,7 +212,7 @@ fn render_checkout(
             <div class="checkout-status checkout-paid">
                 <div class="checkout-status-icon">"✓"</div>
                 <h2>"Payment Complete"</h2>
-                <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
+                <p class="checkout-amount">{format_fiat_amount(&data.amount, &data.currency)}</p>
                 <p class="checkout-status-detail">"Thank you for your payment."</p>
             </div>
         }
@@ -224,7 +224,7 @@ fn render_checkout(
             <div class="checkout-status checkout-expired">
                 <div class="checkout-status-icon">"✗"</div>
                 <h2>"Invoice Expired"</h2>
-                <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
+                <p class="checkout-amount">{format_fiat_amount(&data.amount, &data.currency)}</p>
                 <p class="checkout-status-detail">"This invoice is no longer accepting payments."</p>
             </div>
         }
@@ -236,7 +236,7 @@ fn render_checkout(
             <div class="checkout-status checkout-expired">
                 <div class="checkout-status-icon">"✗"</div>
                 <h2>"Invoice Cancelled"</h2>
-                <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
+                <p class="checkout-amount">{format_fiat_amount(&data.amount, &data.currency)}</p>
             </div>
         }
         .into_any();
@@ -278,7 +278,7 @@ fn render_checkout(
         <div class="checkout-body">
             // Amount and status
             <div class="checkout-amount-section">
-                <p class="checkout-amount">{amount.clone()}" "{currency.clone()}</p>
+                <p class="checkout-amount">{format_fiat_amount(&amount, &currency)}</p>
                 <p class="checkout-status-label">{status_label}</p>
                 <CountdownTimer expires_at=expires_at.to_rfc3339() />
             </div>
