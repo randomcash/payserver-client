@@ -9,11 +9,33 @@ use leptos_router::hooks::use_params_map;
 
 use send_wrapper::SendWrapper;
 
-use ui_kit::{CopyButton, format_units};
+use ui_kit::{CopyButton, format_units, round_amount};
 
 use crate::api::{ApiClient, ApiError, CheckoutResponse, PaymentOption};
 use crate::services::websocket::{StatusUpdate, WebSocketService};
 use crate::util::chain_name;
+
+/// Minor-unit digits of an ISO 4217 currency: zero for the currencies that
+/// have no subunit, three for the dinar-style ones, two for everything else.
+fn currency_minor_units(currency: &str) -> usize {
+    match currency {
+        "BIF" | "CLP" | "DJF" | "GNF" | "ISK" | "JPY" | "KMF" | "KRW" | "PYG" | "RWF" | "UGX"
+        | "UYI" | "VND" | "VUV" | "XAF" | "XOF" | "XPF" => 0,
+        "BHD" | "IQD" | "JOD" | "KWD" | "LYD" | "OMR" | "TND" => 3,
+        _ => 2,
+    }
+}
+
+/// The invoice's fiat total with its currency, e.g. `20.00 USD`. The API
+/// sends the amount at the column's full 18 decimals, so it is rounded to the
+/// currency's minor unit rather than shown as received.
+fn format_fiat_amount(amount: &str, currency: &str) -> String {
+    format!(
+        "{} {}",
+        round_amount(amount, currency_minor_units(currency)),
+        currency
+    )
+}
 
 mod countdown;
 mod qr_picker;
@@ -212,7 +234,7 @@ fn render_checkout(
             <div class="checkout-status checkout-paid">
                 <div class="checkout-status-icon">"&#10003;"</div>
                 <h2>"Payment Complete"</h2>
-                <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
+                <p class="checkout-amount">{format_fiat_amount(&data.amount, &data.currency)}</p>
                 <p class="checkout-status-detail">"Thank you for your payment."</p>
             </div>
         }
@@ -224,7 +246,7 @@ fn render_checkout(
             <div class="checkout-status checkout-expired">
                 <div class="checkout-status-icon">"&#10007;"</div>
                 <h2>"Invoice Expired"</h2>
-                <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
+                <p class="checkout-amount">{format_fiat_amount(&data.amount, &data.currency)}</p>
                 <p class="checkout-status-detail">"This invoice is no longer accepting payments."</p>
             </div>
         }
@@ -236,7 +258,7 @@ fn render_checkout(
             <div class="checkout-status checkout-expired">
                 <div class="checkout-status-icon">"&#10007;"</div>
                 <h2>"Invoice Cancelled"</h2>
-                <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
+                <p class="checkout-amount">{format_fiat_amount(&data.amount, &data.currency)}</p>
             </div>
         }
         .into_any();
@@ -278,7 +300,7 @@ fn render_checkout(
         <div class="checkout-body">
             // Amount and status
             <div class="checkout-amount-section">
-                <p class="checkout-amount">{amount.clone()}" "{currency.clone()}</p>
+                <p class="checkout-amount">{format_fiat_amount(&amount, &currency)}</p>
                 <p class="checkout-status-label">{status_label}</p>
                 <CountdownTimer expires_at=expires_at.to_rfc3339() />
             </div>
@@ -411,4 +433,33 @@ fn render_checkout(
         </div>
     }
     .into_any()
+}
+
+#[cfg(test)]
+mod fiat_amount_tests {
+    use super::*;
+
+    #[test]
+    fn full_precision_usd_shows_two_decimals() {
+        assert_eq!(
+            format_fiat_amount("20.000000000000000000", "USD"),
+            "20.00 USD"
+        );
+    }
+
+    #[test]
+    fn zero_decimal_currency_shows_no_fraction() {
+        assert_eq!(
+            format_fiat_amount("2000.000000000000000000", "JPY"),
+            "2000 JPY"
+        );
+    }
+
+    #[test]
+    fn three_decimal_currency_keeps_three() {
+        assert_eq!(
+            format_fiat_amount("1.500000000000000000", "KWD"),
+            "1.500 KWD"
+        );
+    }
 }
