@@ -84,6 +84,11 @@ mod tests {
     }
 
     #[test]
+    fn whole_number_in_a_zero_decimal_currency_is_unchanged() {
+        assert_eq!(format_fiat_amount("2000", "JPY"), "2000 JPY");
+    }
+
+    #[test]
     fn lowercase_code_uses_the_same_precision() {
         assert_eq!(format_fiat_amount("2000.0", "jpy"), "2000 jpy");
     }
