@@ -9,35 +9,40 @@ use leptos_router::hooks::use_params_map;
 
 use send_wrapper::SendWrapper;
 
-use ui_kit::{CopyButton, format_units, round_amount};
+use ui_kit::{CopyButton, format_units, round_amount, trim_amount};
 
 use crate::api::{ApiClient, ApiError, CheckoutResponse, PaymentOption};
 use crate::services::websocket::{StatusUpdate, WebSocketService};
 use crate::util::chain_name;
 
-/// Minor-unit digits of an ISO 4217 currency: zero for the currencies that
-/// have no subunit, three for the dinar-style ones, four for the two
-/// unit-of-account currencies, two for everything else. Codes are matched
-/// case-insensitively.
-fn currency_minor_units(currency: &str) -> usize {
+/// Minor-unit digits of the ISO 4217 currencies that do not have two: zero for
+/// the ones with no subunit, three for the dinar-style ones, four for the two
+/// unit-of-account currencies. Codes are matched case-insensitively. Anything
+/// else returns `None`, because an invoice currency is not guaranteed to be
+/// fiat and a crypto-denominated amount must not be rounded to two places.
+fn irregular_minor_units(currency: &str) -> Option<usize> {
     match currency.to_ascii_uppercase().as_str() {
         "BIF" | "CLP" | "DJF" | "GNF" | "ISK" | "JPY" | "KMF" | "KRW" | "PYG" | "RWF" | "UGX"
-        | "UYI" | "VND" | "VUV" | "XAF" | "XOF" | "XPF" => 0,
-        "BHD" | "IQD" | "JOD" | "KWD" | "LYD" | "OMR" | "TND" => 3,
-        "CLF" | "UYW" => 4,
-        _ => 2,
+        | "UYI" | "VND" | "VUV" | "XAF" | "XOF" | "XPF" => Some(0),
+        "BHD" | "IQD" | "JOD" | "KWD" | "LYD" | "OMR" | "TND" => Some(3),
+        "CLF" | "UYW" => Some(4),
+        _ => None,
     }
 }
 
-/// The invoice's fiat total with its currency, e.g. `20.00 USD`. The API
-/// sends the amount at the column's full 18 decimals, so it is rounded to the
-/// currency's minor unit rather than shown as received.
+/// The invoice's total with its currency, e.g. `20.00 USD`. The API sends the
+/// amount at the column's full 18 decimals. A currency whose minor unit is not
+/// two is rounded to it; every other amount only has its trailing zeros
+/// trimmed down to two places, so no digit of a value is ever rounded away
+/// on a guess about the currency.
 fn format_fiat_amount(amount: &str, currency: &str) -> String {
-    format!(
-        "{} {}",
-        round_amount(amount, currency_minor_units(currency)),
-        currency
-    )
+    let shown = match irregular_minor_units(currency) {
+        Some(scale) => round_amount(amount, scale),
+        // `trim_amount` returns a fraction-less input untouched.
+        None if !amount.contains('.') => round_amount(amount, 2),
+        None => trim_amount(amount, 2),
+    };
+    format!("{shown} {currency}")
 }
 
 mod countdown;
@@ -468,9 +473,8 @@ mod fiat_amount_tests {
 
     #[test]
     fn rounds_half_up_rather_than_truncating() {
-        assert_eq!(format_fiat_amount("19.995", "USD"), "20.00 USD");
-        assert_eq!(format_fiat_amount("19.994", "USD"), "19.99 USD");
-        assert_eq!(format_fiat_amount("0.005", "USD"), "0.01 USD");
+        assert_eq!(format_fiat_amount("19.9995", "KWD"), "20.000 KWD");
+        assert_eq!(format_fiat_amount("19.9994", "KWD"), "19.999 KWD");
         assert_eq!(format_fiat_amount("0.999", "JPY"), "1 JPY");
         assert_eq!(format_fiat_amount("0.499", "JPY"), "0 JPY");
     }
@@ -482,8 +486,12 @@ mod fiat_amount_tests {
     }
 
     #[test]
-    fn sub_minor_unit_amount_rounds_to_zero() {
-        assert_eq!(format_fiat_amount("0.001", "USD"), "0.00 USD");
+    fn unlisted_currency_never_rounds_a_digit_away() {
+        assert_eq!(format_fiat_amount("0.001", "USD"), "0.001 USD");
+        assert_eq!(
+            format_fiat_amount("0.000123450000000000", "BTC"),
+            "0.00012345 BTC"
+        );
     }
 
     #[test]
