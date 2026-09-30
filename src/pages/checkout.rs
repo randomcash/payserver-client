@@ -210,7 +210,7 @@ fn render_checkout(
     if data.is_paid {
         return view! {
             <div class="checkout-status checkout-paid">
-                <div class="checkout-status-icon">"&#10003;"</div>
+                <div class="checkout-status-icon">"✓"</div>
                 <h2>"Payment Complete"</h2>
                 <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
                 <p class="checkout-status-detail">"Thank you for your payment."</p>
@@ -222,7 +222,7 @@ fn render_checkout(
     if data.is_expired {
         return view! {
             <div class="checkout-status checkout-expired">
-                <div class="checkout-status-icon">"&#10007;"</div>
+                <div class="checkout-status-icon">"✗"</div>
                 <h2>"Invoice Expired"</h2>
                 <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
                 <p class="checkout-status-detail">"This invoice is no longer accepting payments."</p>
@@ -234,7 +234,7 @@ fn render_checkout(
     if status == "cancelled" {
         return view! {
             <div class="checkout-status checkout-expired">
-                <div class="checkout-status-icon">"&#10007;"</div>
+                <div class="checkout-status-icon">"✗"</div>
                 <h2>"Invoice Cancelled"</h2>
                 <p class="checkout-amount">{data.amount.clone()}" "{data.currency.clone()}</p>
             </div>
