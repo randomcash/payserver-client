@@ -16,12 +16,15 @@ use crate::services::websocket::{StatusUpdate, WebSocketService};
 use crate::util::chain_name;
 
 /// Minor-unit digits of an ISO 4217 currency: zero for the currencies that
-/// have no subunit, three for the dinar-style ones, two for everything else.
+/// have no subunit, three for the dinar-style ones, four for the two
+/// unit-of-account currencies, two for everything else. Codes are matched
+/// case-insensitively.
 fn currency_minor_units(currency: &str) -> usize {
-    match currency {
+    match currency.to_ascii_uppercase().as_str() {
         "BIF" | "CLP" | "DJF" | "GNF" | "ISK" | "JPY" | "KMF" | "KRW" | "PYG" | "RWF" | "UGX"
         | "UYI" | "VND" | "VUV" | "XAF" | "XOF" | "XPF" => 0,
         "BHD" | "IQD" | "JOD" | "KWD" | "LYD" | "OMR" | "TND" => 3,
+        "CLF" | "UYW" => 4,
         _ => 2,
     }
 }
@@ -461,5 +464,35 @@ mod fiat_amount_tests {
             format_fiat_amount("1.500000000000000000", "KWD"),
             "1.500 KWD"
         );
+    }
+
+    #[test]
+    fn rounds_half_up_rather_than_truncating() {
+        assert_eq!(format_fiat_amount("19.995", "USD"), "20.00 USD");
+        assert_eq!(format_fiat_amount("19.994", "USD"), "19.99 USD");
+        assert_eq!(format_fiat_amount("0.005", "USD"), "0.01 USD");
+        assert_eq!(format_fiat_amount("0.999", "JPY"), "1 JPY");
+        assert_eq!(format_fiat_amount("0.499", "JPY"), "0 JPY");
+    }
+
+    #[test]
+    fn short_or_missing_fraction_is_padded() {
+        assert_eq!(format_fiat_amount("20", "USD"), "20.00 USD");
+        assert_eq!(format_fiat_amount("20.5", "USD"), "20.50 USD");
+    }
+
+    #[test]
+    fn sub_minor_unit_amount_rounds_to_zero() {
+        assert_eq!(format_fiat_amount("0.001", "USD"), "0.00 USD");
+    }
+
+    #[test]
+    fn lowercase_code_uses_the_same_precision() {
+        assert_eq!(format_fiat_amount("2000.0", "jpy"), "2000 jpy");
+    }
+
+    #[test]
+    fn four_decimal_unit_of_account_keeps_four() {
+        assert_eq!(format_fiat_amount("1.5", "CLF"), "1.5000 CLF");
     }
 }
