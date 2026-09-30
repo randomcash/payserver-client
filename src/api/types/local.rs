@@ -140,6 +140,7 @@ pub const API_KEY_UNRESTRICTED_PERMISSION: &str = "unrestricted";
 /// narrower than "every store" has to be built directly against the API.
 pub const API_KEY_GRANTABLE_STORE_ACTIONS: &[(&str, &str)] = &[
     ("ethpay.store.cancreateinvoice", "Create invoices"),
+    ("ethpay.store.canviewinvoices", "View invoices"),
     ("ethpay.store.canviewstoresettings", "View store settings"),
     (
         "ethpay.store.canmodifystoresettings",

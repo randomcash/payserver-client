@@ -54,6 +54,16 @@ async fn submit_create_key(
     }
 }
 
+/// Revoke a key, returning the message to show if the server refused: a
+/// failed revoke looks identical to success once the list refetches.
+async fn submit_revoke_key(client: &ApiClient, id: &str) -> Option<String> {
+    client
+        .revoke_api_key(id)
+        .await
+        .err()
+        .map(|err| format!("Failed to revoke key: {err}"))
+}
+
 /// The scope line shown for a key: on the list, and on a just-created or
 /// just-rotated key. Unrestricted keys get their own class so they read as
 /// the dangerous ones.
@@ -255,21 +265,26 @@ pub fn ApiKeysTab() -> impl IntoView {
         });
     };
 
-    // Revoke handler factory
-    let make_revoke_handler = move |id: String| {
-        let client = api.get();
-        wasm_bindgen_futures::spawn_local(async move {
-            let _ = client.revoke_api_key(&id).await;
-            set_version.update(|v| *v += 1);
-        });
-    };
-
     // State for rotated key display
     let (rotated_key, set_rotated_key) =
         signal(Option::<RotateApiKeyResponseWithPermissions>::None);
     // Error surfaced on a failed rotation — previously the handler swallowed
     // errors silently, leaving the user wondering if the click had any effect.
     let (rotate_error, set_rotate_error) = signal(Option::<String>::None);
+
+    // Revoke handler factory. A failed revoke is surfaced through the same
+    // error card as a failed rotate: the user believes the credential is dead
+    // when the click succeeded, so a silent failure would leave it live.
+    let make_revoke_handler = move |id: String| {
+        let client = api.get();
+        set_rotate_error.set(None);
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Some(msg) = submit_revoke_key(&client, &id).await {
+                set_rotate_error.set(Some(msg));
+            }
+            set_version.update(|v| *v += 1);
+        });
+    };
 
     // Rotate handler factory
     let make_rotate_handler = move |id: String| {
@@ -521,7 +536,12 @@ mod tests {
         assert!(html.contains("Unrestricted"), "{html}");
         // The picker must not offer server-level permissions the server does
         // not enforce individually.
-        assert!(!html.contains("ethpay.server."), "{html}");
+        assert!(
+            API_KEY_GRANTABLE_STORE_ACTIONS
+                .iter()
+                .all(|(policy, _)| policy.starts_with("ethpay.store.")),
+            "the picker offered a non-store permission"
+        );
     }
 
     // The create flow, driven from the form's state through the request on the
@@ -635,15 +655,27 @@ mod tests {
         }
 
         #[test]
+        fn a_refused_revoke_is_reported_and_a_successful_one_is_not() {
+            let (client, seen) = server_double(Some(403));
+            let msg = block_on(submit_revoke_key(&client, KEY_ID)).expect("403 must surface");
+            assert!(msg.contains("Failed to revoke key"), "{msg}");
+            assert_eq!(seen.lock().unwrap().len(), 1);
+
+            let (client, seen) = server_double(None);
+            assert_eq!(block_on(submit_revoke_key(&client, KEY_ID)), None);
+            assert!(seen.lock().unwrap()[0].path.ends_with(KEY_ID));
+        }
+
+        #[test]
         fn unticking_an_action_removes_it_from_the_request() {
             let (client, seen) = server_double(None);
             let mut actions = ticked(&[
                 "ethpay.store.cancreateinvoice",
-                "ethpay.store.canviewinvoices",
+                "ethpay.store.canviewstoresettings",
             ]);
             set_action(
                 &mut actions,
-                "ethpay.store.canviewinvoices".to_string(),
+                "ethpay.store.canviewstoresettings".to_string(),
                 false,
             );
 
