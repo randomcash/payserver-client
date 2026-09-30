@@ -5,6 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use types::InvoiceStatus;
 use uuid::Uuid;
 
@@ -106,7 +107,7 @@ pub struct PluginPageInfo {
 // field.
 //
 // Keep these mirrors until this crate's commons pin is past the commit that
-// adds `permissions` to the shared api-key types, then replace them with the
+// adds `permissions` to the shared api-key types (commons #71), then replace them with the
 // shared ones. There is deliberately no type for editing a key's permissions:
 // the server has no such route. A key's scope is fixed at creation; to change
 // it, create a new key and revoke the old one.
@@ -175,17 +176,37 @@ pub fn describe_api_key_permissions(permissions: &Option<Vec<String>>) -> String
     granted
         .iter()
         .map(|entry| {
-            // A `policy:storeId` entry describes the same action as its
-            // unscoped form for this summary - the list view has no room to
-            // also name the store.
-            let policy = entry.split(':').next().unwrap_or(entry);
-            API_KEY_GRANTABLE_STORE_ACTIONS
+            // A `policy:storeId` entry is marked as narrowed but the store
+            // is not named - the list view has no room for an id.
+            let (policy, store) = match entry.split_once(':') {
+                Some((policy, store)) => (policy, Some(store).filter(|s| !s.is_empty())),
+                None => (entry.as_str(), None),
+            };
+            let label = API_KEY_GRANTABLE_STORE_ACTIONS
                 .iter()
                 .find(|(p, _)| *p == policy)
-                .map_or(policy, |(_, label)| label)
+                .map_or(policy, |(_, label)| label);
+            match store {
+                Some(_) => format!("{label} (one store)"),
+                None => label.to_string(),
+            }
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// The `permissions` list to send when creating a key. "Unrestricted" wins
+/// over any checked action; otherwise only actions this client knows how to
+/// grant are sent, in a stable order.
+pub fn build_api_key_permissions(unrestricted: bool, actions: &HashSet<String>) -> Vec<String> {
+    if unrestricted {
+        return vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()];
+    }
+    API_KEY_GRANTABLE_STORE_ACTIONS
+        .iter()
+        .filter(|(policy, _)| actions.contains(*policy))
+        .map(|(policy, _)| policy.to_string())
+        .collect()
 }
 
 /// `CreateApiKeyRequest` (api-types) plus the permission scope chosen at
@@ -231,7 +252,8 @@ pub struct CreateApiKeyResponseWithPermissions {
     pub expires_at: Option<DateTime<Utc>>,
     /// The plaintext API key. Store this securely — it cannot be retrieved again.
     pub key: String,
-    pub permissions: Vec<String>,
+    /// `None` if the server omits it; read as inheriting the owner's role.
+    pub permissions: Option<Vec<String>>,
 }
 
 /// `POST /api/users/api-keys/{id}/rotate` response, with permission scope.

@@ -3,10 +3,10 @@
 use std::collections::HashSet;
 
 use crate::api::{
-    API_KEY_GRANTABLE_STORE_ACTIONS, API_KEY_UNRESTRICTED_PERMISSION, ApiClient,
-    ApiKeyInfoWithPermissions, CreateApiKeyRequestWithPermissions,
-    CreateApiKeyResponseWithPermissions, RotateApiKeyResponseWithPermissions,
-    api_key_is_unrestricted, describe_api_key_permissions,
+    API_KEY_GRANTABLE_STORE_ACTIONS, ApiClient, ApiKeyInfoWithPermissions,
+    CreateApiKeyRequestWithPermissions, CreateApiKeyResponseWithPermissions,
+    RotateApiKeyResponseWithPermissions, api_key_is_unrestricted, build_api_key_permissions,
+    describe_api_key_permissions,
 };
 use leptos::prelude::*;
 
@@ -46,15 +46,19 @@ pub fn ApiKeysTab() -> impl IntoView {
         if name.trim().is_empty() {
             return;
         }
+        let permissions =
+            build_api_key_permissions(new_key_unrestricted.get(), &new_key_store_actions.get());
+        if permissions.is_empty() {
+            set_create_error.set(Some(
+                "Grant at least one permission: a key with none cannot do anything.".to_string(),
+            ));
+            return;
+        }
         let client = api.get();
         let request = CreateApiKeyRequestWithPermissions {
             name: name.trim().to_string(),
             expires_at: None,
-            permissions: if new_key_unrestricted.get() {
-                vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()]
-            } else {
-                new_key_store_actions.get().into_iter().collect()
-            },
+            permissions,
         };
         set_loading.set(true);
         set_create_error.set(None);
@@ -248,7 +252,7 @@ pub fn ApiKeysTab() -> impl IntoView {
                         <code class="api-key-value" style="display: block; margin: 8px 0; padding: 8px; background: var(--color-bg-secondary); word-break: break-all;">
                             {key.key.clone()}
                         </code>
-                        <p class="section-desc">"Can do: "{describe_api_key_permissions(&Some(key.permissions.clone()))}</p>
+                        <p class="section-desc">"Can do: "{describe_api_key_permissions(&key.permissions)}</p>
                         <button
                             class="ps-btn ps-btn-ghost ps-btn-sm"
                             on:click=move |_| set_created_key.set(None)
