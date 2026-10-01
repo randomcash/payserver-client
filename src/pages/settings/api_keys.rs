@@ -64,6 +64,18 @@ async fn submit_revoke_key(client: &ApiClient, id: &str) -> Option<String> {
         .map(|err| format!("Failed to revoke key: {err}"))
 }
 
+/// Rotate a key, returning the new key (with the scope it carried over) or
+/// the message to show.
+async fn submit_rotate_key(
+    client: &ApiClient,
+    id: &str,
+) -> Result<RotateApiKeyResponseWithPermissions, String> {
+    client
+        .rotate_api_key(id)
+        .await
+        .map_err(|err| format!("Failed to rotate key: {err}"))
+}
+
 /// The scope line shown for a key: on the list, and on a just-created or
 /// just-rotated key. Unrestricted keys get their own class so they read as
 /// the dangerous ones.
@@ -291,14 +303,12 @@ pub fn ApiKeysTab() -> impl IntoView {
         let client = api.get();
         set_rotate_error.set(None);
         wasm_bindgen_futures::spawn_local(async move {
-            match client.rotate_api_key(&id).await {
+            match submit_rotate_key(&client, &id).await {
                 Ok(resp) => {
                     set_rotated_key.set(Some(resp));
                     set_version.update(|v| *v += 1);
                 }
-                Err(err) => {
-                    set_rotate_error.set(Some(format!("Failed to rotate key: {err}")));
-                }
+                Err(msg) => set_rotate_error.set(Some(msg)),
             }
         });
     };
@@ -749,6 +759,73 @@ mod tests {
             assert!(row.contains("Full access"), "{row}");
             assert!(row.contains("Rotate"), "{row}");
             assert!(row.contains("Revoke"), "{row}");
+        }
+
+        #[test]
+        fn rotating_posts_to_the_rotate_route_and_carries_the_scope_over() {
+            let seen = Arc::new(Mutex::new(Vec::new()));
+            let log = seen.clone();
+            let transport: TestTransport = Arc::new(move |spec| {
+                log.lock().unwrap().push(spec.clone());
+                Ok(serde_json::json!({
+                    "id": KEY_ID,
+                    "name": "ci",
+                    "key_prefix": "rcs_wxyz",
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "key": "rcs_wxyz_secret",
+                    "old_key_deprecated_at": "2026-01-01T00:00:00Z",
+                    "old_key_grace_expires_at": "2026-01-02T00:00:00Z",
+                    "permissions": ["ethpay.store.cancreateinvoice"],
+                }))
+            });
+            let client = ApiClient::with_test_transport("", transport);
+
+            let rotated = block_on(submit_rotate_key(&client, KEY_ID)).expect("rotate succeeds");
+
+            let sent = seen.lock().unwrap().clone();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(sent[0].method, "POST");
+            assert_eq!(sent[0].path, format!("/api/users/api-keys/{KEY_ID}/rotate"));
+            let card = scope_html(rotated.permissions);
+            assert!(card.contains("Create invoices"), "{card}");
+            assert!(!card.contains("Full access"), "{card}");
+        }
+
+        #[test]
+        fn a_refused_rotate_is_reported() {
+            let (client, _) = server_double(Some(403));
+            let msg = block_on(submit_rotate_key(&client, KEY_ID)).expect_err("403 must surface");
+            assert!(msg.contains("Failed to rotate key"), "{msg}");
+        }
+
+        #[test]
+        fn the_list_call_carries_the_servers_scope_into_the_row() {
+            let transport: TestTransport = Arc::new(|spec| {
+                assert_eq!(
+                    (spec.method, spec.path.as_str()),
+                    ("GET", "/api/users/api-keys")
+                );
+                Ok(serde_json::json!({ "keys": [{
+                    "id": KEY_ID,
+                    "name": "ci",
+                    "key_prefix": "rcs_abcd",
+                    "is_active": true,
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "last_used_at": null,
+                    "expires_at": null,
+                    "rate_limit_rpm": null,
+                    "deprecated_at": null,
+                    "deprecation_expires_at": null,
+                    "permissions": ["ethpay.store.canviewinvoices"],
+                }]}))
+            });
+            let client = ApiClient::with_test_transport("", transport);
+            let keys = block_on(client.list_api_keys())
+                .expect("list succeeds")
+                .keys;
+            let row = list_row_html(serde_json::json!(keys[0].permissions));
+            assert!(!row.contains("Full access"), "{row}");
+            assert!(row.contains("View invoices"), "{row}");
         }
     }
 }
