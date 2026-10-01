@@ -4,9 +4,6 @@
 # meant to shrink. Do not add to it to make a build pass.
 # Regenerate: scripts/check-classes-styled.py --update-baseline
 admin-users-table
-alert
-alert-error
-alert-success
 branding-preview
 chart-card-main
 color-input-row

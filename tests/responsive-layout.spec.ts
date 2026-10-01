@@ -376,3 +376,26 @@ test.describe('recovery confirm step', () => {
     expect(step, 'the step container should not repeat it').toBe('rgba(0, 0, 0, 0)');
   });
 });
+
+test.describe('safe-mode banner', () => {
+  // The markup the admin tab renders when the server reports safe mode.
+  const BANNER = `
+    <div class="alert alert-error">
+      <strong>⚠ SAFE MODE: every plugin is disabled</strong>
+      <p>The server booted with plugins disabled.</p>
+    </div>`;
+
+  test('is visibly styled rather than plain text', async ({ page }) => {
+    await page.setContent(`<style>${CSS}</style>${BANNER}`);
+    const banner = page.locator('.alert-error');
+    await expect(banner).toBeVisible();
+
+    const style = await banner.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { bg: s.backgroundColor, border: s.borderTopColor, borderWidth: s.borderTopWidth };
+    });
+    expect(style.bg, 'banner should have a tinted background').not.toBe('rgba(0, 0, 0, 0)');
+    expect(style.borderWidth, 'banner should have a border').not.toBe('0px');
+    expect(style.border).not.toBe('rgba(0, 0, 0, 0)');
+  });
+});
