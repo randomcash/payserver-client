@@ -1081,11 +1081,14 @@ fn a_store_scoped_action_reads_as_narrowed() {
 }
 
 #[test]
-fn a_scope_suffix_with_no_store_reads_as_unscoped() {
+fn a_scope_suffix_with_no_store_still_reads_as_narrowed() {
+    // The server refuses such an entry on create and never matches it on
+    // check, so it grants nothing; the summary must not show it as reaching
+    // every store.
     let perms = vec!["ethpay.store.cancreateinvoice:".to_string()];
     assert_eq!(
         describe_api_key_permissions(&Some(perms)),
-        "Create invoices"
+        "Create invoices (one store)"
     );
 }
 

@@ -103,9 +103,8 @@ pub struct PluginPageInfo {
 // `api-types` lives in payserver-commons, and landing a field there is the
 // three-step dance (merge, bump the pinned rev, `cargo update`) described in
 // this repo's `CLAUDE.md`. The wire shape only grows a field on top of the pinned types,
-// so nothing about the existing `ApiKeyInfo`/`CreateApiKeyRequest` aliases
-// breaks; these are additional types for the endpoints that need the extra
-// field.
+// so the pinned `api_types` api-key structs are no longer re-exported
+// from `types`; the local mirrors below take their place.
 //
 // Keep these mirrors until this crate's commons pin is past the commit that
 // adds `permissions` to the shared api-key types (commons #71), then replace them with the
@@ -119,13 +118,13 @@ pub struct PluginPageInfo {
 /// wasm on the server. Kept apart from the store actions below - it also
 /// covers `ethpay.server.*`/`ethpay.user.*` gates, none of which this
 /// server enforces individually (every one is a bare
-/// `role == Role::ServerAdmin` comparison), so a checkbox for one of those
+/// role comparison), so a checkbox for one of those
 /// specifically would promise control the server cannot back up.
 pub const API_KEY_UNRESTRICTED_PERMISSION: &str = "unrestricted";
 
 /// Store-scoped actions this server enforces individually, in SQL, at real
 /// call sites (invoice creation, store settings, store membership) - see
-/// `user_has_store_permission` and its callers in `server/src/api/`. Unlike
+/// the server's per-store permission check. Unlike
 /// the server/user policies folded into "unrestricted" above, checking one
 /// of these and leaving the rest unchecked genuinely grants only that one.
 ///
@@ -179,9 +178,11 @@ pub fn describe_api_key_permissions(permissions: &Option<Vec<String>>) -> String
         .iter()
         .map(|entry| {
             // A `policy:storeId` entry is marked as narrowed but the store
-            // is not named - the list view has no room for an id.
+            // is not named - the list view has no room for an id. Any
+            // suffix counts, even an empty one: the server never matches a
+            // malformed id, so showing it as unscoped would overstate reach.
             let (policy, store) = match entry.split_once(':') {
-                Some((policy, store)) => (policy, Some(store).filter(|s| !s.is_empty())),
+                Some((policy, store)) => (policy, Some(store)),
                 None => (entry.as_str(), None),
             };
             let label = API_KEY_GRANTABLE_STORE_ACTIONS
