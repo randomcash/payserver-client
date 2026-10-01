@@ -18,7 +18,7 @@ cd "$repo_root"
 
 # wasm-bindgen-test-runner has to match the wasm-bindgen version this crate
 # builds against exactly, or it refuses to run the test binary at all.
-version="$(grep -m1 -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep -m1 -oP 'version = "\K[^"]+')"
+version="$(grep -m1 -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep -m1 -oP 'version = "\K[^"]+' || true)"
 [ -n "$version" ] || { echo "::error::no wasm-bindgen version found in Cargo.lock" >&2; exit 1; }
 
 command -v node >/dev/null || { echo "::error::node is required to run wasm-bindgen-test" >&2; exit 1; }
