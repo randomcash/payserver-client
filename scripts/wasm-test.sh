@@ -43,7 +43,7 @@ names="$(git grep -h -E '^\s*(#\[wasm_bindgen_test\]|(pub )?(async )?fn \w+)' --
 out="$(cargo test --target wasm32-unknown-unknown --lib 2>&1)" || { echo "$out"; exit 1; }
 echo "$out"
 for name in $names; do
-  grep -qE "^test (.*::)?wallet_tx_assembly_tests::${name} \.\.\. ok$" <<<"$out" || {
+  grep -qE "^test (.*::)?${name} \.\.\. ok$" <<<"$out" || {
     echo "::error::wasm_bindgen_test '$name' is tagged but was not reported as passing" >&2
     exit 1
   }
