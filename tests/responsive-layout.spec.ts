@@ -378,24 +378,44 @@ test.describe('recovery confirm step', () => {
 });
 
 test.describe('safe-mode banner', () => {
-  // The markup the admin tab renders when the server reports safe mode.
-  const BANNER = `
-    <div class="alert alert-error">
-      <strong>⚠ SAFE MODE: every plugin is disabled</strong>
-      <p>The server booted with plugins disabled.</p>
-    </div>`;
+  // The banner is taken from the Rust source rather than retyped here. The
+  // client is wasm and needs a trunk build plus an authenticated admin session
+  // to reach the safe-mode branch, which this server-less suite cannot do; but
+  // a hand-copied snippet would keep passing after the real markup moved to a
+  // different class. Reading the `SafeModeBanner::Active` arm means a change
+  // of classes there changes what is asserted here.
+  const SRC = readFileSync(path.join(__dirname, '../src/pages/settings/admin.rs'), 'utf8');
+  const arm = SRC.match(/SafeModeBanner::Active => view! \{\s*<div class="([^"]+)">/);
 
-  test('is visibly styled rather than plain text', async ({ page }) => {
-    await page.setContent(`<style>${CSS}</style>${BANNER}`);
-    const banner = page.locator('.alert-error');
-    await expect(banner).toBeVisible();
+  test('the active arm of the real admin tab is found', () => {
+    expect(arm, 'could not locate the SafeModeBanner::Active markup in admin.rs').not.toBeNull();
+  });
 
-    const style = await banner.evaluate((el) => {
+  test('is visibly styled in the error tone rather than plain text', async ({ page }) => {
+    const classes = arm![1];
+    await page.setContent(
+      `<style>${CSS}</style><div class="${classes}"><strong>SAFE MODE</strong><p>plugins disabled</p></div>`,
+    );
+    await expect(page.locator('div').first()).toBeVisible();
+
+    const probe = await page.evaluate(() => {
+      const el = document.querySelector('div')!;
       const s = getComputedStyle(el);
-      return { bg: s.backgroundColor, border: s.borderTopColor, borderWidth: s.borderTopWidth };
+      // Resolve the token through a throwaway element so the expected value is
+      // in the same rgb() form as the computed one.
+      const t = document.createElement('i');
+      t.style.color = getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim();
+      document.body.appendChild(t);
+      return {
+        bg: s.backgroundColor,
+        borderColor: s.borderTopColor,
+        borderWidth: s.borderTopWidth,
+        error: getComputedStyle(t).color,
+        pageBg: getComputedStyle(document.body).backgroundColor,
+      };
     });
-    expect(style.bg, 'banner should have a tinted background').not.toBe('rgba(0, 0, 0, 0)');
-    expect(style.borderWidth, 'banner should have a border').not.toBe('0px');
-    expect(style.border).not.toBe('rgba(0, 0, 0, 0)');
+    expect(probe.borderWidth, 'banner should have a border').not.toBe('0px');
+    expect(probe.borderColor, 'border should be the error colour').toBe(probe.error);
+    expect(probe.bg, 'banner background should differ from the page').not.toBe(probe.pageBg);
   });
 });
