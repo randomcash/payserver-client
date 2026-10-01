@@ -410,11 +410,13 @@ test.describe('safe-mode banner', () => {
         bg: s.backgroundColor,
         borderColor: s.borderTopColor,
         borderWidth: s.borderTopWidth,
+        token: getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim(),
         error: getComputedStyle(t).color,
         headingColor: getComputedStyle(el.firstElementChild!).color,
         pageBg: getComputedStyle(document.body).backgroundColor,
       };
     });
+    expect(probe.token, '--color-error must resolve, or the colour checks compare fallbacks').not.toBe('');
     expect(probe.borderWidth, 'banner should have a border').not.toBe('0px');
     expect(probe.borderColor, 'border should be the error colour').toBe(probe.error);
     expect(probe.headingColor, 'heading should carry the error tone').toBe(probe.error);
