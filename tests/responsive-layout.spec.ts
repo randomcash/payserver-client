@@ -385,16 +385,16 @@ test.describe('safe-mode banner', () => {
   // different class. Reading the `SafeModeBanner::Active` arm means a change
   // of classes there changes what is asserted here.
   const SRC = readFileSync(path.join(__dirname, '../src/pages/settings/admin.rs'), 'utf8');
-  const arm = SRC.match(/SafeModeBanner::Active => view! \{\s*<div class="([^"]+)">/);
+  const arm = SRC.match(/SafeModeBanner::Active => view! \{\s*<div class="([^"]+)">\s*<(\w+)>/);
 
   test('the active arm of the real admin tab is found', () => {
     expect(arm, 'could not locate the SafeModeBanner::Active markup in admin.rs').not.toBeNull();
   });
 
   test('is visibly styled in the error tone rather than plain text', async ({ page }) => {
-    const classes = arm![1];
+    const [, classes, heading] = arm!;
     await page.setContent(
-      `<style>${CSS}</style><div class="${classes}"><strong>SAFE MODE</strong><p>plugins disabled</p></div>`,
+      `<style>${CSS}</style><div class="${classes}"><${heading}>SAFE MODE</${heading}><p>plugins disabled</p></div>`,
     );
     await expect(page.locator('div').first()).toBeVisible();
 
@@ -411,11 +411,13 @@ test.describe('safe-mode banner', () => {
         borderColor: s.borderTopColor,
         borderWidth: s.borderTopWidth,
         error: getComputedStyle(t).color,
+        headingColor: getComputedStyle(el.firstElementChild!).color,
         pageBg: getComputedStyle(document.body).backgroundColor,
       };
     });
     expect(probe.borderWidth, 'banner should have a border').not.toBe('0px');
     expect(probe.borderColor, 'border should be the error colour').toBe(probe.error);
+    expect(probe.headingColor, 'heading should carry the error tone').toBe(probe.error);
     expect(probe.bg, 'banner background should differ from the page').not.toBe(probe.pageBg);
   });
 });
