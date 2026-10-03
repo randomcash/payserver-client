@@ -4,8 +4,9 @@ use serde::Deserialize;
 
 use super::{ApiClient, ApiError};
 use crate::api::{
-    ApiKeyListResponse, CreateApiKeyRequest, CreateApiKeyResponsePayload, DashboardAnalytics,
-    DashboardStats, RotateApiKeyResponse, ServerSettingsResponse, UpdateServerSettingsRequest,
+    ApiKeyListResponseWithPermissions, CreateApiKeyRequestWithPermissions,
+    CreateApiKeyResponseWithPermissions, DashboardAnalytics, DashboardStats,
+    RotateApiKeyResponseWithPermissions, ServerSettingsResponse, UpdateServerSettingsRequest,
     UpdateUserRoleRequest, UserInfo, UserListResponse,
 };
 
@@ -106,16 +107,17 @@ impl ApiClient {
     // API Keys
     // =========================================================================
 
-    /// List API keys for the authenticated user.
-    pub async fn list_api_keys(&self) -> Result<ApiKeyListResponse, ApiError> {
+    /// List API keys for the authenticated user, including what each one
+    /// can do.
+    pub async fn list_api_keys(&self) -> Result<ApiKeyListResponseWithPermissions, ApiError> {
         self.get("/api/users/api-keys").await
     }
 
-    /// Create a new API key.
+    /// Create a new API key, scoped to the given permission set.
     pub async fn create_api_key(
         &self,
-        request: &CreateApiKeyRequest,
-    ) -> Result<CreateApiKeyResponsePayload, ApiError> {
+        request: &CreateApiKeyRequestWithPermissions,
+    ) -> Result<CreateApiKeyResponseWithPermissions, ApiError> {
         self.post("/api/users/api-keys", request).await
     }
 
@@ -124,8 +126,12 @@ impl ApiClient {
         self.delete(&format!("/api/users/api-keys/{}", id)).await
     }
 
-    /// Rotate an API key (deprecates old, creates new).
-    pub async fn rotate_api_key(&self, id: &str) -> Result<RotateApiKeyResponse, ApiError> {
+    /// Rotate an API key (deprecates old, creates new). The replacement
+    /// carries over the old key's permission scope.
+    pub async fn rotate_api_key(
+        &self,
+        id: &str,
+    ) -> Result<RotateApiKeyResponseWithPermissions, ApiError> {
         self.post_empty(&format!("/api/users/api-keys/{}/rotate", id))
             .await
     }

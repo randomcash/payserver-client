@@ -3,8 +3,11 @@
 //! Everything here is genuinely client-side. Anything the API actually speaks
 //! belongs in `api-types` so both ends compile against one definition.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use types::InvoiceStatus;
+use uuid::Uuid;
 
 use super::Store;
 
@@ -90,4 +93,212 @@ pub struct PluginPageInfo {
     pub path: String,
     pub label: String,
     pub icon: payserver_plugin_api::PageIcon,
+}
+
+// =========================================================================
+// API key permission scope
+//
+// Hand-mirrors the server's `permissions` field on API key requests and
+// responses rather than extending the pinned `api_types` structs for them:
+// `api-types` lives in payserver-commons, and landing a field there is the
+// three-step dance (merge, bump the pinned rev, `cargo update`) described in
+// this repo's `CLAUDE.md`. The wire shape only grows a field on top of the pinned types,
+// so the pinned `api_types` api-key structs are no longer re-exported
+// from `types`; the local mirrors below take their place.
+//
+// Keep these mirrors until this crate's commons pin is past the commit that
+// adds `permissions` to the shared api-key types (commons #71), then replace them with the
+// shared ones. There is deliberately no type for editing a key's permissions:
+// the server has no such route. A key's scope is fixed at creation; to change
+// it, create a new key and revoke the old one.
+// =========================================================================
+
+/// Unrestricted access: equivalent to the key owner's full role, including
+/// installing a plugin, which runs arbitrary SQL migrations and arbitrary
+/// wasm on the server. Kept apart from the store actions below - it also
+/// covers `ethpay.server.*`/`ethpay.user.*` gates, none of which this
+/// server enforces individually (every one is a bare
+/// role comparison), so a checkbox for one of those
+/// specifically would promise control the server cannot back up.
+pub const API_KEY_UNRESTRICTED_PERMISSION: &str = "unrestricted";
+
+/// Store-scoped actions this server enforces individually, in SQL, at real
+/// call sites (invoice creation, store settings, store membership) - see
+/// the server's per-store permission check. Unlike
+/// the server/user policies folded into "unrestricted" above, checking one
+/// of these and leaving the rest unchecked genuinely grants only that one.
+///
+/// Hand-mirrored from `auth::Policies` (payserver-commons) plus two more
+/// (`canviewstoreusers`/`canmodifystoreusers`) that exist only as literal
+/// strings on the server side today, not yet promoted to that enum.
+///
+/// Each entry a key requests here is granted unscoped - every store the
+/// owner can reach - which is the server's default and the only shape this
+/// form produces. The server also accepts a `policy:storeId` suffix to
+/// narrow a grant to one store; there is no control for that yet, so a key
+/// narrower than "every store" has to be built directly against the API.
+pub const API_KEY_GRANTABLE_STORE_ACTIONS: &[(&str, &str)] = &[
+    ("ethpay.store.cancreateinvoice", "Create invoices"),
+    ("ethpay.store.canviewinvoices", "View invoices"),
+    ("ethpay.store.canviewstoresettings", "View store settings"),
+    (
+        "ethpay.store.canmodifystoresettings",
+        "Modify store settings",
+    ),
+    ("ethpay.store.canviewstoreusers", "View store members"),
+    ("ethpay.store.canmodifystoreusers", "Manage store members"),
+];
+
+/// Whether a stored permission scope grants full, unrestricted access - the
+/// same test the server applies when deciding whether to downgrade a
+/// request's effective role. `None` (inherits the owner's role in full)
+/// counts, same as an explicit `["unrestricted"]` entry.
+pub fn api_key_is_unrestricted(permissions: &Option<Vec<String>>) -> bool {
+    match permissions {
+        None => true,
+        Some(perms) => perms.iter().any(|p| p == API_KEY_UNRESTRICTED_PERMISSION),
+    }
+}
+
+/// Human-readable summary of an API key's scope, for the key list - the
+/// whole point being that "testnet e2e key" should never again read as
+/// harmless when it is not.
+pub fn describe_api_key_permissions(permissions: &Option<Vec<String>>) -> String {
+    if api_key_is_unrestricted(permissions) {
+        return match permissions {
+            None => "Full access (inherits your role)".to_string(),
+            Some(_) => "Full access (unrestricted)".to_string(),
+        };
+    }
+    let granted = permissions.as_deref().unwrap_or(&[]);
+    if granted.is_empty() {
+        return "No permissions granted".to_string();
+    }
+    granted
+        .iter()
+        .map(|entry| {
+            // A `policy:storeId` entry is marked as narrowed but the store
+            // is not named - the list view has no room for an id. Any
+            // suffix counts, even an empty one: the server never matches a
+            // malformed id, so showing it as unscoped would overstate reach.
+            let (policy, store) = match entry.split_once(':') {
+                Some((policy, store)) => (policy, Some(store)),
+                None => (entry.as_str(), None),
+            };
+            let label = API_KEY_GRANTABLE_STORE_ACTIONS
+                .iter()
+                .find(|(p, _)| *p == policy)
+                .map_or(policy, |(_, label)| label);
+            match store {
+                Some(_) => format!("{label} (one store)"),
+                None => label.to_string(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The `permissions` list to send when creating a key. "Unrestricted" wins
+/// over any checked action; otherwise only actions this client knows how to
+/// grant are sent, in a stable order.
+pub fn build_api_key_permissions(unrestricted: bool, actions: &HashSet<String>) -> Vec<String> {
+    if unrestricted {
+        return vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()];
+    }
+    API_KEY_GRANTABLE_STORE_ACTIONS
+        .iter()
+        .filter(|(policy, _)| actions.contains(*policy))
+        .map(|(policy, _)| policy.to_string())
+        .collect()
+}
+
+/// What the create form submits, or the reason it must not be sent: a blank
+/// name is ignored, and a key with no permission at all is refused before the
+/// server is asked, since the server reads an empty list as "authenticate and
+/// nothing else".
+pub fn plan_create_api_key_request(
+    name: &str,
+    unrestricted: bool,
+    actions: &HashSet<String>,
+) -> Result<CreateApiKeyRequestWithPermissions, CreateKeyRefusal> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CreateKeyRefusal::BlankName);
+    }
+    let permissions = build_api_key_permissions(unrestricted, actions);
+    if permissions.is_empty() {
+        return Err(CreateKeyRefusal::NoPermissions);
+    }
+    Ok(CreateApiKeyRequestWithPermissions {
+        name: name.to_string(),
+        expires_at: None,
+        permissions,
+    })
+}
+
+/// Why `plan_create_api_key_request` declined to build a request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateKeyRefusal {
+    BlankName,
+    NoPermissions,
+}
+
+/// `CreateApiKeyRequest` (api-types) plus the permission scope chosen at
+/// creation.
+#[derive(Debug, Clone, Serialize)]
+pub struct CreateApiKeyRequestWithPermissions {
+    pub name: String,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub permissions: Vec<String>,
+}
+
+/// `ApiKeyInfo` (api-types) plus the permission scope.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApiKeyInfoWithPermissions {
+    pub id: Uuid,
+    pub name: String,
+    pub key_prefix: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub rate_limit_rpm: Option<i32>,
+    pub deprecated_at: Option<DateTime<Utc>>,
+    pub deprecation_expires_at: Option<DateTime<Utc>>,
+    /// `None` means the key inherits its owner's role in full.
+    pub permissions: Option<Vec<String>>,
+}
+
+/// `GET /api/users/api-keys`, with permission scope.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApiKeyListResponseWithPermissions {
+    pub keys: Vec<ApiKeyInfoWithPermissions>,
+}
+
+/// `POST /api/users/api-keys` response, with permission scope.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateApiKeyResponseWithPermissions {
+    pub id: Uuid,
+    pub name: String,
+    pub key_prefix: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+    /// The plaintext API key. Store this securely — it cannot be retrieved again.
+    pub key: String,
+    /// `None` if the server omits it; read as inheriting the owner's role.
+    pub permissions: Option<Vec<String>>,
+}
+
+/// `POST /api/users/api-keys/{id}/rotate` response, with permission scope.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RotateApiKeyResponseWithPermissions {
+    pub id: Uuid,
+    pub name: String,
+    pub key_prefix: String,
+    pub created_at: DateTime<Utc>,
+    pub key: String,
+    pub old_key_deprecated_at: DateTime<Utc>,
+    pub old_key_grace_expires_at: DateTime<Utc>,
+    pub permissions: Option<Vec<String>>,
 }

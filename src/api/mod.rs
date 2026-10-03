@@ -1,6 +1,6 @@
 //! API client for a payserver.
 
-mod client;
+pub(crate) mod client;
 mod types;
 
 pub use self::types::*;
