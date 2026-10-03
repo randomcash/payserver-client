@@ -26,6 +26,8 @@ pub mod app;
 pub mod components;
 pub mod pages;
 pub mod services;
+#[cfg(test)]
+mod style_check;
 pub mod telemetry;
 pub mod util;
 

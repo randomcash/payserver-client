@@ -130,3 +130,89 @@ pub fn NoStoreSelected(
     }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    /// The stylesheet, read at compile time so the check below is against the
+    /// file that actually ships.
+    const STYLES: &str = include_str!("../../styles.css");
+
+    /// This file, likewise, so the class names in its markup are checked
+    /// rather than a list of them that someone has to remember to update.
+    const SOURCE: &str = include_str!("feedback.rs");
+
+    // `is_defined` and the literal-class scanner live in `crate::style_check`,
+    // shared with `pages/plugin_page.rs`'s copy of this same check, so the
+    // two cannot drift apart.
+    use crate::style_check::{has_dynamic_class_attribute, is_defined, literal_classes};
+
+    /// Every class these components put in the markup must exist in the
+    /// stylesheet.
+    ///
+    /// `LoadingState` and `LoadingInline` used to fail this: `loading-container`,
+    /// `loading-spinner`, `loading-text`, `loading-inline`, `loading-spinner-sm`
+    /// and `loading-text-sm` were all emitted and none of them styled, so a
+    /// slow-loading invoice list or invoice detail page rendered as a blank
+    /// div rather than a spinner - the build stayed green because a missing
+    /// class is not a compile error, only a silent one.
+    ///
+    /// `SOURCE` is the whole file, so `ErrorState`'s `error-container`,
+    /// `error-icon` and `error-message` go through this same scan - they are
+    /// not a separate, untested addition, they are the same bug in the
+    /// component next to `LoadingState` in this file.
+    #[test]
+    fn every_class_these_components_emit_is_defined_in_the_stylesheet() {
+        let mut missing = Vec::new();
+
+        for class in literal_classes(SOURCE) {
+            if !is_defined(STYLES, &class) {
+                missing.push(class);
+            }
+        }
+
+        missing.sort();
+        missing.dedup();
+        assert!(
+            missing.is_empty(),
+            "these classes are emitted by the shared feedback components and defined \
+             nowhere in styles.css, so they style nothing: {missing:?}"
+        );
+    }
+
+    /// `literal_classes` only sees a class written as `class="..."`. A class
+    /// built as `class={some_helper()}`, the brace-free `class=some_helper()`,
+    /// or a conditional `class:name=condition` toggle would be invisible to
+    /// it - exactly the gap `plugin_page.rs` closes by calling its own
+    /// class-choosing functions (`tone_class`, `notice_class`,
+    /// `button_class`) and checking their output directly.
+    /// `has_dynamic_class_attribute` (see its own ablation test in
+    /// `style_check.rs`) can actually detect all three forms. None of the
+    /// components here choose a class that way today, so this check exists
+    /// to keep that fact loud: the day one does, it must fail until the
+    /// class is added to the scan above, the same way `plugin_page.rs`'s
+    /// `from_functions` list is kept in step with the enums it reads.
+    #[test]
+    fn no_class_is_computed_outside_the_literal_scan_above() {
+        assert!(
+            !has_dynamic_class_attribute(SOURCE),
+            "a class attribute written as an expression rather than a literal string \
+             appeared in this file - the literal-string scan above cannot see it, so \
+             add its possible outputs to that scan the way plugin_page.rs's \
+             `from_functions` list does, or a class here can go unstyled with a green \
+             build"
+        );
+    }
+
+    /// The check above only means something if it can fail.
+    #[test]
+    fn a_class_the_stylesheet_does_not_define_is_detected() {
+        assert!(
+            !is_defined(STYLES, "definitely-not-a-class-in-this-stylesheet"),
+            "the detector must not report an undefined class as present"
+        );
+        assert!(
+            is_defined(STYLES, "loading-container"),
+            "and must find one that is present"
+        );
+    }
+}
