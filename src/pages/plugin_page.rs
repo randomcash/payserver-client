@@ -708,19 +708,36 @@ mod tests {
 
     #[test]
     fn a_figure_tones_the_value_itself_not_a_badge_beside_it() {
-        let html = render(&PageElement::Figure(Figure {
-            label: "Lapsed".to_string(),
-            value: "7".to_string(),
-            tone: Tone::Danger,
-        }))
-        .to_html();
-        assert!(html.contains("ps-stat-label") && html.contains("Lapsed"));
-        assert!(html.contains(r#"class="ps-stat-value ps-stat-value-danger""#));
-        assert!(strip_tags(&html).contains('7'));
-        assert!(
-            !html.contains("badge"),
-            "a figure must never fall back to a coloured pill"
-        );
+        let figure = |tone| {
+            render(&PageElement::Figure(Figure {
+                label: "Lapsed".to_string(),
+                value: "7".to_string(),
+                tone,
+            }))
+            .to_html()
+        };
+        for tone in [
+            Tone::Neutral,
+            Tone::Info,
+            Tone::Success,
+            Tone::Warning,
+            Tone::Danger,
+        ] {
+            let html = figure(tone);
+            assert!(html.contains("ps-stat-label") && html.contains("Lapsed"));
+            assert!(
+                html.contains(figure_value_class(tone)),
+                "{tone:?} must reach the value element"
+            );
+            assert!(strip_tags(&html).contains('7'));
+            assert!(
+                !html.contains("badge"),
+                "a figure must never fall back to a coloured pill"
+            );
+        }
+        // The tone must change the output, not be hardcoded.
+        assert_ne!(figure(Tone::Neutral), figure(Tone::Danger));
+        assert_ne!(figure(Tone::Success), figure(Tone::Warning));
     }
 
     #[test]
