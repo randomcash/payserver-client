@@ -23,8 +23,8 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 use payserver_plugin_api::page::{
-    Badge, Button, ButtonVariant, Card, Direction, Fields, Form, Grid, Input, Notice, PageElement,
-    Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone,
+    Badge, Button, ButtonVariant, Card, Direction, Fields, Figure, Form, Grid, Input, Notice,
+    PageElement, Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone,
 };
 
 use crate::api::ApiClient;
@@ -59,6 +59,20 @@ fn tone_class(tone: Tone) -> &'static str {
     }
 }
 
+// `ps-stat-value`, not `stat-value`: same reasoning as `ps-card` above, and
+// these classes were already sitting unused in the stylesheet waiting for a
+// dashboard tile to draw with them. Neutral carries no modifier because the
+// base rule's colour is already the neutral one.
+fn figure_value_class(tone: Tone) -> &'static str {
+    match tone {
+        Tone::Neutral => "ps-stat-value",
+        Tone::Info => "ps-stat-value ps-stat-value-info",
+        Tone::Success => "ps-stat-value ps-stat-value-success",
+        Tone::Warning => "ps-stat-value ps-stat-value-warning",
+        Tone::Danger => "ps-stat-value ps-stat-value-danger",
+    }
+}
+
 fn notice_class(tone: Tone) -> &'static str {
     match tone {
         Tone::Neutral => "plugin-notice plugin-notice-neutral",
@@ -83,6 +97,17 @@ fn render(element: &PageElement) -> AnyView {
     match element {
         PageElement::Badge(Badge { text, tone }) => view! {
             <span class=tone_class(*tone)>{text.clone()}</span>
+        }
+        .into_any(),
+
+        // A dashboard summary tile: a label, a number, and how urgently it
+        // matters. Not a `Badge` beside a title - the tone belongs to the
+        // number itself, which is the whole point of the tile.
+        PageElement::Figure(Figure { label, value, tone }) => view! {
+            <div class="ps-stat-card">
+                <div class="ps-stat-label">{label.clone()}</div>
+                <div class=figure_value_class(*tone)>{value.clone()}</div>
+            </div>
         }
         .into_any(),
 
@@ -514,7 +539,13 @@ mod tests {
             Tone::Danger,
         ]
         .into_iter()
-        .flat_map(|tone| [tone_class(tone), notice_class(tone)])
+        .flat_map(|tone| {
+            [
+                tone_class(tone),
+                notice_class(tone),
+                figure_value_class(tone),
+            ]
+        })
         .chain(
             [
                 ButtonVariant::Primary,
@@ -673,6 +704,48 @@ mod tests {
         );
         assert!(html.contains("<dl") && html.contains("<dt") && html.contains("<dd"));
         assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_figure_tones_the_value_itself_not_a_badge_beside_it() {
+        let figure = |tone| {
+            render(&PageElement::Figure(Figure {
+                label: "Lapsed".to_string(),
+                value: "7".to_string(),
+                tone,
+            }))
+            .to_html()
+        };
+        for tone in [
+            Tone::Neutral,
+            Tone::Info,
+            Tone::Success,
+            Tone::Warning,
+            Tone::Danger,
+        ] {
+            let html = figure(tone);
+            assert!(html.contains("ps-stat-label") && html.contains("Lapsed"));
+            assert!(
+                html.contains(figure_value_class(tone)),
+                "{tone:?} must reach the value element"
+            );
+            assert!(strip_tags(&html).contains('7'));
+            assert!(
+                !html.contains("badge"),
+                "a figure must never fall back to a coloured pill"
+            );
+        }
+        // The tone must change the output, not be hardcoded.
+        assert_ne!(figure(Tone::Neutral), figure(Tone::Danger));
+        assert_ne!(figure(Tone::Success), figure(Tone::Warning));
+        // Literal classes, so a swapped arm in `figure_value_class` goes red
+        // instead of agreeing with itself.
+        assert!(figure(Tone::Danger).contains("class=\"ps-stat-value ps-stat-value-danger\""));
+        assert!(figure(Tone::Success).contains("class=\"ps-stat-value ps-stat-value-success\""));
+        assert!(!figure(Tone::Danger).contains("ps-stat-value-success"));
+        assert!(figure(Tone::Warning).contains("class=\"ps-stat-value ps-stat-value-warning\""));
+        assert!(figure(Tone::Info).contains("class=\"ps-stat-value ps-stat-value-info\""));
+        assert!(figure(Tone::Neutral).contains("class=\"ps-stat-value\""));
     }
 
     #[test]
