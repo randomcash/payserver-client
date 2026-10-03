@@ -197,6 +197,71 @@ test.describe('table column alignment', () => {
 });
 
 /**
+ * A plugin table (`plugin_page.rs` renders every `PageElement::Table` as
+ * `.table-container > table.table`) has no fixed column widths, so a narrow
+ * viewport used to shrink columns to fit instead of scrolling - clipping a
+ * long decimal (`PAID TO DATE`, a NUMERIC(38,18) sum) mid-word and wrapping a
+ * status cell onto a second line. `.table` now gets a `min-width` under the
+ * same breakpoint the sibling tables already use, forcing `.table-container`
+ * (which sets `overflow-x: auto`) to scroll instead of the columns squeezing.
+ *
+ * Two things could still go wrong that a screenshot would catch and a class
+ * name would not: the min-width could land on a container with no scroll
+ * rule, in which case the *page* scrolls sideways instead of the table - the
+ * one outcome that is explicitly not allowed - or the rule could simply not
+ * apply and the old clipping would return.
+ *
+ * The status cell below is plain text, not a styled span: `PageElement::Table`
+ * carries `rows: Vec<Vec<String>>` with no slot for a badge, and the plugin
+ * that fills this table keeps only a badge's text for its status column, so
+ * `<td>Active</td>` is what the live page emits, not a simplification of it.
+ */
+test.describe('plugin page table overflow', () => {
+  const TABLE = `
+    <div class="ps-page">
+      <div class="ps-card">
+        <div class="ps-card-body">
+          <div class="table-container">
+            <table class="table">
+              <thead><tr><th>Plan</th><th>Status</th><th>Paid To Date</th></tr></thead>
+              <tbody>
+                <tr><td>Pro Monthly</td><td>Active</td><td>0.500000000000000000 USDC</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  test('the table scrolls inside its own container on a narrow screen', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.setContent(`<style>${CSS}</style>${TABLE}`);
+
+    const overflowX = await page
+      .locator('.table-container')
+      .evaluate((el) => getComputedStyle(el).overflowX);
+    expect(overflowX, '.table-container must be the scroll boundary').toBe('auto');
+
+    const { containerScrolls, tableWidth } = await page.locator('.table-container').evaluate((el) => ({
+      containerScrolls: el.scrollWidth > el.clientWidth,
+      tableWidth: el.querySelector('table')!.getBoundingClientRect().width,
+    }));
+    expect(containerScrolls, 'the wide table must overflow its own container').toBe(true);
+    expect(tableWidth, 'table must not be squeezed narrower than its min-width').toBeGreaterThanOrEqual(500);
+  });
+
+  test('the page body does not scroll sideways when the table does', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.setContent(`<style>${CSS}</style>${TABLE}`);
+
+    const bodyOverflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(bodyOverflows, 'the table must scroll inside .table-container, not push the page wide').toBe(false);
+  });
+});
+
+/**
  * `.payment-method-row` has the identical collision: the dashboard's payment
  * methods breakdown renders each entry as `<div class="payment-method-row">`
  * and wants a flex layout, while the Payment Methods tab's table renders
@@ -310,4 +375,88 @@ test.describe('recovery confirm step', () => {
     expect(label, 'the checkbox should sit in the warning box').not.toBe('rgba(0, 0, 0, 0)');
     expect(step, 'the step container should not repeat it').toBe('rgba(0, 0, 0, 0)');
   });
+});
+
+test.describe('safe-mode banner', () => {
+  // The banner is taken from the Rust source rather than retyped here. The
+  // client is wasm and needs a trunk build plus an authenticated admin session
+  // to reach the safe-mode branch, which this server-less suite cannot do; but
+  // a hand-copied snippet would keep passing after the real markup moved to a
+  // different class. Reading the `SafeModeBanner::Active` arm means a change
+  // of classes there changes what is asserted here.
+  const SRC = readFileSync(path.join(__dirname, '../src/pages/settings/admin.rs'), 'utf8');
+  const arm = SRC.match(/SafeModeBanner::Active => view! \{\s*<div class="([^"]+)">\s*<(\w+)>/);
+
+  test('the active arm of the real admin tab is found', () => {
+    expect(arm, 'could not locate the SafeModeBanner::Active markup in admin.rs').not.toBeNull();
+  });
+
+  test('is visibly styled in the error tone rather than plain text', async ({ page }) => {
+    const [, classes, heading] = arm!;
+    await page.setContent(
+      `<style>${CSS}</style><div class="${classes}"><${heading}>SAFE MODE</${heading}><p>plugins disabled</p></div>`,
+    );
+    await expect(page.locator('div').first()).toBeVisible();
+
+    const probe = await page.evaluate(() => {
+      const el = document.querySelector('div')!;
+      const s = getComputedStyle(el);
+      // Resolve the token through a throwaway element so the expected value is
+      // in the same rgb() form as the computed one.
+      const t = document.createElement('i');
+      t.style.color = getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim();
+      document.body.appendChild(t);
+      return {
+        bg: s.backgroundColor,
+        borderColor: s.borderTopColor,
+        borderWidth: s.borderTopWidth,
+        token: getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim(),
+        error: getComputedStyle(t).color,
+        headingColor: getComputedStyle(el.firstElementChild!).color,
+        pageBg: getComputedStyle(document.body).backgroundColor,
+      };
+    });
+    expect(probe.token, '--color-error must resolve, or the colour checks compare fallbacks').not.toBe('');
+    expect(probe.borderWidth, 'banner should have a border').not.toBe('0px');
+    expect(probe.borderColor, 'border should be the error colour').toBe(probe.error);
+    expect(probe.headingColor, 'heading should carry the error tone').toBe(probe.error);
+    expect(probe.bg, 'banner background should differ from the page').not.toBe(probe.pageBg);
+  });
+});
+
+/**
+ * The store switcher rendered every store with no height bound, so an account
+ * with dozens of them made the menu taller than the screen. The list must
+ * scroll inside the menu, and the Manage link must stay reachable below it.
+ */
+test.describe('store switcher', () => {
+  const markup = (n: number) => `
+    <aside class="sidebar"><div class="store-selector">
+      <button class="store-selector-btn">Store</button>
+      <div class="store-dropdown open">
+        <div class="store-dropdown-list">
+          <button class="store-dropdown-item"><span>All Stores</span></button>
+          ${Array.from({ length: n }, (_, i) =>
+            `<button class="store-dropdown-item"><span title="s${i}">A very long shared store name prefix ${i}</span></button>`).join('')}
+        </div>
+        <div class="store-dropdown-divider"></div>
+        <a class="store-dropdown-item store-dropdown-manage"><span>Manage Stores</span></a>
+      </div>
+    </div></aside>`;
+
+  for (const n of [36, 2, 1, 0]) {
+    test(`stays inside a laptop viewport with ${n} stores`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 600 });
+      await page.setContent(`<style>${CSS}</style>${markup(n)}`);
+      const m = await page.locator('.store-dropdown').evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const l = el.querySelector('.store-dropdown-list')!;
+        const manage = el.querySelector('.store-dropdown-manage')!.getBoundingClientRect();
+        return { bottom: r.bottom, manageBottom: manage.bottom, scrolls: l.scrollHeight > l.clientHeight };
+      });
+      expect(m.bottom, 'menu must end above the viewport bottom').toBeLessThanOrEqual(600);
+      expect(m.manageBottom, 'Manage link must be on screen').toBeLessThanOrEqual(600);
+      expect(m.scrolls, 'only a long list should scroll').toBe(n >= 10);
+    });
+  }
 });

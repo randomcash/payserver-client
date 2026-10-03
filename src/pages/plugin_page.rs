@@ -743,6 +743,9 @@ mod tests {
         assert!(figure(Tone::Danger).contains("class=\"ps-stat-value ps-stat-value-danger\""));
         assert!(figure(Tone::Success).contains("class=\"ps-stat-value ps-stat-value-success\""));
         assert!(!figure(Tone::Danger).contains("ps-stat-value-success"));
+        assert!(figure(Tone::Warning).contains("class=\"ps-stat-value ps-stat-value-warning\""));
+        assert!(figure(Tone::Info).contains("class=\"ps-stat-value ps-stat-value-info\""));
+        assert!(figure(Tone::Neutral).contains("class=\"ps-stat-value\""));
     }
 
     #[test]
