@@ -738,6 +738,11 @@ mod tests {
         // The tone must change the output, not be hardcoded.
         assert_ne!(figure(Tone::Neutral), figure(Tone::Danger));
         assert_ne!(figure(Tone::Success), figure(Tone::Warning));
+        // Literal classes, so a swapped arm in `figure_value_class` goes red
+        // instead of agreeing with itself.
+        assert!(figure(Tone::Danger).contains("class=\"ps-stat-value ps-stat-value-danger\""));
+        assert!(figure(Tone::Success).contains("class=\"ps-stat-value ps-stat-value-success\""));
+        assert!(!figure(Tone::Danger).contains("ps-stat-value-success"));
     }
 
     #[test]
