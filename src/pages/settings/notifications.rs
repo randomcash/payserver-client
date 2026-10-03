@@ -30,6 +30,18 @@ enum EmailChannel {
     CustomerReceipt,
 }
 
+/// Shown when the server reports it cannot send email. Email preferences would
+/// save but never deliver, so the tab says so instead of offering them.
+const EMAIL_UNAVAILABLE_NOTICE: &str = "This server has no outgoing email configured, so no \
+     email notifications or receipts will be sent. Webhooks are unaffected.";
+
+/// Whether the email channel is drawn as a working control. Only a server that
+/// has said it cannot send mail removes it; while the answer is unknown the
+/// control stays, since hiding it on a guess would break a working server.
+fn email_channel_offered(configured: Option<bool>) -> bool {
+    configured != Some(false)
+}
+
 /// One row of the matrix.
 struct NotificationEvent {
     /// The `notification_prefs` key, and what the webhook dispatcher looks up.
@@ -141,6 +153,18 @@ pub fn NotificationsTab() -> impl IntoView {
         move |()| ctx.refetch_stores()
     });
 
+    // `None` while loading or if the question failed: say nothing rather than
+    // claim email works or does not on a guess.
+    let email_status = LocalResource::new(move || {
+        let api = api.get();
+        async move { api.get_email_status().await }
+    });
+    let email_configured = Signal::derive(move || {
+        email_status
+            .get()
+            .and_then(|r| r.as_ref().ok().map(|s| s.configured))
+    });
+
     let (refresh, set_refresh) = signal(0u32);
     let settings = LocalResource::new(move || {
         let api = api.get();
@@ -237,6 +261,12 @@ pub fn NotificationsTab() -> impl IntoView {
                                  it does not stop the payment being processed."
                             </p>
 
+                            <Show when=move || !email_channel_offered(email_configured.get())>
+                                <div class="form-alert form-alert-error">
+                                    {EMAIL_UNAVAILABLE_NOTICE}
+                                </div>
+                            </Show>
+
                             <Suspense fallback=move || view! {
                                 <p class="text-muted">"Loading notification settings..."</p>
                             }>
@@ -256,7 +286,7 @@ pub fn NotificationsTab() -> impl IntoView {
                                             );
                                             set_loaded_store.set(Some(s.store_id.to_string()));
                                         }
-                                        view! { <NotificationMatrix cells receipts /> }.into_any()
+                                        view! { <NotificationMatrix cells receipts email_configured /> }.into_any()
                                     }
                                     Some(Err(e)) => {
                                         let msg = format!("Could not load notification settings: {e}");
@@ -304,6 +334,7 @@ pub fn NotificationsTab() -> impl IntoView {
 fn NotificationMatrix(
     cells: RwSignal<[bool; NOTIFICATION_EVENTS.len()]>,
     receipts: RwSignal<bool>,
+    email_configured: Signal<Option<bool>>,
 ) -> impl IntoView {
     view! {
         <table class="notification-matrix">
@@ -326,19 +357,32 @@ fn NotificationMatrix(
                             </span>
                         }
                         .into_any(),
-                        EmailChannel::CustomerReceipt => view! {
-                            <label class="toggle">
-                                <input
-                                    type="checkbox"
-                                    prop:checked=move || receipts.get()
-                                    on:change=move |ev| {
-                                        receipts.set(event_target_checked(&ev));
-                                    }
-                                    title="Email a receipt to the customer when their payment confirms"
-                                />
-                                <span class="toggle-slider"></span>
-                            </label>
-                        }
+                        // Reactive: the status can land after the matrix does.
+                        EmailChannel::CustomerReceipt => (move || {
+                            if !email_channel_offered(email_configured.get()) {
+                                view! {
+                                    <span class="text-muted" title=EMAIL_UNAVAILABLE_NOTICE>
+                                        "Unavailable"
+                                    </span>
+                                }
+                                .into_any()
+                            } else {
+                                view! {
+                                    <label class="toggle">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=move || receipts.get()
+                                            on:change=move |ev| {
+                                                receipts.set(event_target_checked(&ev));
+                                            }
+                                            title="Email a receipt to the customer when their payment confirms"
+                                        />
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                }
+                                .into_any()
+                            }
+                        })
                         .into_any(),
                     };
 
@@ -384,6 +428,19 @@ mod tests {
         webhook_enabled, write_matrix,
     };
     use serde_json::json;
+
+    #[test]
+    fn email_is_offered_only_unless_the_server_says_it_cannot_send() {
+        assert!(super::email_channel_offered(Some(true)));
+        assert!(!super::email_channel_offered(Some(false)));
+        assert!(super::email_channel_offered(None));
+    }
+
+    #[test]
+    fn the_status_body_parses_as_a_boolean() {
+        let s: crate::api::EmailStatus = serde_json::from_str(r#"{"configured":false}"#).unwrap();
+        assert!(!s.configured);
+    }
 
     #[test]
     fn an_unset_blob_reads_as_everything_on() {

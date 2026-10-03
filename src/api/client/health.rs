@@ -1,7 +1,7 @@
 //! Health API methods.
 
 use super::{ApiClient, ApiError};
-use crate::api::ChainsHealthResponse;
+use crate::api::{ChainsHealthResponse, EmailStatus};
 
 impl ApiClient {
     /// Fetch per-chain monitor health.
@@ -26,5 +26,13 @@ impl ApiClient {
         // unknown paths, the client parses index.html as JSON, and the panel
         // shows "Parse error: expected value at line 1 column 1".
         self.get("/api/health/chains").await
+    }
+
+    /// Whether this server can send outgoing email.
+    ///
+    /// A server with no SMTP configured accepts email preferences and never
+    /// delivers on them, so the UI asks before offering an email channel.
+    pub async fn get_email_status(&self) -> Result<EmailStatus, ApiError> {
+        self.get("/api/users/me/email/status").await
     }
 }
