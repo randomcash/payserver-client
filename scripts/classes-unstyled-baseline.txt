@@ -3,7 +3,6 @@
 # could be switched on without fixing all of them at once; it is
 # meant to shrink. Do not add to it to make a build pass.
 # Regenerate: scripts/check-classes-styled.py --update-baseline
-admin-users-table
 branding-preview
 chart-card-main
 color-input-row
