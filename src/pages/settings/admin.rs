@@ -186,24 +186,35 @@ pub fn AdminTab() -> impl IntoView {
     // Reload the page of users at `offset`. One path for the initial load,
     // paging, and the refresh after a role or lock change, so they cannot
     // disagree about which page is showing.
+    //
+    // Each call takes a ticket and only the newest ticket may write: rapid
+    // paging, or a click racing the reload after a role change, would
+    // otherwise let a slow stale response overwrite the page just chosen.
+    let load_seq = StoredValue::new(0u64);
     let load_users = move |offset: i64| {
         let api = api.get_untracked();
+        load_seq.update_value(|n| *n += 1);
+        let ticket = load_seq.get_value();
         leptos::task::spawn_local(async move {
-            match api.list_users(offset, PAGE_SIZE).await {
+            let mut target = offset;
+            let mut result = api.list_users(target, PAGE_SIZE).await;
+            if let Ok(resp) = &result {
+                let clamped = clamp_user_offset(target, resp.total);
+                if clamped != target {
+                    // The requested page is past the end now.
+                    target = clamped;
+                    result = api.list_users(target, PAGE_SIZE).await;
+                }
+            }
+            if load_seq.get_value() != ticket {
+                return;
+            }
+            match result {
                 Ok(resp) => {
-                    let clamped = clamp_user_offset(offset, resp.total);
-                    if clamped != offset {
-                        // The requested page is past the end now.
-                        set_user_offset.set(clamped);
-                        if let Ok(resp) = api.list_users(clamped, PAGE_SIZE).await {
-                            set_user_total.set(resp.total);
-                            set_users.set(resp.users);
-                        }
-                    } else {
-                        set_user_offset.set(offset);
-                        set_user_total.set(resp.total);
-                        set_users.set(resp.users);
-                    }
+                    // Offset, total and rows land together, from one response.
+                    set_user_offset.set(target);
+                    set_user_total.set(resp.total);
+                    set_users.set(resp.users);
                 }
                 Err(e) => set_user_status.set(format!("Error: {}", e)),
             }
