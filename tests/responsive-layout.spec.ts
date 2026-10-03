@@ -423,3 +423,40 @@ test.describe('safe-mode banner', () => {
     expect(probe.bg, 'banner background should differ from the page').not.toBe(probe.pageBg);
   });
 });
+
+/**
+ * The store switcher rendered every store with no height bound, so an account
+ * with dozens of them made the menu taller than the screen. The list must
+ * scroll inside the menu, and the Manage link must stay reachable below it.
+ */
+test.describe('store switcher', () => {
+  const markup = (n: number) => `
+    <aside class="sidebar"><div class="store-selector">
+      <button class="store-selector-btn">Store</button>
+      <div class="store-dropdown open">
+        <div class="store-dropdown-list">
+          <button class="store-dropdown-item"><span>All Stores</span></button>
+          ${Array.from({ length: n }, (_, i) =>
+            `<button class="store-dropdown-item"><span title="s${i}">A very long shared store name prefix ${i}</span></button>`).join('')}
+        </div>
+        <div class="store-dropdown-divider"></div>
+        <a class="store-dropdown-item store-dropdown-manage"><span>Manage Stores</span></a>
+      </div>
+    </div></aside>`;
+
+  for (const n of [36, 2, 1, 0]) {
+    test(`stays inside a laptop viewport with ${n} stores`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 600 });
+      await page.setContent(`<style>${CSS}</style>${markup(n)}`);
+      const m = await page.locator('.store-dropdown').evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const l = el.querySelector('.store-dropdown-list')!;
+        const manage = el.querySelector('.store-dropdown-manage')!.getBoundingClientRect();
+        return { bottom: r.bottom, manageBottom: manage.bottom, scrolls: l.scrollHeight > l.clientHeight };
+      });
+      expect(m.bottom, 'menu must end above the viewport bottom').toBeLessThanOrEqual(600);
+      expect(m.manageBottom, 'Manage link must be on screen').toBeLessThanOrEqual(600);
+      expect(m.scrolls, 'only a long list should scroll').toBe(n >= 10);
+    });
+  }
+});

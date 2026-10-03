@@ -348,6 +348,15 @@ a:hover {
     transform: translateY(0);
 }
 
+/* The list scrolls inside the menu so many stores cannot push it past the
+   viewport; the sidebar header and the Manage link stay outside it. */
+.store-dropdown-list {
+    max-height: min(320px, calc(100vh - 220px));
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 .store-dropdown-item {
     display: flex;
     align-items: center;
