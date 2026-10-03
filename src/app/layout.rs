@@ -236,6 +236,7 @@ where
                 </button>
 
                 <div class=move || if dropdown_open.get() { "store-dropdown open" } else { "store-dropdown" }>
+                    <div class="store-dropdown-list">
                     // "All Stores" option
                     {
                         let store_ctx = store_ctx.clone();
@@ -288,7 +289,7 @@ where
                                     }
                                 >
                                     <IconStore />
-                                    <span>{store_name.clone()}</span>
+                                    <span title=store_name.clone()>{store_name.clone()}</span>
                                     {
                                         let store_ctx = store_ctx.clone();
                                         let id = store_id.clone();
@@ -301,6 +302,7 @@ where
                             }
                         }
                     </For>
+                    </div>
 
                     <div class="store-dropdown-divider"></div>
                     <a href="/evm/stores" class="store-dropdown-item store-dropdown-manage"
