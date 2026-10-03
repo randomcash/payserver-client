@@ -28,6 +28,15 @@ use crate::api::{
 #[derive(Debug, Clone, Deserialize)]
 pub struct SafeModeStatus {
     pub safe_mode: bool,
+    /// Whether anything on the server can use the operator store, so the
+    /// settings page knows whether to offer it. A server that predates the
+    /// field does not send it and still has the setting, hence the default.
+    #[serde(default = "default_operator_store_available")]
+    pub operator_store_available: bool,
+}
+
+fn default_operator_store_available() -> bool {
+    true
 }
 
 impl ApiClient {
@@ -218,6 +227,28 @@ mod tests {
             Ok(response.clone())
         });
         (transport, recorded)
+    }
+
+    #[test]
+    fn operator_store_availability_is_read_and_defaults_on_for_older_servers() {
+        let (transport, _) = recording_transport(serde_json::json!({
+            "safe_mode": false,
+            "operator_store_available": false,
+        }));
+        let client = ApiClient::with_test_transport("", transport);
+        assert!(
+            !block_on(client.get_safe_mode())
+                .unwrap()
+                .operator_store_available
+        );
+
+        let (transport, _) = recording_transport(serde_json::json!({ "safe_mode": false }));
+        let client = ApiClient::with_test_transport("", transport);
+        assert!(
+            block_on(client.get_safe_mode())
+                .unwrap()
+                .operator_store_available
+        );
     }
 
     #[test]
