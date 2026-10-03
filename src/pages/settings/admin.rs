@@ -4,6 +4,7 @@ use crate::api::{
     AdminUserInfo, ApiClient, ApiError, SafeModeStatus, Store, UpdateServerSettingsRequest,
     UpdateUserRoleRequest,
 };
+use crate::components::{PAGE_SIZE, Pagination};
 use leptos::prelude::*;
 use types::ChainId;
 
@@ -61,6 +62,34 @@ fn apply_safe_mode_check(
     set_safe_mode_check_failed.set(check_failed);
 }
 
+/// How a user is labelled in the table: email, else a shortened wallet
+/// address, else the start of the id.
+fn user_display_name(user: &AdminUserInfo) -> String {
+    user.email
+        .clone()
+        .or(user.primary_wallet_address.as_ref().map(|w| {
+            let prefix = w.get(..6).unwrap_or(w.as_str());
+            let suffix = w.get(w.len().saturating_sub(4)..).unwrap_or("");
+            format!("{prefix}...{suffix}")
+        }))
+        .unwrap_or_else(|| user.id.get(..8).unwrap_or(user.id.as_str()).to_string())
+}
+
+/// The offset to reload after the server reports `total` users.
+///
+/// A page that no longer exists (users removed since it was loaded) falls back
+/// to the last page that does, so the table never sits empty under a badge
+/// that says there are users.
+fn clamp_user_offset(offset: i64, total: i64) -> i64 {
+    if total <= 0 {
+        return 0;
+    }
+    if offset < total {
+        return offset.max(0);
+    }
+    ((total - 1) / PAGE_SIZE) * PAGE_SIZE
+}
+
 /// Admin tab - server settings and user management (admin only).
 #[component]
 pub fn AdminTab() -> impl IntoView {
@@ -101,6 +130,7 @@ pub fn AdminTab() -> impl IntoView {
     // User list state
     let (users, set_users) = signal(Vec::<AdminUserInfo>::new());
     let (user_total, set_user_total) = signal(0i64);
+    let (user_offset, set_user_offset) = signal(0i64);
     let (user_status, set_user_status) = signal(String::new());
 
     // All available networks
@@ -145,10 +175,6 @@ pub fn AdminTab() -> impl IntoView {
             if let Ok(list) = api.list_stores().await {
                 set_stores.set(list.into_iter().filter(|s| !s.archived).collect());
             }
-            if let Ok(resp) = api.list_users(0, 100).await {
-                set_user_total.set(resp.total);
-                set_users.set(resp.users);
-            }
             let result = api.get_safe_mode().await;
             if let Err(ref e) = result {
                 web_sys::console::error_1(&format!("safe-mode check failed: {e}").into());
@@ -156,6 +182,45 @@ pub fn AdminTab() -> impl IntoView {
             apply_safe_mode_check(&result, set_safe_mode, set_safe_mode_check_failed);
         }
     });
+
+    // Reload the page of users at `offset`. One path for the initial load,
+    // paging, and the refresh after a role or lock change, so they cannot
+    // disagree about which page is showing.
+    //
+    // Each call takes a ticket and only the newest ticket may write: rapid
+    // paging, or a click racing the reload after a role change, would
+    // otherwise let a slow stale response overwrite the page just chosen.
+    let load_seq = StoredValue::new(0u64);
+    let load_users = move |offset: i64| {
+        let api = api.get_untracked();
+        load_seq.update_value(|n| *n += 1);
+        let ticket = load_seq.get_value();
+        leptos::task::spawn_local(async move {
+            let mut target = offset;
+            let mut result = api.list_users(target, PAGE_SIZE).await;
+            if let Ok(resp) = &result {
+                let clamped = clamp_user_offset(target, resp.total);
+                if clamped != target {
+                    // The requested page is past the end now.
+                    target = clamped;
+                    result = api.list_users(target, PAGE_SIZE).await;
+                }
+            }
+            if load_seq.get_value() != ticket {
+                return;
+            }
+            match result {
+                Ok(resp) => {
+                    // Offset, total and rows land together, from one response.
+                    set_user_offset.set(target);
+                    set_user_total.set(resp.total);
+                    set_users.set(resp.users);
+                }
+                Err(e) => set_user_status.set(format!("Error: {}", e)),
+            }
+        });
+    };
+    load_users(0);
 
     // Save settings handler
     let save_settings = move |_| {
@@ -228,9 +293,7 @@ pub fn AdminTab() -> impl IntoView {
             match api.update_user_role(&user_id, &request).await {
                 Ok(()) => {
                     set_user_status.set("Role updated".to_string());
-                    if let Ok(resp) = api.list_users(0, 100).await {
-                        set_users.set(resp.users);
-                    }
+                    load_users(user_offset.get_untracked());
                 }
                 Err(e) => set_user_status.set(format!("Error: {}", e)),
             }
@@ -248,9 +311,7 @@ pub fn AdminTab() -> impl IntoView {
             };
             match result {
                 Ok(()) => {
-                    if let Ok(resp) = api.list_users(0, 100).await {
-                        set_users.set(resp.users);
-                    }
+                    load_users(user_offset.get_untracked());
                 }
                 Err(e) => set_user_status.set(format!("Error: {}", e)),
             }
@@ -311,7 +372,7 @@ pub fn AdminTab() -> impl IntoView {
                         }
                     }}
                     <div class="admin-users-table">
-                        <table class="data-table">
+                        <table class="data-table table">
                             <thead>
                                 <tr>
                                     <th>"User"</th>
@@ -325,13 +386,7 @@ pub fn AdminTab() -> impl IntoView {
                                     let user_id_role = user.id.clone();
                                     let user_id_lock = user.id.clone();
                                     let is_locked = user.locked_until.is_some();
-                                    let display_name = user.email.clone()
-                                        .or(user.primary_wallet_address.clone().map(|w| {
-                                            let prefix = w.get(..6).unwrap_or(w.as_str());
-                                            let suffix = w.get(w.len().saturating_sub(4)..).unwrap_or("");
-                                            format!("{prefix}...{suffix}")
-                                        }))
-                                        .unwrap_or_else(|| user.id.get(..8).unwrap_or(user.id.as_str()).to_string());
+                                    let display_name = user_display_name(&user);
                                     let current_role = user.role.clone();
                                     let created_date = user.created_at.format("%Y-%m-%d").to_string();
                                     view! {
@@ -366,6 +421,18 @@ pub fn AdminTab() -> impl IntoView {
                             </tbody>
                         </table>
                     </div>
+                    {move || {
+                        let total = user_total.get();
+                        (total > PAGE_SIZE).then(|| view! {
+                            <Pagination
+                                total=total
+                                page_size=PAGE_SIZE
+                                current_offset=user_offset.get()
+                                on_page_change=move |new_offset| load_users(new_offset)
+                                item_label="users"
+                            />
+                        })
+                    }}
                 </div>
             </div>
 
@@ -568,6 +635,59 @@ pub fn AdminTab() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn user(email: Option<&str>, wallet: Option<&str>, id: &str) -> AdminUserInfo {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "email": email,
+            "primary_wallet_address": wallet,
+            "role": "user",
+            "created_at": "2026-01-01T00:00:00Z",
+            "last_login_at": null,
+            "locked_until": null,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn user_is_named_by_email_first() {
+        let u = user(
+            Some("a@b.test"),
+            Some("0xabcdef0123456789"),
+            "12345678-aaaa",
+        );
+        assert_eq!(user_display_name(&u), "a@b.test");
+    }
+
+    #[test]
+    fn walletonly_user_is_named_by_shortened_address() {
+        let u = user(None, Some("0xabcdef0123456789"), "12345678-aaaa");
+        assert_eq!(user_display_name(&u), "0xabcd...6789");
+    }
+
+    #[test]
+    fn user_with_neither_is_named_by_id_prefix() {
+        let u = user(None, None, "12345678-aaaa");
+        assert_eq!(user_display_name(&u), "12345678");
+    }
+
+    #[test]
+    fn offset_inside_the_result_set_is_kept() {
+        assert_eq!(clamp_user_offset(0, 45), 0);
+        assert_eq!(clamp_user_offset(40, 45), 40);
+    }
+
+    #[test]
+    fn offset_past_the_end_falls_back_to_the_last_page() {
+        assert_eq!(clamp_user_offset(40, 40), 20);
+        assert_eq!(clamp_user_offset(100, 45), 40);
+    }
+
+    #[test]
+    fn empty_result_set_stays_on_the_first_page() {
+        assert_eq!(clamp_user_offset(0, 0), 0);
+        assert_eq!(clamp_user_offset(20, 0), 0);
+    }
 
     #[test]
     fn no_check_yet_shows_no_banner() {

@@ -870,6 +870,19 @@ a:hover {
     background: var(--color-gray-50);
 }
 
+/* Bounded, scrolling user list: the page stays a fixed height however many
+   users there are, and the header stays visible while the rows scroll. */
+.admin-users-table {
+    max-height: 480px;
+    overflow: auto;
+}
+
+.admin-users-table .table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
 .table-cell-primary {
     color: var(--text-primary);
     font-weight: 500;
