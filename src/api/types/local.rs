@@ -8,6 +8,16 @@ use types::InvoiceStatus;
 
 use super::Store;
 
+/// Whether the server can send email at all (`GET /users/me/email/status`).
+///
+/// Hand-mirrored from the server rather than shared through `api-types`: a
+/// shared DTO needs a merge in the commons repository and a pin bump first. It
+/// is one boolean; the server never sends the settings behind it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct EmailStatus {
+    pub configured: bool,
+}
+
 /// How an invoice status is shown.
 ///
 /// Labels and CSS classes are a rendering decision, so they stay here rather
