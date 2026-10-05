@@ -17,7 +17,7 @@
 use leptos::prelude::*;
 use serde_json::{Value, json};
 
-use crate::api::{ApiClient, UpdateStoreSettingsRequest};
+use crate::api::{ApiClient, ApiError, EmailStatus, UpdateStoreSettingsRequest};
 use crate::app::StoreContext;
 use crate::components::NoStoreSelected;
 
@@ -52,6 +52,17 @@ enum EmailAvailability {
 }
 
 impl EmailAvailability {
+    /// Map the server's answer to the status question. `None` is the request
+    /// still in flight; an error is never read as an answer.
+    fn from_status(answer: Option<&Result<EmailStatus, ApiError>>) -> Self {
+        match answer {
+            None => Self::Checking,
+            Some(Ok(s)) if s.configured => Self::Configured,
+            Some(Ok(_)) => Self::NotConfigured,
+            Some(Err(_)) => Self::Unknown,
+        }
+    }
+
     /// Whether the email channel is drawn as a working control. Only a server
     /// that has said it cannot send mail removes it; while the answer is
     /// pending or failed the control stays, since hiding it on a guess would
@@ -185,14 +196,12 @@ pub fn NotificationsTab() -> impl IntoView {
         let api = api.get();
         async move { api.get_email_status().await }
     });
-    let email_configured = Signal::derive(move || match email_status.get().as_deref() {
-        None => EmailAvailability::Checking,
-        Some(Ok(s)) if s.configured => EmailAvailability::Configured,
-        Some(Ok(_)) => EmailAvailability::NotConfigured,
-        Some(Err(e)) => {
+    let email_configured = Signal::derive(move || {
+        let answer = email_status.get();
+        if let Some(Err(e)) = answer.as_deref() {
             web_sys::console::warn_1(&format!("Could not check email status: {e}").into());
-            EmailAvailability::Unknown
         }
+        EmailAvailability::from_status(answer.as_deref())
     });
 
     let (refresh, set_refresh) = signal(0u32);
@@ -455,6 +464,7 @@ mod tests {
         CUSTOMER_RECEIPTS_KEY, NOTIFICATION_EVENTS, customer_receipts_enabled, read_matrix,
         webhook_enabled, write_matrix,
     };
+    use crate::api::{ApiError, EmailStatus};
     use serde_json::json;
 
     #[test]
@@ -464,6 +474,27 @@ mod tests {
         assert!(!NotConfigured.channel_offered());
         assert!(Checking.channel_offered());
         assert!(Unknown.channel_offered());
+    }
+
+    #[test]
+    fn the_servers_answer_maps_to_the_right_state() {
+        use super::EmailAvailability as A;
+        let ok = |configured| Ok(EmailStatus { configured });
+        assert_eq!(A::from_status(Some(&ok(true))), A::Configured);
+        assert_eq!(A::from_status(Some(&ok(false))), A::NotConfigured);
+        assert_eq!(A::from_status(None), A::Checking);
+        // A failure (a server without the route, a 401) is not "configured".
+        for e in [
+            ApiError::Unauthorized,
+            ApiError::Network("down".into()),
+            ApiError::Http {
+                status: 404,
+                message: "no route".into(),
+            },
+            ApiError::Parse("bad".into()),
+        ] {
+            assert_eq!(A::from_status(Some(&Err(e))), A::Unknown);
+        }
     }
 
     #[test]
