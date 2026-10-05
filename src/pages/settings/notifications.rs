@@ -35,11 +35,39 @@ enum EmailChannel {
 const EMAIL_UNAVAILABLE_NOTICE: &str = "This server has no outgoing email configured, so no \
      email notifications or receipts will be sent. Webhooks are unaffected.";
 
-/// Whether the email channel is drawn as a working control. Only a server that
-/// has said it cannot send mail removes it; while the answer is unknown the
-/// control stays, since hiding it on a guess would break a working server.
-fn email_channel_offered(configured: Option<bool>) -> bool {
-    configured != Some(false)
+/// Shown when the status question itself failed, so the tab cannot say either
+/// way. A failed answer is not a "configured" answer.
+const EMAIL_UNKNOWN_NOTICE: &str = "Could not check whether this server can send email. \
+     Email notifications and receipts may not be delivered.";
+
+/// What the tab knows about the server's outgoing email.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EmailAvailability {
+    /// The question is still in flight.
+    Checking,
+    Configured,
+    NotConfigured,
+    /// The question failed (network, auth, a server without the route).
+    Unknown,
+}
+
+impl EmailAvailability {
+    /// Whether the email channel is drawn as a working control. Only a server
+    /// that has said it cannot send mail removes it; while the answer is
+    /// pending or failed the control stays, since hiding it on a guess would
+    /// break a working server.
+    fn channel_offered(self) -> bool {
+        self != Self::NotConfigured
+    }
+
+    /// The banner for this state, if any.
+    fn notice(self) -> Option<&'static str> {
+        match self {
+            Self::NotConfigured => Some(EMAIL_UNAVAILABLE_NOTICE),
+            Self::Unknown => Some(EMAIL_UNKNOWN_NOTICE),
+            Self::Checking | Self::Configured => None,
+        }
+    }
 }
 
 /// One row of the matrix.
@@ -153,16 +181,18 @@ pub fn NotificationsTab() -> impl IntoView {
         move |()| ctx.refetch_stores()
     });
 
-    // `None` while loading or if the question failed: say nothing rather than
-    // claim email works or does not on a guess.
     let email_status = LocalResource::new(move || {
         let api = api.get();
         async move { api.get_email_status().await }
     });
-    let email_configured = Signal::derive(move || {
-        email_status
-            .get()
-            .and_then(|r| r.as_ref().ok().map(|s| s.configured))
+    let email_configured = Signal::derive(move || match email_status.get().as_deref() {
+        None => EmailAvailability::Checking,
+        Some(Ok(s)) if s.configured => EmailAvailability::Configured,
+        Some(Ok(_)) => EmailAvailability::NotConfigured,
+        Some(Err(e)) => {
+            web_sys::console::warn_1(&format!("Could not check email status: {e}").into());
+            EmailAvailability::Unknown
+        }
     });
 
     let (refresh, set_refresh) = signal(0u32);
@@ -261,11 +291,9 @@ pub fn NotificationsTab() -> impl IntoView {
                                  it does not stop the payment being processed."
                             </p>
 
-                            <Show when=move || !email_channel_offered(email_configured.get())>
-                                <div class="form-alert form-alert-error">
-                                    {EMAIL_UNAVAILABLE_NOTICE}
-                                </div>
-                            </Show>
+                            {move || email_configured.get().notice().map(|n| view! {
+                                <div class="form-alert form-alert-error">{n}</div>
+                            })}
 
                             <Suspense fallback=move || view! {
                                 <p class="text-muted">"Loading notification settings..."</p>
@@ -334,7 +362,7 @@ pub fn NotificationsTab() -> impl IntoView {
 fn NotificationMatrix(
     cells: RwSignal<[bool; NOTIFICATION_EVENTS.len()]>,
     receipts: RwSignal<bool>,
-    email_configured: Signal<Option<bool>>,
+    email_configured: Signal<EmailAvailability>,
 ) -> impl IntoView {
     view! {
         <table class="notification-matrix">
@@ -359,7 +387,7 @@ fn NotificationMatrix(
                         .into_any(),
                         // Reactive: the status can land after the matrix does.
                         EmailChannel::CustomerReceipt => (move || {
-                            if !email_channel_offered(email_configured.get()) {
+                            if !email_configured.get().channel_offered() {
                                 view! {
                                     <span class="text-muted" title=EMAIL_UNAVAILABLE_NOTICE>
                                         "Unavailable"
@@ -430,16 +458,34 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn email_is_offered_only_unless_the_server_says_it_cannot_send() {
-        assert!(super::email_channel_offered(Some(true)));
-        assert!(!super::email_channel_offered(Some(false)));
-        assert!(super::email_channel_offered(None));
+    fn email_is_removed_only_when_the_server_says_it_cannot_send() {
+        use super::EmailAvailability::*;
+        assert!(Configured.channel_offered());
+        assert!(!NotConfigured.channel_offered());
+        assert!(Checking.channel_offered());
+        assert!(Unknown.channel_offered());
     }
 
     #[test]
-    fn the_status_body_parses_as_a_boolean() {
-        let s: crate::api::EmailStatus = serde_json::from_str(r#"{"configured":false}"#).unwrap();
-        assert!(!s.configured);
+    fn each_state_says_what_it_knows() {
+        use super::EmailAvailability::*;
+        assert_eq!(Configured.notice(), None);
+        assert_eq!(Checking.notice(), None);
+        assert_eq!(
+            NotConfigured.notice(),
+            Some(super::EMAIL_UNAVAILABLE_NOTICE)
+        );
+        // A failed check is never silent: it must not read as "configured".
+        assert_eq!(Unknown.notice(), Some(super::EMAIL_UNKNOWN_NOTICE));
+    }
+
+    #[test]
+    fn the_status_body_parses_in_both_states() {
+        for want in [true, false] {
+            let body = format!(r#"{{"configured":{want}}}"#);
+            let s: crate::api::EmailStatus = serde_json::from_str(&body).unwrap();
+            assert_eq!(s.configured, want);
+        }
     }
 
     #[test]
