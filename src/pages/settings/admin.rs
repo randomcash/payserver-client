@@ -2,7 +2,7 @@
 
 use crate::api::{
     AdminUserInfo, ApiClient, ApiError, SafeModeStatus, Store, UpdateServerSettingsRequest,
-    UpdateUserRoleRequest,
+    UpdateUserRoleRequest, UserListResponse,
 };
 use crate::components::{PAGE_SIZE, Pagination};
 use leptos::prelude::*;
@@ -88,6 +88,27 @@ fn clamp_user_offset(offset: i64, total: i64) -> i64 {
         return offset.max(0);
     }
     ((total - 1) / PAGE_SIZE) * PAGE_SIZE
+}
+
+/// Fetch the page at `offset`, refetching once at the last page that exists if
+/// the first response shows `offset` is past the end. Returns the offset the
+/// rows actually belong to, so offset and rows cannot disagree. A failure on
+/// either request is returned, never swallowed.
+async fn fetch_user_page<F, Fut>(
+    offset: i64,
+    mut fetch: F,
+) -> Result<(i64, UserListResponse), ApiError>
+where
+    F: FnMut(i64) -> Fut,
+    Fut: std::future::Future<Output = Result<UserListResponse, ApiError>>,
+{
+    let resp = fetch(offset).await?;
+    let clamped = clamp_user_offset(offset, resp.total);
+    if clamped == offset {
+        return Ok((offset, resp));
+    }
+    // The requested page is past the end now.
+    Ok((clamped, fetch(clamped).await?))
 }
 
 /// Admin tab - server settings and user management (admin only).
@@ -196,21 +217,12 @@ pub fn AdminTab() -> impl IntoView {
         load_seq.update_value(|n| *n += 1);
         let ticket = load_seq.get_value();
         leptos::task::spawn_local(async move {
-            let mut target = offset;
-            let mut result = api.list_users(target, PAGE_SIZE).await;
-            if let Ok(resp) = &result {
-                let clamped = clamp_user_offset(target, resp.total);
-                if clamped != target {
-                    // The requested page is past the end now.
-                    target = clamped;
-                    result = api.list_users(target, PAGE_SIZE).await;
-                }
-            }
+            let result = fetch_user_page(offset, |o| api.list_users(o, PAGE_SIZE)).await;
             if load_seq.get_value() != ticket {
                 return;
             }
             match result {
-                Ok(resp) => {
+                Ok((target, resp)) => {
                     // Offset, total and rows land together, from one response.
                     set_user_offset.set(target);
                     set_user_total.set(resp.total);
@@ -647,6 +659,63 @@ mod tests {
             "locked_until": null,
         }))
         .unwrap()
+    }
+
+    fn page(total: i64) -> UserListResponse {
+        UserListResponse {
+            users: vec![],
+            total,
+            offset: 0,
+            limit: PAGE_SIZE,
+        }
+    }
+
+    fn block_on<T>(fut: impl std::future::Future<Output = T>) -> T {
+        let mut fut = std::pin::pin!(fut);
+        let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+        match fut.as_mut().poll(&mut cx) {
+            std::task::Poll::Ready(v) => v,
+            std::task::Poll::Pending => panic!("future was not immediately ready"),
+        }
+    }
+
+    #[test]
+    fn page_inside_the_result_set_is_fetched_once() {
+        let mut calls = vec![];
+        let (offset, _) = block_on(fetch_user_page(PAGE_SIZE, |o| {
+            calls.push(o);
+            std::future::ready(Ok(page(PAGE_SIZE * 3)))
+        }))
+        .unwrap();
+        assert_eq!(offset, PAGE_SIZE);
+        assert_eq!(calls, vec![PAGE_SIZE]);
+    }
+
+    #[test]
+    fn page_past_the_end_refetches_the_last_page_and_reports_its_offset() {
+        // Deleting the only user on the last page leaves the old offset empty.
+        let mut calls = vec![];
+        let (offset, _) = block_on(fetch_user_page(PAGE_SIZE * 2, |o| {
+            calls.push(o);
+            std::future::ready(Ok(page(PAGE_SIZE * 2)))
+        }))
+        .unwrap();
+        assert_eq!(offset, PAGE_SIZE);
+        assert_eq!(calls, vec![PAGE_SIZE * 2, PAGE_SIZE]);
+    }
+
+    #[test]
+    fn failed_refetch_is_an_error_not_a_stale_offset() {
+        let mut n = 0;
+        let result = block_on(fetch_user_page(PAGE_SIZE * 2, |_| {
+            n += 1;
+            std::future::ready(if n == 1 {
+                Ok(page(PAGE_SIZE * 2))
+            } else {
+                Err(ApiError::Network("down".into()))
+            })
+        }));
+        assert!(result.is_err());
     }
 
     #[test]
