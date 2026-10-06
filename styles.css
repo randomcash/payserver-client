@@ -348,6 +348,15 @@ a:hover {
     transform: translateY(0);
 }
 
+/* The list scrolls inside the menu so many stores cannot push it past the
+   viewport; the sidebar header and the Manage link stay outside it. */
+.store-dropdown-list {
+    max-height: min(320px, calc(100vh - 220px));
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 .store-dropdown-item {
     display: flex;
     align-items: center;
@@ -859,6 +868,19 @@ a:hover {
 
 .table tr:hover td {
     background: var(--color-gray-50);
+}
+
+/* Bounded, scrolling user list: the page stays a fixed height however many
+   users there are, and the header stays visible while the rows scroll. */
+.admin-users-table {
+    max-height: 480px;
+    overflow: auto;
+}
+
+.admin-users-table .table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
 .table-cell-primary {
