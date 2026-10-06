@@ -673,20 +673,26 @@ mod tests {
 
     #[test]
     fn offset_inside_the_result_set_is_kept() {
-        assert_eq!(clamp_user_offset(0, 45), 0);
-        assert_eq!(clamp_user_offset(40, 45), 40);
+        let total = PAGE_SIZE * 2 + 5;
+        assert_eq!(clamp_user_offset(0, total), 0);
+        assert_eq!(clamp_user_offset(PAGE_SIZE * 2, total), PAGE_SIZE * 2);
     }
 
     #[test]
     fn offset_past_the_end_falls_back_to_the_last_page() {
-        assert_eq!(clamp_user_offset(40, 40), 20);
-        assert_eq!(clamp_user_offset(100, 45), 40);
+        // Exactly full pages: the last page starts one page before the end.
+        assert_eq!(clamp_user_offset(PAGE_SIZE * 2, PAGE_SIZE * 2), PAGE_SIZE);
+        // A partial last page starts where the final partial run begins.
+        assert_eq!(
+            clamp_user_offset(PAGE_SIZE * 5, PAGE_SIZE * 2 + 5),
+            PAGE_SIZE * 2
+        );
     }
 
     #[test]
     fn empty_result_set_stays_on_the_first_page() {
         assert_eq!(clamp_user_offset(0, 0), 0);
-        assert_eq!(clamp_user_offset(20, 0), 0);
+        assert_eq!(clamp_user_offset(PAGE_SIZE, 0), 0);
     }
 
     #[test]
