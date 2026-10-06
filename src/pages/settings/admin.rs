@@ -4,10 +4,27 @@ use crate::api::{
     AdminUserInfo, ApiClient, ApiError, SafeModeStatus, Store, UpdateServerSettingsRequest,
     UpdateUserRoleRequest,
 };
+use crate::components::{PAGE_SIZE, Pagination};
 use leptos::prelude::*;
 use types::ChainId;
 
 use super::IconShield;
+
+/// Fetch one page of users and replace the table's contents with it.
+///
+/// A failed fetch leaves the rows already on screen alone rather than blanking
+/// the table: an empty list would read as "there are no users".
+async fn reload_users(
+    api: ApiClient,
+    set_users: WriteSignal<Vec<AdminUserInfo>>,
+    set_user_total: WriteSignal<i64>,
+    offset: i64,
+) {
+    if let Ok(resp) = api.list_users(offset, PAGE_SIZE).await {
+        set_user_total.set(resp.total);
+        set_users.set(resp.users);
+    }
+}
 
 /// Which safe-mode banner, if any, the admin tab should show.
 ///
@@ -101,6 +118,7 @@ pub fn AdminTab() -> impl IntoView {
     // User list state
     let (users, set_users) = signal(Vec::<AdminUserInfo>::new());
     let (user_total, set_user_total) = signal(0i64);
+    let (user_offset, set_user_offset) = signal(0i64);
     let (user_status, set_user_status) = signal(String::new());
 
     // All available networks
@@ -145,7 +163,7 @@ pub fn AdminTab() -> impl IntoView {
             if let Ok(list) = api.list_stores().await {
                 set_stores.set(list.into_iter().filter(|s| !s.archived).collect());
             }
-            if let Ok(resp) = api.list_users(0, 100).await {
+            if let Ok(resp) = api.list_users(0, PAGE_SIZE).await {
                 set_user_total.set(resp.total);
                 set_users.set(resp.users);
             }
@@ -220,6 +238,15 @@ pub fn AdminTab() -> impl IntoView {
         });
     };
 
+    // Page change handler
+    let go_to_user_page = move |offset: i64| {
+        set_user_offset.set(offset);
+        let api = api.get_untracked();
+        leptos::task::spawn_local(async move {
+            reload_users(api, set_users, set_user_total, offset).await;
+        });
+    };
+
     // Role change handler
     let change_role = move |user_id: String, new_role: String| {
         let api = api.get_untracked();
@@ -228,9 +255,7 @@ pub fn AdminTab() -> impl IntoView {
             match api.update_user_role(&user_id, &request).await {
                 Ok(()) => {
                     set_user_status.set("Role updated".to_string());
-                    if let Ok(resp) = api.list_users(0, 100).await {
-                        set_users.set(resp.users);
-                    }
+                    reload_users(api, set_users, set_user_total, user_offset.get_untracked()).await;
                 }
                 Err(e) => set_user_status.set(format!("Error: {}", e)),
             }
@@ -248,9 +273,7 @@ pub fn AdminTab() -> impl IntoView {
             };
             match result {
                 Ok(()) => {
-                    if let Ok(resp) = api.list_users(0, 100).await {
-                        set_users.set(resp.users);
-                    }
+                    reload_users(api, set_users, set_user_total, user_offset.get_untracked()).await;
                 }
                 Err(e) => set_user_status.set(format!("Error: {}", e)),
             }
@@ -366,6 +389,18 @@ pub fn AdminTab() -> impl IntoView {
                             </tbody>
                         </table>
                     </div>
+                    {move || {
+                        let total = user_total.get();
+                        (total > PAGE_SIZE).then(|| view! {
+                            <Pagination
+                                total=total
+                                page_size=PAGE_SIZE
+                                current_offset=user_offset.get()
+                                on_page_change=go_to_user_page
+                                item_label="users"
+                            />
+                        })
+                    }}
                 </div>
             </div>
 

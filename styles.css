@@ -2378,6 +2378,54 @@ tr.payment-row {
     background: var(--color-gray-50);
 }
 
+/* Admin user table: bounded, scrolls inside its own box, header stays put */
+.admin-users-table {
+    max-height: 480px;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table .date-cell {
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+.data-table tr.locked .user-name {
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
 /* Invoice Cell Styles */
 .invoice-id-cell {
     display: flex;

@@ -3,12 +3,9 @@
 # could be switched on without fixing all of them at once; it is
 # meant to shrink. Do not add to it to make a build pass.
 # Regenerate: scripts/check-classes-styled.py --update-baseline
-admin-users-table
 branding-preview
 chart-card-main
 color-input-row
-data-table
-date-cell
 detail-value-mono
 error-container
 error-icon
@@ -55,7 +52,6 @@ loading-spinner-sm
 loading-state
 loading-text
 loading-text-sm
-locked
 notification-row
 settings-section
 settings-section-desc
@@ -69,6 +65,5 @@ stores-loading
 tx-hash-search
 tx-search-error
 user-cell
-user-name
 user-row
 wallet-card-title
