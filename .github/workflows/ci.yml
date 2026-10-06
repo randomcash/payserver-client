@@ -141,6 +141,15 @@ jobs:
       - name: Build
         run: trunk build --release
 
+      # The image is built from dist/, so this checks what is actually served
+      # rather than what the repository holds.
+      - name: Favicon and title are in the bundle
+        run: |
+          for f in favicon.svg favicon.png favicon.ico; do
+            test -s "dist/$f" || { echo "::error::dist/$f missing"; exit 1; }
+          done
+          grep -q '<title>Random Cash</title>' dist/index.html
+
       # The whole reason this crate hand-writes its secret scrubber instead of
       # using `regex` is bundle size (~1 MB of WASM). Print it on every build so
       # a regression is visible in the log rather than six months later.
