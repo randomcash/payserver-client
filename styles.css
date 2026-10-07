@@ -6770,6 +6770,41 @@ tr.payment-row {
     border-left-color: var(--color-error);
 }
 
+.plugin-figure {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border: 1px solid var(--border-color, var(--color-gray-200));
+    border-radius: var(--radius-md, 8px);
+}
+
+.plugin-figure-label {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.plugin-figure-value {
+    font-size: var(--text-3xl);
+    font-weight: 600;
+}
+
+.plugin-figure-info .plugin-figure-value {
+    color: var(--color-info);
+}
+
+.plugin-figure-success .plugin-figure-value {
+    color: var(--color-success);
+}
+
+.plugin-figure-warning .plugin-figure-value {
+    color: #9e6c00;
+}
+
+.plugin-figure-danger .plugin-figure-value {
+    color: var(--color-error);
+}
+
 .plugin-form,
 .plugin-field {
     display: flex;
