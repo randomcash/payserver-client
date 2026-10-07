@@ -460,3 +460,135 @@ test.describe('store switcher', () => {
     });
   }
 });
+
+/**
+ * A plugin's summary tiles, as the billing plugin's operator dashboard sends
+ * them: four `figure` elements, each with a tone.
+ *
+ * The renderer is checked in Rust, and a unit test there asserts every class
+ * it emits has a rule. Neither of those can see the thing that makes a tone a
+ * tone - that the number is actually a different colour. A rule can exist,
+ * match, and still be overridden by a later one of equal specificity, which is
+ * the failure this whole file exists for.
+ *
+ * It is also not hypothetical here. `plugin-figure-neutral` was emitted by the
+ * renderer with no rule anywhere in this stylesheet: four tiles shipped, one
+ * tone silently unstyled, every check green.
+ */
+test.describe('plugin summary tiles', () => {
+  // The markup the Rust renderer produces for a figure element, by hand -
+  // these tests have no WASM to run. Kept in the same shape so a change to the
+  // renderer's structure shows up as a failure here rather than as a test that
+  // measures markup nothing emits any more.
+  const tile = (tone: string, label: string, value: string) => `
+    <div class="plugin-figure plugin-figure-${tone}">
+      <span class="plugin-figure-label">${label}</span>
+      <span class="plugin-figure-value">${value}</span>
+    </div>`;
+
+  const TONES = [
+    ['success', 'Active', '128'],
+    ['warning', 'Past due', '6'],
+    ['danger', 'Lapsed', '7'],
+    ['neutral', 'Monthly recurring', '64.00 USDC'],
+  ];
+
+  const MARKUP = `<div class="plugin-grid">${TONES.map(([t, l, v]) => tile(t, l, v)).join('')}</div>`;
+
+  test('every tone colours the number, and no two agree', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setContent(`<style>${CSS}</style>${MARKUP}`);
+
+    const seen: Record<string, string> = {};
+    for (const [tone] of TONES) {
+      seen[tone] = await page
+        .locator(`.plugin-figure-${tone} .plugin-figure-value`)
+        .evaluate((el) => getComputedStyle(el).color);
+    }
+
+    // Not merely "has a colour": an unstyled class still computes to the
+    // inherited one, so a missing rule looks identical to a present one unless
+    // the tones are compared against each other.
+    for (const [tone] of TONES) {
+      expect(seen[tone], `${tone} must resolve to a real colour`).toMatch(/^rgb/);
+    }
+    expect(seen['success'], 'success and danger must not read the same').not.toBe(seen['danger']);
+    expect(seen['warning'], 'warning and danger must not read the same').not.toBe(seen['danger']);
+    expect(seen['warning'], 'warning and success must not read the same').not.toBe(seen['success']);
+
+    // Neutral is the tone that shipped with no rule. It is the only one that
+    // SHOULD equal the plain text colour, so it is checked by naming the token
+    // rather than by comparing it with another tone.
+    const primary = await page.evaluate(() => {
+      const t = document.createElement('i');
+      t.style.color = getComputedStyle(document.documentElement)
+        .getPropertyValue('--text-primary')
+        .trim();
+      document.body.appendChild(t);
+      return getComputedStyle(t).color;
+    });
+    expect(primary, '--text-primary must resolve, or this compares a fallback').toMatch(/^rgb/);
+    expect(seen['neutral'], 'neutral must be the primary text colour, by a rule').toBe(primary);
+    for (const t of ['success', 'warning', 'danger']) {
+      expect(seen[t], `${t} must not fall back to the plain text colour`).not.toBe(primary);
+    }
+  });
+
+  /**
+   * The tile is meant to be the same box as the dashboard's own metric card.
+   * `--radius-md` is why this is asserted rather than trusted: the rule named
+   * a token no :root in this file defines, so it silently used a hardcoded
+   * fallback while every card beside it used `--border-radius-lg`.
+   */
+  test('the tile is the same box as a dashboard metric card', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setContent(`<style>${CSS}</style>${MARKUP}
+      <div class="metric-card">
+        <div class="metric-label">Volume</div><div class="metric-value">1.2</div>
+      </div>`);
+
+    const box = (sel: string) =>
+      page.locator(sel).evaluate((el) => {
+        const s = getComputedStyle(el);
+        return {
+          radius: s.borderTopLeftRadius,
+          padding: s.paddingTop,
+          border: s.borderTopWidth,
+          bg: s.backgroundColor,
+        };
+      });
+    const figure = await box('.plugin-figure-success');
+    const metric = await box('.metric-card');
+
+    expect(figure.radius, 'radius must come from the shared token').toBe(metric.radius);
+    expect(figure.padding, 'padding must match the host card').toBe(metric.padding);
+    expect(figure.border, 'border width must match the host card').toBe(metric.border);
+    expect(figure.bg, 'the tile must sit on the same surface').toBe(metric.bg);
+    expect(figure.radius, 'a radius of 0 would mean the token did not resolve').not.toBe('0px');
+
+    const read = (sel: string) =>
+      page.locator(sel).evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { size: s.fontSize, weight: s.fontWeight };
+      });
+    const value = await read('.plugin-figure-success .plugin-figure-value');
+    const mValue = await read('.metric-value');
+    expect(value.size, 'the number must be as prominent as the host metric').toBe(mValue.size);
+    expect(value.weight, 'and as heavy').toBe(mValue.weight);
+  });
+
+  /**
+   * Four tiles across on a dashboard, and not four tiles across on a phone.
+   * The renderer sets the column count from the plugin's own `grid` element,
+   * inline - so this asserts the one thing the stylesheet still owns: that a
+   * tile is not squeezed to nothing when the grid is narrow.
+   */
+  test('a tile stays legible at a phone width', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setContent(`<style>${CSS}</style>${MARKUP}`);
+    const w = await page
+      .locator('.plugin-figure-success')
+      .evaluate((el) => el.getBoundingClientRect().width);
+    expect(w, 'a tile must not collapse on a narrow screen').toBeGreaterThan(80);
+  });
+});

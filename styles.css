@@ -6770,23 +6770,50 @@ tr.payment-row {
     border-left-color: var(--color-error);
 }
 
+/* A summary tile. Deliberately the same box as `.metric-card` on the
+   dashboard: a plugin's tiles sit on an operator screen directly beside the
+   host's own metric cards, and a tile with no surface and no shadow beside
+   four that have both is how a plugin page reads as the odd one out.
+
+   The radius previously came from `--radius-md`, which no :root in this file
+   defines, so it fell through to its own hardcoded `8px`. That happens to be
+   what `--border-radius-lg` resolves to, so nothing was visibly wrong - which
+   is the point worth keeping: a `var()` fallback cannot fail loudly, so a
+   token that stops existing is indistinguishable from one that works until
+   the day its value and the fallback diverge. */
 .plugin-figure {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-3);
-    border: 1px solid var(--border-color, var(--color-gray-200));
-    border-radius: var(--radius-md, 8px);
+    gap: var(--space-2);
+    padding: var(--space-5);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-xs);
 }
 
 .plugin-figure-label {
     font-size: var(--text-sm);
-    color: var(--text-secondary);
+    font-weight: 500;
+    color: var(--text-muted);
 }
 
 .plugin-figure-value {
     font-size: var(--text-3xl);
     font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+/* Spelled out rather than left to inherit from `.plugin-figure-value`.
+   The renderer emits a tone class for every tone including this one, and a
+   class with no rule is the one styling mistake nothing reports: the markup
+   is valid, the build is green, and the page is simply unstyled. Leaving
+   neutral implicit shipped exactly that - the class was emitted and matched
+   no rule in this file at all. */
+.plugin-figure-neutral .plugin-figure-value {
+    color: var(--text-primary);
 }
 
 .plugin-figure-info .plugin-figure-value {
