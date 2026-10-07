@@ -495,9 +495,19 @@ test.describe('plugin summary tiles', () => {
 
   const MARKUP = `<div class="plugin-grid">${TONES.map(([t, l, v]) => tile(t, l, v)).join('')}</div>`;
 
+  // The host's own metric card, in the same page. Both of the tests below
+  // compare against it rather than against a resolved token: `--text-primary`
+  // is itself `var(--color-gray-900)`, and reading a chained custom property
+  // back out through a throwaway element compares the tile with a value
+  // reconstructed by the test instead of with the screen it has to match.
+  const HOST_CARD = `
+    <div class="metric-card">
+      <div class="metric-label">Volume</div><div class="metric-value">1.2</div>
+    </div>`;
+
   test('every tone colours the number, and no two agree', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.setContent(`<style>${CSS}</style>${MARKUP}`);
+    await page.setContent(`<style>${CSS}</style>${MARKUP}${HOST_CARD}`);
 
     const seen: Record<string, string> = {};
     for (const [tone] of TONES) {
@@ -516,36 +526,39 @@ test.describe('plugin summary tiles', () => {
     expect(seen['warning'], 'warning and danger must not read the same').not.toBe(seen['danger']);
     expect(seen['warning'], 'warning and success must not read the same').not.toBe(seen['success']);
 
-    // Neutral is the tone that shipped with no rule. It is the only one that
-    // SHOULD equal the plain text colour, so it is checked by naming the token
-    // rather than by comparing it with another tone.
-    const primary = await page.evaluate(() => {
-      const t = document.createElement('i');
-      t.style.color = getComputedStyle(document.documentElement)
-        .getPropertyValue('--text-primary')
-        .trim();
-      document.body.appendChild(t);
-      return getComputedStyle(t).color;
-    });
-    expect(primary, '--text-primary must resolve, or this compares a fallback').toMatch(/^rgb/);
-    expect(seen['neutral'], 'neutral must be the primary text colour, by a rule').toBe(primary);
+    // Neutral is the tone that shipped with no rule, and the only one that
+    // SHOULD read as plain text. "Plain text" is taken from the host's own
+    // metric number rather than from a token the test resolves itself, so
+    // this asserts the two screens agree rather than that one of them matches
+    // a value reconstructed here.
+    const hostNumber = await page
+      .locator('.metric-value')
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(hostNumber, 'the host metric must have a colour to compare against').toMatch(/^rgb/);
+    expect(
+      seen['neutral'],
+      'an untoned figure must read exactly like the dashboard\'s own number',
+    ).toBe(hostNumber);
     for (const t of ['success', 'warning', 'danger']) {
-      expect(seen[t], `${t} must not fall back to the plain text colour`).not.toBe(primary);
+      expect(seen[t], `${t} must not fall back to the plain text colour`).not.toBe(hostNumber);
     }
   });
 
   /**
-   * The tile is meant to be the same box as the dashboard's own metric card.
-   * `--radius-md` is why this is asserted rather than trusted: the rule named
-   * a token no :root in this file defines, so it silently used a hardcoded
-   * fallback while every card beside it used `--border-radius-lg`.
+   * The tile is meant to be the same box as the dashboard's own metric card,
+   * because on an operator screen it sits directly beside four of them.
+   *
+   * It was not: no background and no shadow where the card has both, and 12px
+   * of padding against the card's 20px. The radius came from `--radius-md`,
+   * which no :root in this stylesheet defines, so it fell through to its own
+   * hardcoded `8px` - which is also what `--border-radius-lg` resolves to, so
+   * that part was latent rather than visible. Asserted here because a `var()`
+   * fallback cannot fail loudly: a token that stops existing looks exactly
+   * like one that works, until its value and the fallback diverge.
    */
   test('the tile is the same box as a dashboard metric card', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.setContent(`<style>${CSS}</style>${MARKUP}
-      <div class="metric-card">
-        <div class="metric-label">Volume</div><div class="metric-value">1.2</div>
-      </div>`);
+    await page.setContent(`<style>${CSS}</style>${MARKUP}${HOST_CARD}`);
 
     const box = (sel: string) =>
       page.locator(sel).evaluate((el) => {
