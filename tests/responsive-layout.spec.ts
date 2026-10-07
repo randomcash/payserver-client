@@ -465,15 +465,17 @@ test.describe('store switcher', () => {
  * A plugin's summary tiles, as the billing plugin's operator dashboard sends
  * them: four `figure` elements, each with a tone.
  *
- * The renderer is checked in Rust, and a unit test there asserts every class
- * it emits has a rule. Neither of those can see the thing that makes a tone a
- * tone - that the number is actually a different colour. A rule can exist,
- * match, and still be overridden by a later one of equal specificity, which is
- * the failure this whole file exists for.
+ * What covers what, because it is not obvious and getting it wrong here means
+ * trusting a test that cannot fail:
  *
- * It is also not hypothetical here. `plugin-figure-neutral` was emitted by the
- * renderer with no rule anywhere in this stylesheet: four tiles shipped, one
- * tone silently unstyled, every check green.
+ * * that the renderer emits the right classes at all is a Rust test, in
+ *   `plugin_page.rs`;
+ * * that every class it emits HAS a rule is also a Rust test there, which
+ *   calls the four class-picking helpers rather than reading them;
+ * * that the rules then produce four readably different numbers is only
+ *   answerable here. A rule can exist, match, and still lose to a later one of
+ *   equal specificity - the failure this whole file exists for - and no
+ *   amount of checking that a selector is present can see it.
  */
 test.describe('plugin summary tiles', () => {
   // The markup the Rust renderer produces for a figure element, by hand -
@@ -526,11 +528,17 @@ test.describe('plugin summary tiles', () => {
     expect(seen['warning'], 'warning and danger must not read the same').not.toBe(seen['danger']);
     expect(seen['warning'], 'warning and success must not read the same').not.toBe(seen['success']);
 
-    // Neutral is the tone that shipped with no rule, and the only one that
-    // SHOULD read as plain text. "Plain text" is taken from the host's own
-    // metric number rather than from a token the test resolves itself, so
-    // this asserts the two screens agree rather than that one of them matches
-    // a value reconstructed here.
+    // Neutral is the only tone that SHOULD read as plain text, so it is
+    // asserted against the host's own metric number rather than against a
+    // token this test resolves for itself - the point is that the two screens
+    // agree, not that one matches a value reconstructed here.
+    //
+    // Deliberately NOT claiming to guard the missing `.plugin-figure-neutral`
+    // rule that prompted all this. `.plugin-figure-value` sets this same
+    // colour, so deleting the neutral rule changes nothing a browser can
+    // measure and this assertion would keep passing. The Rust test that
+    // requires every emitted class to have a rule is what catches that, and it
+    // is the only thing that can.
     const hostNumber = await page
       .locator('.metric-value')
       .evaluate((el) => getComputedStyle(el).color);
