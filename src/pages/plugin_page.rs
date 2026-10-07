@@ -23,8 +23,8 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 use payserver_plugin_api::page::{
-    Badge, Button, ButtonVariant, Card, Direction, Fields, Form, Grid, Input, Notice, PageElement,
-    Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone,
+    Badge, Button, ButtonVariant, Card, Direction, Fields, Figure, Form, Grid, Input, Notice,
+    PageElement, Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone,
 };
 
 use crate::api::ApiClient;
@@ -56,6 +56,16 @@ fn tone_class(tone: Tone) -> &'static str {
         Tone::Success => "badge badge-success",
         Tone::Warning => "badge badge-warning",
         Tone::Danger => "badge badge-error",
+    }
+}
+
+fn figure_class(tone: Tone) -> &'static str {
+    match tone {
+        Tone::Neutral => "plugin-figure plugin-figure-neutral",
+        Tone::Info => "plugin-figure plugin-figure-info",
+        Tone::Success => "plugin-figure plugin-figure-success",
+        Tone::Warning => "plugin-figure plugin-figure-warning",
+        Tone::Danger => "plugin-figure plugin-figure-danger",
     }
 }
 
@@ -291,6 +301,17 @@ fn render(element: &PageElement) -> AnyView {
                 .collect_view();
             view! { <div class="plugin-tabs">{sections}</div> }.into_any()
         }
+
+        // A summary tile: the number carries the tone, in place, rather than a
+        // pill beside it - the tone says how urgently the figure matters, not
+        // that it is a status on something else.
+        PageElement::Figure(Figure { label, value, tone }) => view! {
+            <div class=figure_class(*tone)>
+                <span class="plugin-figure-label">{label.clone()}</span>
+                <span class="plugin-figure-value">{value.clone()}</span>
+            </div>
+        }
+        .into_any(),
 
         PageElement::Unknown => view! {
             <div class="plugin-notice plugin-notice-warning" role="status">
@@ -622,6 +643,20 @@ mod tests {
         assert!(html.contains("badge badge-info"));
         assert!(html.contains("<span"), "a badge is inline, not a block");
         assert!(!strip_tags(&html).trim().is_empty());
+    }
+
+    #[test]
+    fn a_figure_renders_its_label_value_and_tone_class() {
+        let html = render(&PageElement::Figure(Figure {
+            label: "Lapsed".to_string(),
+            value: "7".to_string(),
+            tone: Tone::Danger,
+        }))
+        .to_html();
+        assert!(html.contains("plugin-figure plugin-figure-danger"));
+        let text = strip_tags(&html);
+        assert!(text.contains("Lapsed") && text.contains('7'));
+        assert!(!html.contains("needs a newer version"));
     }
 
     #[test]
