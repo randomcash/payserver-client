@@ -44,6 +44,14 @@ fn safe_mode_after_check(result: &Result<SafeModeStatus, ApiError>) -> (Option<b
     }
 }
 
+/// Whether to offer the operator store. Hidden until the server says
+/// something can use it, and on a failed check: the section is a restart-gated
+/// setting for where invoices are issued, so it is not worth offering on a
+/// guess.
+fn operator_store_offered(result: &Result<SafeModeStatus, ApiError>) -> bool {
+    matches!(result, Ok(status) if status.operator_store_available)
+}
+
 /// Apply a safe-mode check result to the tab's two signals.
 ///
 /// Pulled out of `AdminTab`'s load-on-mount task so the `if let Some` guard -
@@ -121,6 +129,8 @@ pub fn AdminTab() -> impl IntoView {
     // Whether the safe-mode check itself failed - kept distinct from `safe_mode`
     // so a transient fetch error can't be mistaken for "plugins are fine".
     let (safe_mode_check_failed, set_safe_mode_check_failed) = signal(false);
+    // Whether the operator store section is shown at all.
+    let (operator_store_available, set_operator_store_available) = signal(false);
 
     // Settings form state
     let (default_confirmations, set_default_confirmations) = signal("3".to_string());
@@ -200,6 +210,7 @@ pub fn AdminTab() -> impl IntoView {
             if let Err(ref e) = result {
                 web_sys::console::error_1(&format!("safe-mode check failed: {e}").into());
             }
+            set_operator_store_available.set(operator_store_offered(&result));
             apply_safe_mode_check(&result, set_safe_mode, set_safe_mode_check_failed);
         }
     });
@@ -454,6 +465,7 @@ pub fn AdminTab() -> impl IntoView {
             // this is the only setting on the page that decides where money
             // is invoiced, and it is the only one that does not take effect
             // until a restart.
+            <Show when=move || operator_store_available.get()>
             <div class="ps-card">
                 <div class="ps-card-header">
                     <h3>"Operator Store"</h3>
@@ -488,6 +500,7 @@ pub fn AdminTab() -> impl IntoView {
                     </div>
                 </div>
             </div>
+            </Show>
 
             // Payment Defaults
             <div class="ps-card">
@@ -780,6 +793,19 @@ mod tests {
     }
 
     #[test]
+    fn the_operator_store_is_offered_only_when_the_server_says_so() {
+        let status = |available| {
+            Ok(SafeModeStatus {
+                safe_mode: false,
+                operator_store_available: available,
+            })
+        };
+        assert!(operator_store_offered(&status(true)));
+        assert!(!operator_store_offered(&status(false)));
+        assert!(!operator_store_offered(&Err(ApiError::Unauthorized)));
+    }
+
+    #[test]
     fn a_confirmed_active_mode_outranks_a_later_failed_check() {
         // Once safe mode has been confirmed on, a later transient fetch
         // error must not read as "we no longer know" - it stays Active.
@@ -788,10 +814,16 @@ mod tests {
 
     #[test]
     fn a_successful_check_reports_the_mode_and_clears_any_prior_failure() {
-        let result = Ok(SafeModeStatus { safe_mode: true });
+        let result = Ok(SafeModeStatus {
+            safe_mode: true,
+            operator_store_available: true,
+        });
         assert_eq!(safe_mode_after_check(&result), (Some(true), false));
 
-        let result = Ok(SafeModeStatus { safe_mode: false });
+        let result = Ok(SafeModeStatus {
+            safe_mode: false,
+            operator_store_available: true,
+        });
         assert_eq!(safe_mode_after_check(&result), (Some(false), false));
     }
 
@@ -807,7 +839,10 @@ mod tests {
         // that would be indistinguishable from a check that actually ran and
         // found plugins enabled. It always reports `None` and lets the
         // caller leave the last-known `safe_mode` value alone.
-        let ok = safe_mode_after_check(&Ok(SafeModeStatus { safe_mode: false }));
+        let ok = safe_mode_after_check(&Ok(SafeModeStatus {
+            safe_mode: false,
+            operator_store_available: true,
+        }));
         let err = safe_mode_after_check(&Err(ApiError::Unauthorized));
         assert_eq!(ok, (Some(false), false));
         assert_eq!(err, (None, true));
@@ -821,7 +856,10 @@ mod tests {
         let (mode, check_failed) = safe_mode_after_check(&Err(ApiError::Network("x".into())));
         assert_eq!((mode, check_failed), (None, true));
 
-        let (mode, check_failed) = safe_mode_after_check(&Ok(SafeModeStatus { safe_mode: false }));
+        let (mode, check_failed) = safe_mode_after_check(&Ok(SafeModeStatus {
+            safe_mode: false,
+            operator_store_available: true,
+        }));
         assert_eq!((mode, check_failed), (Some(false), false));
     }
 
@@ -836,7 +874,10 @@ mod tests {
         let (check_failed, set_check_failed) = signal(false);
 
         apply_safe_mode_check(
-            &Ok(SafeModeStatus { safe_mode: true }),
+            &Ok(SafeModeStatus {
+                safe_mode: true,
+                operator_store_available: true,
+            }),
             set_safe_mode,
             set_check_failed,
         );
