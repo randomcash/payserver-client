@@ -91,3 +91,24 @@ pub struct PluginPageInfo {
     pub label: String,
     pub icon: payserver_plugin_api::PageIcon,
 }
+
+/// The signed-in merchant's own account standing, from `/users/me/standing`.
+///
+/// Defined here because the server defines it in its own crate rather than in
+/// `api-types`; the shape is four plain fields, read-only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccountStandingInfo {
+    pub state: StandingState,
+    pub plan_name: Option<String>,
+    pub paid_through: Option<String>,
+    pub checkout_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StandingState {
+    Unknown,
+    Good,
+    Expiring,
+    Lapsed,
+}
