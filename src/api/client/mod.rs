@@ -34,7 +34,7 @@ mod payments;
 mod plugins;
 mod stores;
 
-pub use admin::SafeModeStatus;
+pub use admin::{EmailStatus, SafeModeStatus};
 
 /// API client errors.
 #[derive(Error, Debug, Clone)]
