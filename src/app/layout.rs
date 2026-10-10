@@ -13,7 +13,7 @@ use ui_kit::hooks::use_storage::{get_local, set_local};
 use ui_kit::{AuthGuard, use_auth};
 
 use crate::api::{ApiClient, Store};
-use crate::components::{CreateInvoiceModal, CreateInvoiceSignal};
+use crate::components::{CreateInvoiceModal, CreateInvoiceSignal, StandingBanner};
 use crate::services::WebSocketService;
 
 use super::header::MainHeader;
@@ -176,6 +176,7 @@ pub(super) fn ProtectedLayout() -> impl IntoView {
                 <div class="main-content">
                     <MainHeader on_menu_click=toggle_sidebar />
                     <main class="page-container">
+                        <StandingBanner />
                         <Outlet />
                     </main>
                 </div>
