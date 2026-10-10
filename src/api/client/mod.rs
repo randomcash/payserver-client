@@ -13,8 +13,7 @@
 //! `delete_wallet` (DELETE), `export_wallet_xpub` (GET) (see `stores`
 //! tests) - none of the four is a `put` call, so all four are already inside
 //! the seam's coverage, not outside it - and the `invoices`/`payments` reads
-//! and writes, run for real under `cargo test`. `put`, the `_empty`
-//! variants, and anything that calls `build_request` directly (`logout`)
+//! and writes, run for real under `cargo test`. `put`, `post_empty_body`, and anything that calls `build_request` directly (`logout`)
 //! still cannot be exercised past their own pure helpers without the same
 //! seam extended further, or a `wasm-bindgen-test` harness (already a
 //! dev-dependency, unused in this crate's test runs). Separately, any call
@@ -92,7 +91,7 @@ impl ApiClient {
         }
     }
 
-    /// Create a client whose `post`/`patch`/`delete` calls are answered by
+    /// Create a client whose `post`/`post_empty`/`patch`/`delete` calls are answered by
     /// `transport` instead of `gloo-net`, so the async function itself -
     /// including the request it builds - runs under `cargo test`.
     #[cfg(test)]
@@ -329,6 +328,16 @@ impl ApiClient {
 
     /// Make a POST request without a body, returning parsed JSON.
     async fn post_empty<T: DeserializeOwned>(&self, path: &str) -> Result<T, ApiError> {
+        #[cfg(test)]
+        if let Some(transport) = &self.test_transport {
+            let response = transport(RequestSpec {
+                method: "POST",
+                path: path.to_string(),
+                body: None,
+            })?;
+            return serde_json::from_value(response).map_err(|e| ApiError::Parse(e.to_string()));
+        }
+
         let request = self
             .build_request("POST", path)
             .build()

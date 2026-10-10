@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashSet;
 use types::ChainId;
 use types::InvoiceStatus;
 
@@ -1014,4 +1015,218 @@ fn test_user_info_deserialize_minimal() {
     assert!(user.primary_wallet_address.is_none());
     assert!(user.last_login_at.is_none());
     assert!(!user.role.is_admin());
+}
+
+#[test]
+fn a_null_permission_set_reads_as_inheriting_the_role() {
+    assert_eq!(
+        describe_api_key_permissions(&None),
+        "Full access (inherits your role)"
+    );
+    assert!(api_key_is_unrestricted(&None));
+}
+
+#[test]
+fn an_empty_permission_set_reads_as_no_permissions() {
+    assert_eq!(
+        describe_api_key_permissions(&Some(vec![])),
+        "No permissions granted"
+    );
+    assert!(!api_key_is_unrestricted(&Some(vec![])));
+}
+
+#[test]
+fn unrestricted_reads_as_full_access() {
+    let perms = vec![API_KEY_UNRESTRICTED_PERMISSION.to_string()];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms.clone())),
+        "Full access (unrestricted)"
+    );
+    assert!(api_key_is_unrestricted(&Some(perms)));
+}
+
+#[test]
+fn a_named_store_action_reads_as_its_label_not_the_raw_policy_string() {
+    let perms = vec!["ethpay.store.cancreateinvoice".to_string()];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "Create invoices"
+    );
+}
+
+#[test]
+fn several_store_actions_join_into_one_summary() {
+    let perms = vec![
+        "ethpay.store.cancreateinvoice".to_string(),
+        "ethpay.store.canviewstoresettings".to_string(),
+    ];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "Create invoices, View store settings"
+    );
+}
+
+#[test]
+fn a_store_scoped_action_reads_as_narrowed() {
+    // The store id is not shown, but a one-store key must not read the same
+    // as an every-store key.
+    let perms = vec![format!(
+        "ethpay.store.cancreateinvoice:{}",
+        uuid::Uuid::new_v4()
+    )];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "Create invoices (one store)"
+    );
+}
+
+#[test]
+fn a_scope_suffix_with_no_store_still_reads_as_narrowed() {
+    // The server refuses such an entry on create and never matches it on
+    // check, so it grants nothing; the summary must not show it as reaching
+    // every store.
+    let perms = vec!["ethpay.store.cancreateinvoice:".to_string()];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "Create invoices (one store)"
+    );
+}
+
+#[test]
+fn unrestricted_mixed_with_named_actions_is_still_full_access() {
+    let perms = vec![
+        "ethpay.store.cancreateinvoice".to_string(),
+        API_KEY_UNRESTRICTED_PERMISSION.to_string(),
+    ];
+    assert!(api_key_is_unrestricted(&Some(perms)));
+}
+
+#[test]
+fn unrestricted_checkbox_overrides_checked_actions_in_the_request() {
+    let checked: std::collections::HashSet<String> =
+        ["ethpay.store.cancreateinvoice".to_string()].into();
+    assert_eq!(
+        build_api_key_permissions(true, &checked),
+        vec!["unrestricted"]
+    );
+}
+
+#[test]
+fn checked_actions_are_sent_in_stable_order_and_nothing_else() {
+    let checked: std::collections::HashSet<String> = [
+        "ethpay.store.canviewstoresettings".to_string(),
+        "ethpay.store.cancreateinvoice".to_string(),
+        "ethpay.server.canmanageplugins".to_string(),
+    ]
+    .into();
+    assert_eq!(
+        build_api_key_permissions(false, &checked),
+        vec![
+            "ethpay.store.cancreateinvoice",
+            "ethpay.store.canviewstoresettings"
+        ]
+    );
+    assert!(build_api_key_permissions(false, &Default::default()).is_empty());
+}
+
+#[test]
+fn create_request_serialises_the_narrowed_permissions() {
+    let req = CreateApiKeyRequestWithPermissions {
+        name: "ci".into(),
+        expires_at: None,
+        permissions: vec!["ethpay.store.cancreateinvoice".into()],
+    };
+    let v = serde_json::to_value(&req).unwrap();
+    assert_eq!(
+        v["permissions"],
+        serde_json::json!(["ethpay.store.cancreateinvoice"])
+    );
+}
+
+#[test]
+fn create_response_without_permissions_still_deserialises() {
+    let v = serde_json::json!({
+        "id": uuid::Uuid::new_v4(), "name": "k", "key_prefix": "rc_", "is_active": true,
+        "created_at": "2026-01-01T00:00:00Z", "expires_at": null, "key": "secret"
+    });
+    let resp: CreateApiKeyResponseWithPermissions = serde_json::from_value(v).unwrap();
+    assert!(resp.permissions.is_none());
+}
+
+#[test]
+fn an_unrecognised_policy_string_falls_back_to_itself() {
+    // Defensive: a future server policy this client hasn't been taught about
+    // yet should not disappear from the summary, just render unprettified.
+    let perms = vec!["ethpay.store.canfrobnicate".to_string()];
+    assert_eq!(
+        describe_api_key_permissions(&Some(perms)),
+        "ethpay.store.canfrobnicate"
+    );
+}
+
+#[test]
+fn create_plan_sends_exactly_the_checked_actions() {
+    let actions: HashSet<String> = ["ethpay.store.cancreateinvoice".to_string()].into();
+    let req = plan_create_api_key_request("  ci  ", false, &actions).unwrap();
+    assert_eq!(req.name, "ci");
+    assert!(req.expires_at.is_none());
+    assert_eq!(req.permissions, vec!["ethpay.store.cancreateinvoice"]);
+    let v = serde_json::to_value(&req).unwrap();
+    assert_eq!(
+        v["permissions"],
+        serde_json::json!(["ethpay.store.cancreateinvoice"])
+    );
+}
+
+#[test]
+fn create_plan_unrestricted_overrides_checked_actions() {
+    let actions: HashSet<String> = ["ethpay.store.cancreateinvoice".to_string()].into();
+    let req = plan_create_api_key_request("ci", true, &actions).unwrap();
+    assert_eq!(req.permissions, vec!["unrestricted"]);
+}
+
+#[test]
+fn create_plan_refuses_a_key_with_no_permissions_and_a_blank_name() {
+    assert_eq!(
+        plan_create_api_key_request("ci", false, &HashSet::new()).unwrap_err(),
+        CreateKeyRefusal::NoPermissions
+    );
+    assert_eq!(
+        plan_create_api_key_request("   ", true, &HashSet::new()).unwrap_err(),
+        CreateKeyRefusal::BlankName
+    );
+}
+
+#[test]
+fn responses_carry_the_permissions_field_under_its_wire_name() {
+    let id = uuid::Uuid::new_v4();
+    let scope = serde_json::json!(["ethpay.store.cancreateinvoice:store-1"]);
+    let list: ApiKeyListResponseWithPermissions = serde_json::from_value(serde_json::json!({
+        "keys": [{
+            "id": id, "name": "k", "key_prefix": "rc_", "is_active": true,
+            "created_at": "2026-01-01T00:00:00Z", "last_used_at": null,
+            "expires_at": null, "rate_limit_rpm": null, "deprecated_at": null,
+            "deprecation_expires_at": null, "permissions": scope
+        }]
+    }))
+    .unwrap();
+    assert_eq!(
+        list.keys[0].permissions.as_deref(),
+        Some(&["ethpay.store.cancreateinvoice:store-1".to_string()][..])
+    );
+    let created: CreateApiKeyResponseWithPermissions = serde_json::from_value(serde_json::json!({
+        "id": id, "name": "k", "key_prefix": "rc_", "is_active": true,
+        "created_at": "2026-01-01T00:00:00Z", "expires_at": null,
+        "key": "secret", "permissions": scope
+    }))
+    .unwrap();
+    assert_eq!(created.permissions.unwrap().len(), 1);
+    let rotated: RotateApiKeyResponseWithPermissions = serde_json::from_value(serde_json::json!({
+        "id": id, "name": "k", "key_prefix": "rc_",
+        "created_at": "2026-01-01T00:00:00Z", "key": "secret",
+        "old_key_deprecated_at": "2026-01-01T00:00:00Z",
+        "old_key_grace_expires_at": "2026-01-02T00:00:00Z", "permissions": scope
+    }))
+    .unwrap();
+    assert_eq!(rotated.permissions.unwrap().len(), 1);
 }
