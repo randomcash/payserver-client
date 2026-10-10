@@ -141,6 +141,19 @@ pub fn NotificationsTab() -> impl IntoView {
         move |()| ctx.refetch_stores()
     });
 
+    // Unknown (still loading, or the request failed) draws no banner: only a
+    // definite "not configured" is worth telling the merchant.
+    let email_status = LocalResource::new(move || {
+        let api = api.get();
+        async move { api.get_email_status().await }
+    });
+    let email_unconfigured = move || {
+        matches!(
+            email_status.get().as_deref(),
+            Some(Ok(status)) if !status.configured
+        )
+    };
+
     let (refresh, set_refresh) = signal(0u32);
     let settings = LocalResource::new(move || {
         let api = api.get();
@@ -236,6 +249,14 @@ pub fn NotificationsTab() -> impl IntoView {
                                  Switching an event off stops the notification for that channel; \
                                  it does not stop the payment being processed."
                             </p>
+
+                            <Show when=email_unconfigured>
+                                <div class="form-alert form-alert-error">
+                                    "Outgoing email is not configured on this server, so \
+                                     email notifications, including customer receipts, are \
+                                     not sent."
+                                </div>
+                            </Show>
 
                             <Suspense fallback=move || view! {
                                 <p class="text-muted">"Loading notification settings..."</p>
